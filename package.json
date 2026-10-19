@@ -12,7 +12,7 @@
     "build": "vite build --config web/vite.config.js",
     "start": "node --no-warnings=ExperimentalWarning server/index.js",
     "seed": "node --no-warnings=ExperimentalWarning server/seed.js",
-    "test": "node --no-warnings=ExperimentalWarning --test server/tests/"
+    "test": "node --no-warnings=ExperimentalWarning --test server/tests/*.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
@@ -24,6 +24,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^6.1.2",
     "concurrently": "^10.0.6",
+    "playwright": "1.56",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router-dom": "^7.18.4",
