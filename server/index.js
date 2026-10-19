@@ -15,6 +15,7 @@ import { business, oauthCallback } from './routes/business.js';
 import { portal } from './routes/portal.js';
 import { ficha } from './routes/ficha.js';
 import { pendencias } from './routes/pendencias.js';
+import { divisao } from './routes/divisao.js';
 import { review } from './routes/review.js';
 
 export function bootstrap() {
@@ -52,6 +53,7 @@ export function createApp() {
   app.use('/api', review);
   app.use('/api', ficha);
   app.use('/api', pendencias);
+  app.use('/api', divisao);
   app.use('/api', ops);
   app.use('/api', business);
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'Rota não encontrada.')));

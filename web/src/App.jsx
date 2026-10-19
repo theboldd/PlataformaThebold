@@ -22,6 +22,7 @@ const Reunioes = P(() => import('./pages/Reunioes.jsx'));
 const Comunicacao = P(() => import('./pages/Comunicacao.jsx'));
 const Pendencias = P(() => import('./pages/Pendencias.jsx'));
 const Migracao = P(() => import('./pages/Migracao.jsx'));
+const Divisao = P(() => import('./pages/Divisao.jsx'));
 const CRM = P(() => import('./pages/CRM.jsx'));
 const Financeiro = P(() => import('./pages/Financeiro.jsx'));
 const Insights = P(() => import('./pages/Insights.jsx'));
@@ -68,6 +69,7 @@ export default function App() {
                     <Route path="/comunicacao/:channelId" element={<Comunicacao />} />
                     <Route path="/pendencias" element={<Pendencias />} />
                     <Route path="/migracao" element={<Migracao />} />
+                    <Route path="/divisao" element={<Divisao />} />
                     <Route path="/crm" element={<CRM />} />
                     <Route path="/financeiro" element={<Financeiro />} />
                     <Route path="/insights" element={<Insights />} />

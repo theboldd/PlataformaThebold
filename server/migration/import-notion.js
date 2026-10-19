@@ -19,6 +19,9 @@ const ORIGINS = new Set(['onboarding_cliente', 'equipe', 'observacao_interna', '
 const files = fs.readdirSync(DIR).filter((f) => f.endsWith('.json') && !f.startsWith('_')).sort();
 const read = (f) => JSON.parse(fs.readFileSync(path.join(DIR, f), 'utf8'));
 const teamMap = fs.existsSync(path.join(DIR, '_team_map.json')) ? JSON.parse(fs.readFileSync(path.join(DIR, '_team_map.json'), 'utf8')) : null;
+// Decisões da equipe registradas fora do git (_decisoes.json): { aliases: { "<nome da ficha>": ["outro nome usado no Notion", ...] } }
+// Ex.: a mesma cliente aparece com dois nomes no Notion → os nomes viram apelidos de uma ficha só (equipe e cartões casam com ela).
+const DECISIONS = fs.existsSync(path.join(DIR, '_decisoes.json')) ? JSON.parse(fs.readFileSync(path.join(DIR, '_decisoes.json'), 'utf8')) : {};
 
 const form = activeForm();
 const questions = form.sections.flatMap((s) => s.questions.map((q) => ({ ...q, section_title: s.title, n: norm(q.text) })));
@@ -74,6 +77,11 @@ function importClient(file) {
       insert('onboarding', { id: uid('ob_'), client_id: c.id, status: 'migrado', started_at: ts });
     }
 
+    const extra = DECISIONS.aliases?.[d.name];
+    if (extra?.length) {
+      const merged = [...new Set([...JSON.parse(c.aliases || '[]'), ...(d.aliases || []), ...extra])];
+      run('UPDATE clients SET aliases=? WHERE id=?', JSON.stringify(merged), c.id);
+    }
     if (c.status === 'a_confirmar') issue(c.id, d.name, 'status', 'Status do cliente não está explícito no Notion — confirmar (ativo, pausado, encerrado).', 'notion');
     const stats = { fields: 0, empty: 0, answers: 0, entries: 0, links: 0, files: 0, issues: 0, sections: {} };
     const answered = new Map(); // question_key → [{content, field}]

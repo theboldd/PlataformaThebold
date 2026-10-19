@@ -19,6 +19,8 @@
 - **Nada descartado:** o que não tem campo próprio vai para uma seção nova do Brain ou para "outro".
 - **Fora desta etapa:** calendários editoriais (só listados no relatório) e credenciais.
 - **Equipe:** é vinculada a partir de RESPONSÁVEIS POR CLIENTE e DIVISÃO EQUIPE. Funções com fontes divergentes não são aplicadas e viram ponto de revisão.
+- **Decisões da equipe:** `storage/migration/notion/_decisoes.json` (fora do git) registra o que a equipe confirmou, como "dois nomes no Notion são a mesma cliente". Esses nomes viram apelidos de uma ficha só, e equipe e cartões casam com ela em qualquer reimportação.
+- **Divisão:** a página `/divisao` mostra a divisão de clientes (pessoa · função · clientes), como na DIVISÃO EQUIPE. Toda a equipe interna pode ver. A fonte é a equipe de cada ficha.
 - **Pontos de revisão:** ambiguidades, conflitos, páginas inacessíveis e possíveis duplicados vão para `migration_issues`. Aparecem na aba Ficha → Revisão; nada é escolhido automaticamente.
 - **Status:** cliente sem status explícito no Notion recebe `a_confirmar`.
 
