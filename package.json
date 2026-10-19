@@ -5,7 +5,7 @@
   "type": "module",
   "description": "THE BOLD — Operating System. Plataforma operacional interna da agência.",
   "engines": {
-    "node": ">=22.5"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "concurrently -k -n api,web \"node --watch --no-warnings=ExperimentalWarning server/index.js\" \"vite --config web/vite.config.js\"",

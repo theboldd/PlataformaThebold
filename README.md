@@ -49,3 +49,11 @@ Sem essas credenciais, as integrações aparecem **desconectadas**. Nada é simu
 - [`docs/04-mvp-e-roadmap.md`](docs/04-mvp-e-roadmap.md): o que está pronto, próximos passos e decisões em aberto
 - [`docs/integracoes/google-drive.md`](docs/integracoes/google-drive.md): especificação da integração com o Google Drive
 - [`docs/modulos/reunioes.md`](docs/modulos/reunioes.md): especificação do módulo de Reuniões e videoconferência
+
+## Prévia no Vercel (dados de demonstração)
+O repositório já vem pronto para o Vercel: `vercel.json` publica o site (`web/dist`) e a API inteira como uma função (`api/index.js`).
+- A prévia usa **dados fictícios** (`demo-snapshot/`, gerados por `npm run seed`). A base real migrada do Notion nunca vai para o repositório.
+- Cada instância nova da função copia o banco de demonstração para `/tmp`. Alterações feitas na prévia são temporárias.
+- Login: `rebeca@thebold.demo` (CEO), `felipe@thebold.demo` (design), `sena@cliente.demo` (cliente) etc. Senha: `thebold2026`.
+- Para atualizar o snapshot: `BOLD_DATA_DIR=/tmp/d BOLD_STORAGE_DIR=/tmp/d npm run seed` e copie `bold.db`, `originals/` e `derived/` para `demo-snapshot/`.
+- Versão definitiva (dados reais, persistentes): banco e arquivos no Supabase. Ver docs/04-mvp-e-roadmap.md.
