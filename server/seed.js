@@ -44,6 +44,13 @@ for (const [key, name, role, title, fns, cap] of TEAM) {
   U[key] = insert('users', { id: uid('u_'), name, email: `${key}@thebold.demo`, password_hash: pw, role_key: role, title, functions: JSON.stringify(fns), capacity: cap, active: 1, avatar_color: '#4A1725', created_at: now() });
 }
 
+// Base real: só a equipe; os clientes vêm da migração do Notion (server/migration/import-notion.js)
+if (process.env.BOLD_SEED === 'equipe') {
+  setClock(null);
+  console.log(`Equipe criada (${TEAM.length} pessoas). Senha inicial: ${PASSWORD}`);
+  process.exit(0);
+}
+
 // ─────────── CLIENTES (fictícios) ───────────
 const CLIENTS = [
   { key: 'helena', contact: 'Helena Prado', name: 'Dra. Helena Prado [DEMO]', handle: '@drahelenaprado.demo', segment: 'Dermatologia', services: ['Estratégia editorial', 'Design', 'Reels', 'Legendas', 'Agendamento'],
@@ -86,9 +93,13 @@ C.sena = startClient({ name: 'Instituto Sena [DEMO]', handle: '@institutosena.de
 clientUsers.sena = insert('users', { id: uid('u_'), name: 'Paulo Sena', email: 'sena@cliente.demo', password_hash: pw, role_key: 'cliente', title: 'Cliente', functions: '[]', capacity: 0, active: 1, avatar_color: '#000000', created_at: now() });
 insert('client_members', { client_id: C.sena.id, user_id: clientUsers.sena.id, function: 'cliente' });
 at('2026-10-09');
-for (const label of ['Briefing “Sua marca”: posicionamento', 'Briefing: público-alvo e persona', 'Contrato assinado (duração e plano)', 'Reunião de Diagnóstico de Marca']) {
-  run("UPDATE onboarding_items SET status='recebido', received_at=?, value=? WHERE label=? AND onboarding_id=(SELECT id FROM onboarding WHERE client_id=?)", now(), label.startsWith('Briefing') ? '[DEMO] Resposta enviada pelo cliente no formulário.' : null, label, C.sena.id);
+for (const label of ['Contrato assinado (duração e plano)', 'Reunião de Diagnóstico de Marca']) {
+  run("UPDATE onboarding_items SET status='recebido', received_at=? WHERE label=? AND onboarding_id=(SELECT id FROM onboarding WHERE client_id=?)", now(), label, C.sena.id);
 }
+// Cliente começou o formulário oficial (rascunho salvo, ainda não enviado)
+{ const { saveAnswer } = await import('./services/onboarding.js');
+  saveAnswer(C.sena.id, 'pos_mudanca_vida', '[DEMO] Ser reconhecido como referência em gestão de empresas familiares.', clientUsers.sena);
+  run("UPDATE onboarding SET form_status='em_andamento' WHERE client_id=?", C.sena.id); }
 run("UPDATE client_brain SET body='Consultoria que organiza a gestão de empresas familiares. [DEMO]' WHERE client_id=? AND section='posicionamento'", C.sena.id);
 
 // ─────────── MÍDIA DE DEMONSTRAÇÃO (gerada localmente; originais em alta resolução) ───────────

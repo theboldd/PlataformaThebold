@@ -7,6 +7,7 @@ import { Avatar, Button, ContentCard, Empty, ErrorBox, Field, Loading, Risk, Sta
 import { I } from '../components/Icons.jsx';
 import { ago, bytes, cleanName, fmtDate, fmtDateTime, fmtMonth, money } from '../lib/format.js';
 import { FUNCTIONS } from '../lib/status.js';
+import Ficha from './client/Ficha.jsx';
 import '../styles/production.css';
 
 const BRAIN = [['posicionamento', 'Posicionamento'], ['publico', 'Público'], ['persona', 'Persona'], ['tom', 'Tom de voz'], ['linguagem', 'Linguagem'], ['oferta', 'Oferta'], ['produtos', 'Produtos e serviços'], ['objetivos', 'Objetivos'], ['estrategia', 'Estratégia'], ['preferencias', 'Preferências'], ['restricoes', 'Restrições'], ['referencias', 'Referências'], ['regras', 'Regras específicas'], ['importante', 'Informações importantes']];
@@ -27,7 +28,7 @@ export default function ClienteDetalhe() {
   const { client: c, onboarding: ob } = data;
   const missing = ob ? ob.items.filter((i) => i.status === 'pendente' && i.required) : [];
   const tabs = [
-    { key: 'visao', label: 'Visão geral' }, { key: 'brain', label: 'Client Brain' },
+    { key: 'visao', label: 'Visão geral' }, { key: 'ficha', label: 'Ficha' }, { key: 'brain', label: 'Resumo do Brain' },
     { key: 'onboarding', label: 'Onboarding', count: ob && ob.status !== 'concluido' ? missing.length : 0 },
     { key: 'conteudos', label: 'Conteúdos', count: data.contents.length }, { key: 'reunioes', label: 'Reuniões', count: data.meetings.length },
     { key: 'equipe', label: 'Equipe' }, { key: 'arquivos', label: 'Arquivos', count: data.files.length },
@@ -40,7 +41,7 @@ export default function ClienteDetalhe() {
           <div className="caps">Dossiê · {c.segment || 'Cliente'}{c.handle ? ` · ${c.handle}` : ''}</div>
           <h1 className="ed-xxl mt-2">{cleanName(c.name)}</h1>
           <div className="row wrap gap-4 mt-4">
-            <span className={`tag ${c.status === 'onboarding' ? 'tag-bordo' : c.status === 'ativo' ? 'tag-ok' : ''}`}>{c.status}</span>
+            <span className={`tag ${c.status === 'onboarding' ? 'tag-bordo' : c.status === 'ativo' ? 'tag-ok' : ''}`}>{c.status === 'a_confirmar' ? 'status a confirmar' : c.status}</span>
             <Risk level={c.risk.level} />{['baixo', 'nenhum'].includes(c.risk.level) && <span className="xs muted">sem riscos identificados</span>}
             <span className="sm muted">{c.services.join(' · ')}</span>
           </div>
@@ -52,6 +53,7 @@ export default function ClienteDetalhe() {
       </header>
       <Tabs tabs={tabs} value={tab} onChange={setTab} />
       {tab === 'visao' && <Overview data={data} missing={missing} setTab={setTab} />}
+      {tab === 'ficha' && <Ficha clientId={c.id} />}
       {tab === 'brain' && <BrainTab data={data} reload={reload} />}
       {tab === 'onboarding' && <OnboardingTab data={data} missing={missing} reload={reload} />}
       {tab === 'conteudos' && <ContentsTab data={data} />}
@@ -198,12 +200,20 @@ function OnboardingTab({ data, missing, reload }) {
   const toast = useToast();
   const ob = data.onboarding;
   if (!ob) return <Empty title="Sem onboarding." />;
+  const formLine = ob.form && (
+    <div className="panel mb-5 row between wrap gap-3">
+      <span className="sm">Formulário “Sua marca”: <b>{{ nao_iniciado: 'não iniciado', em_andamento: 'em preenchimento pelo cliente', concluido: 'concluído' }[ob.form_status] || ob.form_status}</b> · {ob.form.answered}/{ob.form.total} respostas{ob.form_submitted_at ? ` · enviado em ${fmtDateTime(ob.form_submitted_at)}` : ''}</span>
+      <Link className="btn btn-sm btn-ghost" to={`/clientes/${data.client.id}?tab=ficha`}>Ver respostas</Link>
+    </div>
+  );
+  if (ob.status === 'migrado') return <div>{formLine}<p className="sm muted">Cliente migrado do Notion: o onboarding aconteceu antes da plataforma. As respostas encontradas estão na Ficha, com a origem de cada uma.</p></div>;
   const groups = [['formulario', 'Formulário'], ['material', 'Materiais'], ['acesso', 'Acessos'], ['interno', 'Interno']];
   const set = async (item, status) => { try { await api.patch(`/onboarding/items/${item.id}`, { status }); toast(`“${item.label}” → ${status}`); reload(); } catch (e) { toast(e.message, 'err'); } };
   const now = new Date().toISOString();
   const done = ob.items.filter((i) => i.status !== 'pendente').length;
   return (
     <div>
+      {formLine}
       {ob.status !== 'concluido' && missing.length > 0 ? (
         <div className="ob-banner">
           <div className="row between wrap"><div className="caps" style={{ color: 'var(--err)' }}>Onboarding incompleto</div><span className="sm">{done}/{ob.items.length} itens · iniciado {ago(ob.started_at)}</span></div>

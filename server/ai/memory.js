@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { one, all } from '../db.js';
 
-const SECTIONS = ['posicionamento', 'publico', 'persona', 'tom', 'linguagem', 'oferta', 'produtos', 'objetivos', 'estrategia', 'preferencias', 'restricoes', 'referencias', 'regras', 'importante'];
+const SECTIONS = ['posicionamento', 'identidade', 'diferenciais', 'publico', 'persona', 'tom', 'linguagem', 'oferta', 'produtos', 'objetivos', 'diagnostico', 'estrategia', 'identidade_visual', 'preferencias', 'restricoes', 'referencias', 'regras', 'importante', 'historico', 'operacional', 'observacoes', 'outro'];
 
 const dbProvider = {
   name: 'banco',

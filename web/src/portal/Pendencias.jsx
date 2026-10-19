@@ -88,7 +88,8 @@ function OnbRow({ o, onDone }) {
         <div className="ttl">{((s) => s.charAt(0).toUpperCase() + s.slice(1))(o.label.replace('Briefing “Sua marca”: ', '').replace('Briefing: ', ''))}</div>
         <div className="xs muted">{KIND[o.kind]}{o.due_at && !done ? ` · até ${fmtDate(o.due_at)}` : ''}{done ? ' · recebido' : ''}</div>
         {!done && o.kind === 'material' && <Uploader extra={{ onboarding_item: o.id }} label="Enviar arquivos" onDone={onDone} />}
-        {!done && o.kind !== 'material' && (
+        {!done && ['formulario', 'acesso'].includes(o.kind) && <Link to="/portal/onboarding" className="p-cta mt-4">{o.kind === 'acesso' ? 'Informar acessos' : 'Abrir formulário'} <I.arrow size={14} /></Link>}
+        {!done && !['material', 'formulario', 'acesso'].includes(o.kind) && (
           <form onSubmit={send} className="col gap-2 mt-4">
             <textarea className="textarea" rows={3} value={val} onChange={(e) => setVal(e.target.value)} aria-label={o.label}
               placeholder={o.kind === 'acesso' ? 'Como você liberou o acesso? (ex.: “convite enviado para a conta da The Bold”). Não escreva senhas aqui.' : 'Conte com suas palavras…'} />

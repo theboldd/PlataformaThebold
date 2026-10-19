@@ -18,6 +18,7 @@ const Materiais = lazy(() => import('./Materiais.jsx'));
 const Reunioes = lazy(() => import('./Reunioes.jsx'));
 const Conversa = lazy(() => import('./Conversa.jsx'));
 const Perfil = lazy(() => import('./Perfil.jsx'));
+const Onboarding = lazy(() => import('./Onboarding.jsx'));
 
 const PortalCtx = createContext(null);
 export const usePortal = () => useContext(PortalCtx);
@@ -91,6 +92,7 @@ export default function PortalApp() {
               <Route path="comunicacao" element={<Conversa />} />
               <Route path="conversa" element={<Navigate to="/portal/comunicacao" replace />} />
               <Route path="perfil" element={<Perfil />} />
+              <Route path="onboarding" element={<Onboarding />} />
               <Route path="*" element={<Navigate to="/portal" replace />} />
             </Routes>
           </Suspense>

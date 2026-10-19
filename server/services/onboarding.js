@@ -66,7 +66,7 @@ export function saveAnswer(clientId, key, value, actor, { origin = 'onboarding_c
     const entry = one("SELECT id FROM client_brain_entries WHERE client_id=? AND source_type IN ('onboarding','notion_onboarding') AND source_ref=?", clientId, `onboarding:${key}`);
     if (entry) update('client_brain_entries', { id: entry.id }, { content: val, updated_by: actor?.id || null, updated_at: now() });
     else if (val) insert('client_brain_entries', { id: uid('be_'), client_id: clientId, section, label: text, content: val, origin, source_type: source_type === 'notion' ? 'notion_onboarding' : 'onboarding', source_ref: `onboarding:${key}`, source_page: q?.section_title || null, created_by: actor?.id || null, created_at: now() });
-    if (!silent) log({ actor: actor?.id, action: prev ? 'onboarding.resposta_alterada' : 'onboarding.resposta', entity: 'client', id: clientId, client: clientId, summary: `${prev ? 'Resposta alterada' : 'Respondeu'}: ${text.slice(0, 90)}`, before: prev?.answer ?? null, after: val, visibility: 'client' });
+    if (!silent) log({ actor: actor?.id, action: prev ? 'onboarding.resposta_alterada' : 'onboarding.resposta', entity: 'client', id: clientId, client: clientId, summary: `${prev ? 'Resposta alterada' : 'Respondeu'}: ${text.slice(0, 90)}`, before: prev?.answer ?? null, after: val });
     return one('SELECT * FROM onboarding_answers WHERE client_id=? AND question_key=?', clientId, key);
   });
 }

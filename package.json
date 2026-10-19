@@ -12,7 +12,9 @@
     "build": "vite build --config web/vite.config.js",
     "start": "node --no-warnings=ExperimentalWarning server/index.js",
     "seed": "node --no-warnings=ExperimentalWarning server/seed.js",
-    "test": "node --no-warnings=ExperimentalWarning --test server/tests/*.test.js"
+    "test": "node --no-warnings=ExperimentalWarning --test server/tests/*.test.js",
+    "migrar:notion": "node --no-warnings=ExperimentalWarning server/migration/import-notion.js",
+    "base:real": "BOLD_SEED=equipe node --no-warnings=ExperimentalWarning server/seed.js && npm run migrar:notion"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

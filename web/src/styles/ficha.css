@@ -1,0 +1,33 @@
+/* Ficha do cliente: procedência sempre visível, leitura confortável de textos longos do cliente */
+.ficha-src { margin: 0 0 var(--s-4, 16px); }
+.ficha-sec { margin-top: 28px; }
+.ficha-sec > h3 { margin: 0 0 10px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.ficha-entry, .ficha-q { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.ficha-q.empty { opacity: .55; }
+.ficha-content { white-space: pre-wrap; font-size: 14px; line-height: 1.6; color: var(--ink-2); margin-top: 6px; max-width: 78ch; overflow-wrap: anywhere; }
+.o-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line-strong); white-space: nowrap; }
+.o-chip::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.o-cliente { color: var(--ink); }
+.o-equipe { color: var(--muted); }
+.o-interna { color: var(--bordo-vivo); border-color: var(--bordo-line); }
+.o-indef { color: var(--muted); border-style: dashed; }
+
+/* Portal · formulário de onboarding */
+.p-ob { max-width: 720px; }
+.p-ob-steps { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 18px 0 24px; }
+.p-ob-steps button { flex: 0 0 auto; font: inherit; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--muted); cursor: pointer; }
+.p-ob-steps button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.p-ob-steps button.done { color: var(--ink); }
+.p-ob-q { padding: 18px 0; border-bottom: 1px solid var(--line); }
+.p-ob-q label { display: block; font-size: 16px; line-height: 1.45; margin-bottom: 10px; }
+.p-ob-q .help { font-size: 13px; color: var(--muted); margin: -4px 0 10px; white-space: pre-wrap; }
+.p-ob-q textarea, .p-ob-q input { width: 100%; font: inherit; font-size: 15px; line-height: 1.55; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line-strong); background: transparent; color: var(--ink); resize: vertical; }
+.p-ob-q textarea:focus, .p-ob-q input:focus { outline: none; border-color: var(--ink); }
+.p-ob-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.p-ob-opts button { font: inherit; font-size: 14px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--ink); cursor: pointer; }
+.p-ob-opts button.on { background: var(--ink); color: var(--bg); }
+.p-ob-saved { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 16px; }
+.p-ob-secure { font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
+.p-ob-foot { position: sticky; bottom: 0; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0; background: var(--bg); border-top: 1px solid var(--line); margin-top: 24px; }
+.p-ob-progress { height: 2px; background: var(--line); margin-top: 10px; }
+.p-ob-progress > i { display: block; height: 100%; background: var(--ink); transition: width .3s; }

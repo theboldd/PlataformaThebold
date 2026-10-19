@@ -11,6 +11,7 @@ import { computePendencies, clientSummary, clientRisk, runDetectors, opsMetrics,
 import { ingest, fileDTO, TMP_DIR } from '../services/media.js';
 import { BRAIN_SECTIONS, exportClientBrainMarkdown } from '../ai/memory.js';
 import { integrationStatus } from '../integrations/vault.js';
+import { activeForm, formStatus } from '../services/onboarding.js';
 
 export const ops = Router();
 ops.use(requireInternal);
@@ -40,15 +41,12 @@ export function startClient({ name, handle, segment, services, monthly_posts, re
   for (const s of BRAIN_SECTIONS) insert('client_brain', { client_id: c.id, section: s, body: '', updated_at: ts });
   for (const m of team) insert('client_members', { client_id: c.id, user_id: m.user_id, function: m.function });
   const ob = insert('onboarding', { id: uid('ob_'), client_id: c.id, status: 'em_andamento', form_sent_at: ts, started_at: ts });
-  // Checklist reconstruído de MEMÓRIA > CLIENTE NOVO (Notion) + manual "Como a The Bold Funciona" (semanas 1–4)
+  // Checklist: formulário oficial "Sua marca" (ESPAÇO CLIENTE, Notion) + itens de equipe de MEMÓRIA > CLIENTE NOVO
   const W = (w) => businessDaysFrom(new Date(ts), w * 5).toISOString();
+  const form = activeForm();
   const items = [
-    ['formulario', 'Briefing “Sua marca”: posicionamento', 'posicionamento', 'cliente', W(1)], ['formulario', 'Briefing: público-alvo e persona', 'publico', 'cliente', W(1)],
-    ['formulario', 'Briefing: tom de voz e linguagem', 'tom', 'cliente', W(1)], ['formulario', 'Briefing: oferta, produtos e serviços', 'oferta', 'cliente', W(1)],
-    ['formulario', 'Briefing: objetivos', 'objetivos', 'cliente', W(1)], ['formulario', 'Briefing: preferências e restrições', 'restricoes', 'cliente', W(1)],
-    ['formulario', 'Briefing: referências', 'referencias', 'cliente', W(1)],
-    ['material', 'Identidade visual (logo, paleta, fontes)', null, 'cliente', W(1)], ['material', 'Fotos profissionais', null, 'cliente', W(2)], ['material', 'Vídeos brutos do primeiro mês', null, 'cliente', W(2)],
-    ['acesso', 'Acesso ao Instagram (conta profissional)', null, 'cliente', W(1)], ['acesso', 'Vínculo com Meta Business', null, 'cliente', W(2)],
+    ['formulario', `Formulário de onboarding — Sua marca (${form ? form.sections.length : 6} etapas)`, null, 'cliente', W(1)],
+    ['acesso', 'Acesso às contas (Facebook / Instagram)', null, 'cliente', W(1)],
     ['interno', 'Contrato assinado (duração e plano)', null, 'equipe', W(1)], ['interno', 'Canal do cliente criado na plataforma', null, 'equipe', W(1)],
     ['interno', 'Aniversário do cliente no calendário', null, 'equipe', W(1)], ['interno', 'Reunião de Diagnóstico de Marca', null, 'equipe', W(2)],
     ['interno', 'Plano estratégico (diagnóstico do 1º mês)', null, 'equipe', W(3)], ['interno', 'Primeiro cronograma', null, 'equipe', W(3)],
@@ -73,7 +71,8 @@ ops.get('/clients/:id', requirePerm('clientes', 'view'), (req, res) => {
   const brain = all('SELECT section, body, updated_at, updated_by FROM client_brain WHERE client_id=?', c.id);
   const memories = all('SELECT m.*, u.name author FROM client_memories m LEFT JOIN users u ON u.id=m.created_by WHERE m.client_id=? ORDER BY m.created_at DESC', c.id);
   const ob = one('SELECT * FROM onboarding WHERE client_id=?', c.id);
-  const onboarding = ob ? { ...ob, items: all('SELECT * FROM onboarding_items WHERE onboarding_id=? ORDER BY sort', ob.id) } : null;
+  const fst = ob ? formStatus(c.id) : null;
+  const onboarding = ob ? { ...ob, form: fst && { answered: fst.answered, total: fst.total }, items: all('SELECT * FROM onboarding_items WHERE onboarding_id=? ORDER BY sort', ob.id) } : null;
   const cycles = all('SELECT * FROM cycles WHERE client_id=? ORDER BY month DESC', c.id).map((cy) => ({ ...cy, milestones: parseJSON(cy.milestones, {}),
     counts: one("SELECT COUNT(*) total, SUM(stage IN ('agendado','publicado')) done FROM contents WHERE cycle_id=? AND stage<>'cancelado'", cy.id) }));
   const contents = all("SELECT * FROM contents WHERE client_id=? AND stage<>'cancelado' ORDER BY planned_at", c.id).map((x) => ({ ...contentCard(x), status: publicStatus(x) }));

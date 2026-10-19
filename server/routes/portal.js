@@ -7,6 +7,7 @@ import { HttpError } from '../lib/permissions.js';
 import { log, notify } from '../lib/core.js';
 import { STAGES, publicStatus, clientDecision, versionMedia, unblockContent, editableVersion, undoClientApproval, clientAdjustmentRequest } from '../engine/process.js';
 import { detectAdjustment } from '../lib/intent.js';
+import { activeForm, questionOf, saveAnswer, formStatus, submitForm } from '../services/onboarding.js';
 import { fileDTO, ingest } from '../services/media.js';
 import { addComment, upload, checkOnboardingComplete } from './ops.js';
 import { createMeeting } from './comms.js';
@@ -94,11 +95,12 @@ portal.get('/me', (req, res) => {
   if (counts.aguardando) steps.push({ text: counts.aguardando === 1 ? '1 conteúdo aguardando sua aprovação.' : `${counts.aguardando} conteúdos aguardando sua aprovação.`, link: '/portal/conteudos', cta: 'Ver conteúdos' });
   const mat = one("SELECT COUNT(*) n FROM contents WHERE client_id=? AND blocked=1 AND waiting_on='cliente'", c.id).n;
   if (mat) steps.push({ text: `Enviar ${mat} material(is) pendente(s)`, link: '/portal/projeto', cta: 'Enviar materiais' });
-  if (ob && ob.status !== 'concluido') steps.push({ text: 'Faltam algumas informações para começarmos.', link: '/portal/projeto', cta: 'Completar' });
+  if (ob && ob.form_status !== 'concluido' && ob.status !== 'migrado') steps.unshift({ text: ob.form_status === 'em_andamento' ? 'Seu formulário de onboarding está pela metade — continue de onde parou.' : 'Preencha o formulário de onboarding para começarmos seu projeto.', link: '/portal/onboarding', cta: ob.form_status === 'em_andamento' ? 'Continuar formulário' : 'Preencher formulário' });
+  else if (ob && !['concluido', 'migrado'].includes(ob.status)) steps.push({ text: 'Faltam algumas informações para começarmos.', link: '/portal/projeto', cta: 'Completar' });
   if (next) steps.push({ text: `Reunião em ${new Date(next.starts_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' })}`, link: '/portal/reunioes', cta: 'Ver reunião' });
   res.json({ client: { id: c.id, name: c.name, handle: c.handle, status: c.status, services: parseJSON(c.services, []) }, team: team.map(({ id, name, function: f }) => ({ id, name, function: f })), counts, next_meeting: next, timeline, steps,
     cycle: cycle ? { month: cycle.month, status: cycle.status, milestones: Object.fromEntries(Object.entries(parseJSON(cycle.milestones, {})).filter(([k]) => ['cliente_aprova_temas', 'cliente_aprova_final', 'ajustes_cliente'].includes(k))) } : null,
-    onboarding: ob ? { status: ob.status } : null, track: projectTrack(c.id),
+    onboarding: ob ? { status: ob.status, form_status: ob.form_status } : null, track: projectTrack(c.id),
     upcoming: all("SELECT id, title, format, COALESCE(scheduled_at, planned_at) date, stage FROM contents WHERE client_id=? AND stage IN ('aprovacao_cliente','agendamento','agendado') AND COALESCE(scheduled_at, planned_at) >= ? ORDER BY date LIMIT 4", c.id, now()).map((x) => ({ ...x, status: publicStatus(x) })),
     in_preparation: one("SELECT COUNT(*) n FROM contents WHERE client_id=? AND stage IN ('cronograma','analise_cronograma','ajuste_cronograma','producao','analise_producao','ajuste_interno')", c.id).n,
     deadlines: cycle ? Object.entries(parseJSON(cycle.milestones, {})).filter(([k, m]) => ['cliente_aprova_temas', 'cliente_aprova_final'].includes(k) && m.end >= now().slice(0, 10)).map(([k, m]) => ({ label: k === 'cliente_aprova_temas' ? 'Aprovar os temas do mês' : 'Aprovar os conteúdos do mês', date: m.end })) : [] });
@@ -207,7 +209,37 @@ portal.get('/pendencias', (req, res) => {
   const onboarding = ob ? all("SELECT id, kind, label, status, due_at, brain_section FROM onboarding_items WHERE onboarding_id=? AND who='cliente' ORDER BY sort", ob.id) : [];
   const approvals = all("SELECT id, number, title, stage, stage_entered_at FROM contents WHERE client_id=? AND stage IN ('aprovacao_tema','aprovacao_cliente')", c.id);
   const materials = all("SELECT id, number, title, block_reason, updated_at, planned_at FROM contents WHERE client_id=? AND blocked=1 AND waiting_on='cliente'", c.id);
-  res.json({ onboarding, approvals, materials, onboarding_status: ob?.status });
+  res.json({ onboarding, approvals, materials, onboarding_status: ob?.status, form_status: ob?.form_status });
+});
+// FORMULÁRIO OFICIAL "Sua marca" — o cliente preenche na plataforma (rascunho salvo a cada resposta)
+portal.get('/onboarding/form', (req, res) => {
+  const c = myClient(req);
+  const form = activeForm();
+  if (!form) throw new HttpError(404, 'Formulário não configurado.');
+  const st = formStatus(c.id);
+  // Acessos nunca voltam para a tela: só a indicação de que já foram informados
+  const answers = Object.fromEntries(Object.entries(st.answers).map(([k, a]) => [k, k.startsWith('acesso_') ? { saved: true } : { value: a.answer, updated_at: a.updated_at }]));
+  res.json({ title: form.title, version: form.version, sections: form.sections.map((s) => ({ title: s.title, intro: s.intro || null, questions: s.questions.map(({ key, text, type, options, help, sensitive }) => ({ key, text, type, options, help: help && !/^(CAMPO SENSÍVEL|Linha |Checkboxes|Pode envolver|Resposta:)/.test(help) ? help : null, sensitive: !!sensitive, required: form.required_keys.includes(key) })) })),
+    answers, status: st.status, submitted_at: st.submitted_at, answered: st.answered, total: st.total, missing_required: st.missing_required });
+});
+portal.put('/onboarding/answers/:key', (req, res) => {
+  const c = myClient(req);
+  const form = activeForm();
+  if (!questionOf(form, req.params.key)) throw new HttpError(404, 'Pergunta não encontrada.');
+  const value = req.body?.value;
+  if (typeof value !== 'string' && !Array.isArray(value)) throw new HttpError(422, 'Resposta inválida.');
+  if (String(value).length > 20000) throw new HttpError(422, 'Resposta muito longa.');
+  saveAnswer(c.id, req.params.key, value, req.user, { origin: 'onboarding_cliente', source_type: 'plataforma' });
+  run("UPDATE onboarding SET form_status='em_andamento' WHERE client_id=? AND form_status='nao_iniciado'", c.id);
+  if (req.params.key.startsWith('acesso_') && String(value).trim()) run("UPDATE onboarding_items SET status='recebido', received_at=? WHERE onboarding_id=(SELECT id FROM onboarding WHERE client_id=?) AND kind='acesso' AND status='pendente'", now(), c.id);
+  const st = formStatus(c.id);
+  res.json({ ok: true, answered: st.answered, total: st.total, saved_at: now() });
+});
+portal.post('/onboarding/submit', (req, res) => {
+  const c = myClient(req);
+  const ob = one('SELECT * FROM onboarding WHERE client_id=?', c.id);
+  const st = submitForm(c.id, req.user, () => ob && checkOnboardingComplete(ob.id, req.user));
+  res.json({ ok: true, status: st.status, answered: st.answered, total: st.total });
 });
 // Formulário de onboarding: preenche o Client Brain e dá baixa no item
 portal.post('/onboarding/:itemId', (req, res) => {
