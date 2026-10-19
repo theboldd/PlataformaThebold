@@ -30,9 +30,12 @@ const TEAM = [
   ['leo', 'Léo', 'edicao', 'Editor de vídeo', ['edicao'], 16],
   ['matheus', 'Matheus', 'comercial', 'Comercial · Financeiro · Contratos', [], 12],
 ];
+// E-mails de acesso definidos pela equipe (fora do git, em _decisoes.json → emails: { rebeca: "..." })
+const DEC = path.resolve(process.env.BOLD_MIGRATION_DIR || 'storage/migration/notion', '_decisoes.json');
+const EMAILS = fs.existsSync(DEC) ? JSON.parse(fs.readFileSync(DEC, 'utf8')).emails || {} : {};
 const U = {};
 for (const [key, name, role, title, fns, cap] of TEAM) {
-  U[key] = insert('users', { id: uid('u_'), name, email: `${key}@thebold.demo`, password_hash: pw, role_key: role, title, functions: JSON.stringify(fns), capacity: cap, active: 1, avatar_color: '#4A1725', created_at: now() });
+  U[key] = insert('users', { id: uid('u_'), name, email: EMAILS[key] || `${key}@thebold.demo`, password_hash: pw, role_key: role, title, functions: JSON.stringify(fns), capacity: cap, active: 1, avatar_color: '#4A1725', created_at: now() });
 }
 
 setClock(null);
