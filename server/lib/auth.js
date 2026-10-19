@@ -23,9 +23,24 @@ export function validatePassword(pw) {
 }
 
 const sha = (t) => crypto.createHash('sha256').update(t).digest('hex');
+
+// Sessões assinadas (sem estado) para ambientes com várias instâncias e banco local por instância (prévia no Vercel).
+// O token carrega usuário + validade + HMAC; qualquer instância valida sem consultar a tabela de sessões.
+const STATELESS = process.env.BOLD_STATELESS_SESSIONS === '1';
+const SECRET = process.env.BOLD_SESSION_SECRET || (process.env.BOLD_DEMO === '1' ? 'the-bold-os:demo-preview' : null);
+if (STATELESS && !SECRET) throw new Error('BOLD_SESSION_SECRET é obrigatório com sessões assinadas.');
+const sign = (payload) => crypto.createHmac('sha256', SECRET).update(payload).digest('base64url');
+function readSigned(token) {
+  const [v, userId, exp, mac] = String(token).split('.');
+  if (v !== 'v1' || !userId || !exp || !mac) return null;
+  const ref = Buffer.from(sign(`v1.${userId}.${exp}`)), got = Buffer.from(mac);
+  if (ref.length !== got.length || !crypto.timingSafeEqual(ref, got) || Number(exp) < Date.now()) return null;
+  return userId;
+}
+
 export function createSession(user, req) {
-  const token = crypto.randomBytes(32).toString('base64url');
   const expires = new Date(Date.now() + SESSION_DAYS * 864e5).toISOString();
+  const token = STATELESS ? `v1.${user.id}.${Date.parse(expires)}.${sign(`v1.${user.id}.${Date.parse(expires)}`)}` : crypto.randomBytes(32).toString('base64url');
   insert('sessions', { id: uid('s_'), token_hash: sha(token), user_id: user.id, created_at: now(), expires_at: expires, ip: req.ip, user_agent: String(req.headers['user-agent'] || '').slice(0, 200) });
   run('UPDATE users SET last_login_at=? WHERE id=?', now(), user.id);
   return { token, expires };
@@ -46,7 +61,11 @@ export const clearRate = (key) => attempts.delete(key);
 export function loadUser(req, _res, next) {
   const token = req.cookies?.[COOKIE];
   req.user = null;
-  if (token) {
+  if (token && STATELESS) {
+    const userId = readSigned(token);
+    const u = userId && one('SELECT * FROM users WHERE id=?', userId);
+    if (u && u.active) req.user = u;
+  } else if (token) {
     const s = one('SELECT * FROM sessions WHERE token_hash=?', sha(token));
     if (s && s.expires_at > now()) {
       const u = one('SELECT * FROM users WHERE id=?', s.user_id);

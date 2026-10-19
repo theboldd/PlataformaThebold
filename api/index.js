@@ -8,6 +8,9 @@ const DIR = process.env.BOLD_DATA_DIR || '/tmp/bold';
 if (!fs.existsSync(path.join(DIR, 'bold.db'))) fs.cpSync(path.resolve('demo-snapshot'), DIR, { recursive: true });
 process.env.BOLD_DATA_DIR = DIR;
 process.env.BOLD_STORAGE_DIR = DIR;
+process.env.BOLD_DEMO = '1';
+// Cada instância tem sua cópia do banco: a sessão precisa valer em qualquer uma
+process.env.BOLD_STATELESS_SESSIONS = '1';
 
 const { createApp } = await import('../server/index.js');
 export default createApp();
