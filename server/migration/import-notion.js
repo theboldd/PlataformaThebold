@@ -122,18 +122,9 @@ function importClient(file) {
       else if (p.reason === 'inacessível') { report.skippedInaccessible.push(`${d.name} — ${p.title}`); issue(c.id, d.name, 'pagina_inacessivel', `Página/bloco não lido na migração: ${p.title}`, 'notion'); }
     }
 
-    // Equipe vinculada (do mapa extraído do Notion; nomes ambíguos não são escolhidos)
-    const members = teamMap?.clients?.[d.notion_url] || teamMap?.clients?.[d.name] || [];
-    for (const m of members) {
-      const u = userByFirst(m.person || m.name);
-      if (!u || !m.function) { report.unmatchedTeam.push(`${d.name}: ${m.person || m.name} (${m.function || 'função?'})`); issue(c.id, d.name, 'equipe', `Vínculo não aplicado: "${m.person || m.name}" como ${m.function || '[função não informada]'}${m.source ? ` (fonte: ${m.source})` : ''}.`, 'notion'); continue; }
-      run('INSERT OR IGNORE INTO client_members (client_id,user_id,function) VALUES (?,?,?)', c.id, u.id, m.function);
-      run('INSERT OR IGNORE INTO channel_members (channel_id,user_id) VALUES ((SELECT id FROM channels WHERE client_id=? AND kind=?),?)', c.id, 'cliente', u.id);
-    }
-
     log({ action: 'migracao.notion', entity: 'client', id: c.id, client: c.id, summary: `Ficha migrada do Notion (${section || 'seção?'}): ${stats.entries} informações, ${stats.answers} respostas do onboarding, ${stats.links + stats.files} links/arquivos`, after: d.notion_url });
     for (const k of Object.keys(report.totals)) report.totals[k] += stats[k] || 0;
-    report.clients.push({ name: d.name, section, id: c.id, ...stats, visited: (d.pages_visited || []).length, members: members.length });
+    report.clients.push({ name: d.name, section, id: c.id, ...stats, visited: (d.pages_visited || []).length, members: 0 });
     return c;
   });
 }
@@ -186,6 +177,47 @@ if (fs.existsSync(ansFile)) {
   }
   for (const u of A.unmatched || []) issue(find(u.client_name)?.id || null, u.client_name, 'formulario_antigo', `Formulário não extraído por pergunta: ${u.reason}${u.url ? ` (${u.url})` : ''}`, 'notion:geral');
   for (const o of report.answersOutside) issue(null, o.split(' (')[0], 'escopo', `Há respostas de onboarding no Notion para quem não está em CLIENTES MKT / ADVS MKT: ${o}. Não migrado nesta etapa.`, 'notion:geral');
+}
+
+// Equipe por cliente (_team_map.json: RESPONSÁVEIS POR CLIENTE + DIVISÃO EQUIPE). Funções com fontes divergentes NÃO são aplicadas.
+const FN = { estrategista: 'estrategia', copywriter: 'copy', designer: 'design', editor_video: 'edicao', responsavel_geral: 'atendimento' };
+if (teamMap?.clients) {
+  const pool = all('SELECT id, name, aliases FROM clients WHERE is_demo=0 AND notion_url IS NOT NULL');
+  const findClient = (name) => {
+    const n = norm(name);
+    const names = (c) => [c.name, ...JSON.parse(c.aliases || '[]')].map(norm);
+    const exact = pool.filter((c) => names(c).includes(n));
+    if (exact.length === 1) return { c: exact[0], loose: false };
+    const pre = pool.filter((c) => names(c).some((x) => x === n || x.startsWith(n + ' ')));
+    return pre.length === 1 ? { c: pre[0], loose: !n.includes(' ') } : null;
+  };
+  const conflicts = new Set((teamMap.conflicts || []).map((x) => `${norm(x.client_name)}|${x.field}`));
+  run("DELETE FROM client_members WHERE function<>'cliente' AND client_id IN (SELECT id FROM clients WHERE notion_url IS NOT NULL)");
+  for (const row of teamMap.clients) {
+    const m = findClient(row.client_name);
+    if (!m) { report.unmatchedTeam.push(`${row.client_name}: sem ficha correspondente em CLIENTES MKT / ADVS MKT`); continue; }
+    const { c, loose } = m;
+    if (loose) issue(c.id, c.name, 'equipe', `Equipe vinculada pelo apelido "${row.client_name}" usado no Notion — confirmar que é este cliente.`, 'notion:geral');
+    let n = 0;
+    for (const [field, fn] of Object.entries(FN)) {
+      const who = row[field];
+      if (conflicts.has(`${norm(row.client_name)}|${field}`)) {
+        const cf = teamMap.conflicts.find((x) => norm(x.client_name) === norm(row.client_name) && x.field === field);
+        issue(c.id, c.name, 'equipe', `${field.replace('_', ' ')}: fontes divergentes — ${cf.values.map((v) => `${v.value} (${v.source?.title || 'fonte?'})`).join(' × ')}. Não vinculado; definir na aba Equipe.`, 'notion:geral');
+        report.unmatchedTeam.push(`${c.name}: ${field} em conflito (${cf.values.map((v) => v.value).join(' × ')})`);
+        continue;
+      }
+      if (!who) continue;
+      const u = userByFirst(who);
+      if (!u) { issue(c.id, c.name, 'equipe', `${field.replace('_', ' ')} "${who}" não corresponde a ninguém da equipe cadastrada.`, 'notion:geral'); report.unmatchedTeam.push(`${c.name}: ${who} (${field})`); continue; }
+      run('INSERT OR IGNORE INTO client_members (client_id,user_id,function) VALUES (?,?,?)', c.id, u.id, fn);
+      run("INSERT OR IGNORE INTO channel_members (channel_id,user_id) SELECT id, ? FROM channels WHERE client_id=? AND kind='cliente'", u.id, c.id);
+      n++;
+    }
+    const rc = report.clients.find((x) => x.id === c.id);
+    if (rc) rc.members += n;
+  }
+  for (const c of pool) if (!one("SELECT 1 FROM client_members WHERE client_id=? AND function<>'cliente'", c.id)) issue(c.id, c.name, 'equipe', 'Nenhuma pessoa da equipe vinculada a partir do Notion — definir na aba Equipe.', 'notion:geral');
 }
 
 // Duplicados: mesmo nome normalizado ou alias compartilhado entre fichas diferentes

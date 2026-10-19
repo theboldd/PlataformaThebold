@@ -10,7 +10,7 @@ import { FUNCTIONS } from '../lib/status.js';
 import '../styles/production.css';
 import { ClientTile } from './production/ClientTile.jsx';
 
-const STATUS = { onboarding: 'Onboarding', ativo: 'Ativo', pausado: 'Pausado', encerrado: 'Encerrado' };
+const STATUS = { onboarding: 'Onboarding', ativo: 'Ativo', pausado: 'Pausado', encerrado: 'Encerrado', a_confirmar: 'A confirmar' };
 
 export default function Clientes() {
   useCrumbs('Clientes');

@@ -23,6 +23,7 @@
 .ct-status { flex: none; font-size: 12px; font-weight: 600; padding: 3px 12px; border-radius: 999px; background: var(--ink); color: var(--bg); }
 .ct-status.s-onboarding { background: var(--bordo); color: var(--paper); }
 .ct-status.s-pausado, .ct-status.s-encerrado { background: var(--surface-2); color: var(--muted); }
+.ct-status.s-a_confirmar { background: transparent; color: var(--muted); border: 1px dashed var(--line-strong); }
 .ct-seg { align-self: flex-start; font-size: 13px; font-weight: 500; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line-strong); }
 .ct-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--line); }
 .ct-chip { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; font-size: 14px; font-weight: 500; background: var(--surface-2); }
