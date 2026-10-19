@@ -23,24 +23,30 @@ export function computePendencies() {
     const overdue = k.due_at && new Date(k.due_at).getTime() < t;
     const isClient = k.function === 'cliente';
     const base = { id: `task:${k.id}`, client_id: k.client_id, client: k.client_name, content_id: k.content_id, content: k.content_id ? `#${k.content_number} ${k.content_title}` : null,
-      process: k.content_stage ? STAGES[k.content_stage]?.label : k.kind, since: k.created_at, due: k.due_at, link: k.content_id ? `/conteudos/${k.content_id}` : '/processos' };
+      process: k.content_stage ? STAGES[k.content_stage]?.label : k.kind, since: k.created_at, due: k.due_at, link: k.content_id ? `/conteudos/${k.content_id}` : '/processos',
+      source: { type: 'task', id: k.id }, who_id: k.assignee_id, function: k.function, publish_at: k.planned_at };
     if (!k.assignee_id) {
-      out.push({ ...base, severity: 'critica', title: `Tarefa sem responsável: ${k.title}`, who: 'Operações (definir responsável)', impact: 'O fluxo para: ninguém foi notificado.', next: `Vincular uma pessoa com a função “${k.function}” ao cliente ou atribuir manualmente.` });
+      out.push({ ...base, severity: 'critica', title: `Tarefa sem responsável: ${k.title}`, problem: `${k.client_name && k.title.endsWith(` — ${k.client_name}`) ? k.title.slice(0, -(k.client_name.length + 3)) : k.title} — sem responsável`, cause: 'responsavel', late_ms: ago(k.created_at), late: fmtDays(ago(k.created_at)), impact_w: 3,
+        who: 'Operações (definir responsável)', impact: 'O fluxo para: ninguém foi notificado.', action: 'Atribuir responsável', next: `Vincular uma pessoa com a função “${k.function}” ao cliente ou atribuir manualmente.` });
       continue;
     }
     if (overdue) {
       const late = t - new Date(k.due_at).getTime();
       const publishSoon = k.planned_at && (new Date(k.planned_at).getTime() - t) < 3 * 864e5;
       out.push({ ...base, severity: publishSoon || late > 2 * 864e5 ? 'critica' : 'alta', title: isClient ? `Aprovação atrasada — ${k.client_name}` : `Atrasado: ${k.title}`,
+        problem: isClient ? `${k.content_stage === 'aprovacao_tema' ? 'Aprovação do tema' : 'Aprovação'} atrasada` : (k.client_name && k.title.endsWith(` — ${k.client_name}`) ? k.title.slice(0, -(k.client_name.length + 3)) : k.title), cause: isClient ? 'cliente' : 'prazo', late_ms: late, impact_w: publishSoon ? 3 : 2,
+        action: isClient ? 'Cobrar aprovação do cliente' : 'Concluir ou renegociar o prazo',
         who: isClient ? 'Cliente' : k.assignee_name, late: fmtDays(late), impact: publishSoon ? 'Publicação em menos de 3 dias em risco.' : 'Atrasa as próximas etapas do ciclo.',
         next: isClient ? 'Enviar follow-up ao cliente (régua de cobrança) e decidir se o item vai para a próxima semana ou o próximo mês.' : 'Concluir a etapa ou renegociar o prazo com Operações.' });
     } else if (isClient && ago(k.created_at) > 48 * H) {
-      out.push({ ...base, severity: ago(k.created_at) > 72 * H ? 'alta' : 'media', title: `Aguardando cliente — ${k.client_name}`, who: 'Cliente', late: fmtDays(ago(k.created_at)), impact: 'Produção/agendamento esperando resposta.', next: 'Follow-up pelo atendimento.' });
+      out.push({ ...base, severity: ago(k.created_at) > 72 * H ? 'alta' : 'media', title: `Aguardando cliente — ${k.client_name}`, problem: 'Aguardando resposta do cliente', cause: 'cliente', late_ms: ago(k.created_at), impact_w: 1, action: 'Fazer follow-up', who: 'Cliente', late: fmtDays(ago(k.created_at)), impact: 'Produção/agendamento esperando resposta.', next: 'Follow-up pelo atendimento.' });
     }
   }
   for (const c of all(`SELECT ct.*, cl.name client_name FROM contents ct JOIN clients cl ON cl.id=ct.client_id WHERE ct.blocked=1 AND ct.stage NOT IN ('publicado','cancelado')`)) {
     out.push({ id: `block:${c.id}`, client_id: c.client_id, client: c.client_name, content_id: c.id, content: `#${c.number} ${c.title}`, process: STAGES[c.stage].label, since: c.updated_at, due: c.planned_at,
-      severity: c.planned_at && new Date(c.planned_at).getTime() - t < 5 * 864e5 ? 'critica' : 'alta', title: `Bloqueado: ${c.block_reason}`, who: c.waiting_on === 'cliente' ? 'Cliente' : c.waiting_on === 'informacao' ? 'Aguardando informação' : 'Equipe',
+      severity: c.planned_at && new Date(c.planned_at).getTime() - t < 5 * 864e5 ? 'critica' : 'alta', title: `Bloqueado: ${c.block_reason}`, problem: c.block_reason || 'Conteúdo bloqueado',
+      cause: c.waiting_on === 'cliente' ? 'material' : c.waiting_on === 'informacao' ? 'informacao' : 'equipe', late_ms: ago(c.updated_at), late: fmtDays(ago(c.updated_at)), impact_w: c.planned_at && new Date(c.planned_at).getTime() - t < 5 * 864e5 ? 3 : 2,
+      action: c.waiting_on === 'cliente' ? 'Cobrar o material' : 'Resolver e desbloquear', source: { type: 'content', id: c.id }, publish_at: c.planned_at, who: c.waiting_on === 'cliente' ? 'Cliente' : c.waiting_on === 'informacao' ? 'Aguardando informação' : 'Equipe',
       impact: 'Conteúdo não avança.', next: c.waiting_on === 'cliente' ? 'Cobrar o material e definir data-limite.' : 'Resolver o bloqueio e desbloquear.', link: `/conteudos/${c.id}` });
   }
   for (const o of all(`SELECT oi.*, ob.client_id, cl.name client_name FROM onboarding_items oi JOIN onboarding ob ON ob.id=oi.onboarding_id JOIN clients cl ON cl.id=ob.client_id
@@ -48,13 +54,16 @@ export function computePendencies() {
     const late = o.due_at && new Date(o.due_at).getTime() < t;
     if (!late && ago(o.requested_at) < 3 * 864e5) continue;
     out.push({ id: `onb:${o.id}`, client_id: o.client_id, client: o.client_name, process: 'Onboarding', since: o.requested_at, due: o.due_at, severity: late ? 'alta' : 'media',
-      title: `Onboarding incompleto: ${o.label}`, who: o.who === 'cliente' ? 'Cliente' : 'Equipe', late: late ? fmtDays(t - new Date(o.due_at).getTime()) : null, impact: 'Atrasa o primeiro cronograma.', next: o.who === 'cliente' ? 'Lembrar o cliente pelo portal e pelo grupo.' : 'Concluir item interno.', link: `/clientes/${o.client_id}?tab=onboarding` });
+      title: `Onboarding incompleto: ${o.label}`, problem: o.label, cause: 'onboarding', late_ms: late ? t - new Date(o.due_at).getTime() : ago(o.requested_at), impact_w: 1,
+      action: o.who === 'cliente' ? 'Lembrar o cliente' : 'Concluir item interno', source: { type: 'onboarding_item', id: o.id }, who: o.who === 'cliente' ? 'Cliente' : 'Equipe', late: late ? fmtDays(t - new Date(o.due_at).getTime()) : null, impact: 'Atrasa o primeiro cronograma.', next: o.who === 'cliente' ? 'Lembrar o cliente pelo portal e pelo grupo.' : 'Concluir item interno.', link: `/clientes/${o.client_id}?tab=onboarding` });
   }
   for (const i of all("SELECT inv.*, cl.name client_name FROM invoices inv JOIN clients cl ON cl.id=inv.client_id WHERE inv.status IN ('aberta','atrasada') AND inv.due_at < ?", now())) {
-    out.push({ id: `inv:${i.id}`, client_id: i.client_id, client: i.client_name, process: 'Financeiro', since: i.due_at, due: i.due_at, severity: 'alta', title: `Pagamento em atraso — ${i.description}`, who: 'Cliente / Financeiro', late: fmtDays(t - new Date(i.due_at).getTime()), impact: 'Receita pendente.', next: 'Contato do financeiro.', link: '/financeiro', financial: true });
+    out.push({ id: `inv:${i.id}`, client_id: i.client_id, client: i.client_name, process: 'Financeiro', since: i.due_at, due: i.due_at, severity: 'alta', title: `Pagamento em atraso — ${i.description}`, problem: `Pagamento em atraso: ${i.description}`, cause: 'financeiro', late_ms: t - new Date(i.due_at).getTime(), impact_w: 2,
+      action: 'Contato do financeiro', source: { type: 'invoice', id: i.id }, who: 'Cliente / Financeiro', late: fmtDays(t - new Date(i.due_at).getTime()), impact: 'Receita pendente.', next: 'Contato do financeiro.', link: '/financeiro', financial: true });
   }
   const order = { critica: 0, alta: 1, media: 2, baixa: 3 };
-  return out.sort((a, b) => order[a.severity] - order[b.severity] || String(a.due || '9').localeCompare(String(b.due || '9')));
+  // prioridade → impacto → tempo de atraso → prazo mais próximo
+  return out.sort((a, b) => order[a.severity] - order[b.severity] || (b.impact_w || 0) - (a.impact_w || 0) || (b.late_ms || 0) - (a.late_ms || 0) || String(a.due || '9').localeCompare(String(b.due || '9')));
 }
 
 // ── Risco por cliente ──

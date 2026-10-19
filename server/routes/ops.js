@@ -406,13 +406,7 @@ ops.get('/review/queue', requirePerm('revisao', 'view'), (req, res) => {
 });
 
 // ═════════════ CENTRO DE PENDÊNCIAS (exclusivo CEO + Operações) ═════════════
-ops.get('/pendencias', (req, res) => {
-  if (!can(req.user, 'pendencias')) throw new HttpError(403, 'Centro de Pendências: acesso restrito (liberado pela administração em Usuários).');
-  let items = computePendencies();
-  if (!can(req.user, 'financeiro')) items = items.filter((i) => !i.financial);
-  const count = (s) => items.filter((i) => i.severity === s).length;
-  res.json({ items, counts: { critica: count('critica'), alta: count('alta'), media: count('media'), baixa: count('baixa') } });
-});
+// Centro de Pendências: ver routes/pendencias.js
 
 // ═════════════ TORRE DE CONTROLE / DASHBOARDS ═════════════
 function financeSummary() {
