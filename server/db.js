@@ -79,6 +79,42 @@ CREATE TABLE IF NOT EXISTS projects (
   cycle_month TEXT, created_at TEXT NOT NULL
 );
 
+-- Memória do cliente com PROCEDÊNCIA: cada informação guarda de onde veio (onboarding do cliente, equipe, observação interna, Notion)
+CREATE TABLE IF NOT EXISTS client_brain_entries (
+  id TEXT PRIMARY KEY, client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  section TEXT NOT NULL, label TEXT, content TEXT NOT NULL,
+  origin TEXT NOT NULL DEFAULT 'equipe', -- onboarding_cliente | equipe | observacao_interna | indefinido
+  source_type TEXT NOT NULL DEFAULT 'plataforma', -- plataforma | notion | onboarding
+  source_ref TEXT, source_page TEXT, created_by TEXT, created_at TEXT NOT NULL, updated_by TEXT, updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_brain_entries ON client_brain_entries(client_id, section);
+CREATE TABLE IF NOT EXISTS client_links (
+  id TEXT PRIMARY KEY, client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  label TEXT, url TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'link', -- link | arquivo
+  source_page TEXT, source_type TEXT NOT NULL DEFAULT 'plataforma', created_at TEXT NOT NULL
+);
+-- Cofre de acessos do cliente (logins/senhas): sempre cifrado; revelar exige permissão e fica auditado
+CREATE TABLE IF NOT EXISTS client_secrets (
+  id TEXT PRIMARY KEY, client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  label TEXT NOT NULL, secret_enc TEXT NOT NULL, provided_by TEXT, created_at TEXT NOT NULL, updated_at TEXT
+);
+-- Formulário oficial de onboarding (estrutura real do Notion "Sua marca", versionada)
+CREATE TABLE IF NOT EXISTS onboarding_forms (
+  id TEXT PRIMARY KEY, version TEXT NOT NULL, title TEXT NOT NULL, source TEXT, structure TEXT NOT NULL,
+  required_keys TEXT NOT NULL DEFAULT '[]', active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS onboarding_answers (
+  id TEXT PRIMARY KEY, client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE, form_id TEXT,
+  question_key TEXT NOT NULL, question_text TEXT, answer TEXT NOT NULL DEFAULT '',
+  origin TEXT NOT NULL DEFAULT 'onboarding_cliente', source_type TEXT NOT NULL DEFAULT 'plataforma', source_ref TEXT,
+  answered_by TEXT, answered_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE (client_id, question_key)
+);
+-- Pontos da migração que precisam de revisão humana (conflitos, ambiguidades, dados não migrados)
+CREATE TABLE IF NOT EXISTS migration_issues (
+  id TEXT PRIMARY KEY, client_id TEXT REFERENCES clients(id) ON DELETE CASCADE, client_name TEXT,
+  kind TEXT NOT NULL, description TEXT NOT NULL, source TEXT, status TEXT NOT NULL DEFAULT 'aberto', created_at TEXT NOT NULL
+);
+
 -- ───────────── ONBOARDING ─────────────
 CREATE TABLE IF NOT EXISTS onboarding (
   id TEXT PRIMARY KEY, client_id TEXT NOT NULL UNIQUE REFERENCES clients(id) ON DELETE CASCADE,
@@ -337,7 +373,7 @@ CREATE TABLE IF NOT EXISTS reports (
 `;
 db.exec(SCHEMA);
 // Migrações leves (colunas adicionadas depois da primeira versão)
-for (const sql of ['ALTER TABLE adjustments ADD COLUMN reapproval INTEGER NOT NULL DEFAULT 0']) { try { db.exec(sql); } catch { /* já existe */ } }
+for (const sql of ['ALTER TABLE adjustments ADD COLUMN reapproval INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE clients ADD COLUMN notion_url TEXT', 'ALTER TABLE clients ADD COLUMN notion_section TEXT', 'ALTER TABLE clients ADD COLUMN aliases TEXT', "ALTER TABLE onboarding ADD COLUMN form_status TEXT NOT NULL DEFAULT 'nao_iniciado'", 'ALTER TABLE onboarding ADD COLUMN form_submitted_at TEXT']) { try { db.exec(sql); } catch { /* já existe */ } }
 
 // ── helpers ───────────────────────────────────────────
 export const one = (sql, ...p) => db.prepare(sql).get(...p);

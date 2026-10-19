@@ -1,0 +1,636 @@
+{
+  "version": "PADRÃO 2026",
+  "title": "Sua marca — Bem-vinda(o) à The Bold",
+  "source": "Notion: PADRÃO 2026 / BRIEFING INICIAL / SUA MARCA / BEM VINDA(O) A THE BOLD (galeria com 6 cartões)",
+  "sections": [
+    {
+      "title": "COMECE AQUI",
+      "questions": [
+        {
+          "key": "acesso_facebook_login",
+          "text": "FACEBOOK: LOGIN:",
+          "type": "text",
+          "options": [],
+          "help": "ACESSO DAS SUA CONTAS: Não ficaremos logados no seu perfil do instagram, precisamos apenas do acesso para conectar na nossa plataforma de agendamento. DO QUE PRECISAMOS? — CAMPO SENSÍVEL: valores NÃO migrados.",
+          "sensitive": true
+        },
+        {
+          "key": "acesso_facebook_senha",
+          "text": "FACEBOOK: SENHA:",
+          "type": "text",
+          "options": [],
+          "help": "CAMPO SENSÍVEL (credencial): valores NÃO migrados.",
+          "sensitive": true
+        },
+        {
+          "key": "acesso_instagram_login",
+          "text": "INSTAGRAM: LOGIN:",
+          "type": "text",
+          "options": [],
+          "help": "CAMPO SENSÍVEL: valores NÃO migrados.",
+          "sensitive": true
+        },
+        {
+          "key": "acesso_instagram_senha",
+          "text": "INSTAGRAM: SENHA:",
+          "type": "text",
+          "options": [],
+          "help": "CAMPO SENSÍVEL (credencial): valores NÃO migrados. Rodapé do cartão: 'Caso tenha qualquer dúvida ao responder, não deixe de nos perguntar.'",
+          "sensitive": true
+        }
+      ]
+    },
+    {
+      "title": "POSICIONAMENTO",
+      "questions": [
+        {
+          "key": "pos_mudanca_vida",
+          "text": "O que esse posicionamento no digital iria mudar na sua vida?",
+          "type": "long_text",
+          "options": [],
+          "help": "Agora eu quero que você defina,",
+          "sensitive": false
+        },
+        {
+          "key": "pos_impacto_real",
+          "text": "Além de vender mais, qual é o impacto real que você quer gerar na vida de quem consome seu conteúdo?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_custo_ausencia",
+          "text": "O quanto a sua ausência no digital hoje está custando para a credibilidade da sua marca física/offline?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_nivel_autoridade",
+          "text": "Qual é o nível de autoridade que você deseja alcançar?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_3_adjetivos",
+          "text": "Quais seriam os 3 adjetivos que descrevem a personalidade?",
+          "type": "long_text",
+          "options": [],
+          "help": "E vamos trabalhar a clareza da sua marca? Mais importante do que chegar em algum lugar é entender claramente aonde você quer chegar. Por isso antes de você começar o processo de estruturar sua marca e Instagram responda essas perguntas abaixo.",
+          "sensitive": false
+        },
+        {
+          "key": "pos_como_lembrada",
+          "text": "Como você quer ser lembrada? e como você não deseja ser lembrada?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_sentimentos",
+          "text": "Quais sentimentos você quer despertar no seu cliente?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_tom_voz",
+          "text": "Qual é o tom de voz da sua comunicação: mais acolhedor e humano ou mais técnico e imponente?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_transformacao",
+          "text": "Qual transformação você quer causar?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_valores",
+          "text": "Quais são os 3 valores que você nunca sacrificaria no seu trabalho?",
+          "type": "multi_select",
+          "options": [
+            "Gratidão / Espiritualidade",
+            "Obediência",
+            "Esperança",
+            "Maturidade",
+            "Disciplina",
+            "Inteligência",
+            "Humildade",
+            "Lealdade",
+            "Justiça",
+            "Dedicação",
+            "Honestidade",
+            "Coragem",
+            "Entusiasmo",
+            "Felicidade",
+            "Amor",
+            "Amizade",
+            "Compaixão",
+            "Respeito",
+            "Paz",
+            "Tolerância",
+            "Responsabilidade"
+          ],
+          "help": "O ser humano no geral se conecta muito a marcas que compartilham dos mesmos valores que ele, por isso é importante essa definição. Para que você use esses valores como pontos de diferenciação e conexão com a sua audiência. - Escolher 3 a 5. Alguns valores para você pensar: (checkboxes)",
+          "sensitive": false
+        },
+        {
+          "key": "pos_dif_excelente",
+          "text": "O que você faz de forma excelente, mas que o seu mercado ainda trata como algo comum ou irrelevante?",
+          "type": "long_text",
+          "options": [],
+          "help": "Na internet milhões de pessoas já fazem milhões de coisas, concorda? E muitas vezes o que vemos são muitas pessoas que são mais do mesmo. E como não ser mais do mesmo? Sendo você! Cada detalhe da sua jornada, sua experiência de vida, seu jeito de falar e tratar as pessoas, seus valores enfim, TUDO que é característico só seu é o seu diferencial.",
+          "sensitive": false
+        },
+        {
+          "key": "pos_dif_lembrar",
+          "text": "O que normalmente fazem as pessoas lembrarem de você?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_dif_preco",
+          "text": "Se o preço não fosse um fator de decisão, por que um cliente escolheria você e não o seu concorrente mais próximo?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_dif_trajetoria",
+          "text": "Quais elementos da sua trajetória pessoal ou bastidores você quer compartilhar na sua marca?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_mood_personalidade",
+          "text": "Qual a sua personalidade?",
+          "type": "long_text",
+          "options": [],
+          "help": "Exemplo de moodboard: Persona focada em bons hábitos: https://br.pinterest.com/pin/68539225571250147/ ; Persona que trabalha fora, ama leitura e café superfaturados: https://br.pinterest.com/pin/2111131070340775/ ; Persona focada em uma boa alimentação: https://br.pinterest.com/pin/140806232458834/",
+          "sensitive": false
+        },
+        {
+          "key": "pos_mood_horas_vagas",
+          "text": "O que você gosta de fazer nas horas vagas?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_mood_estilo_vida",
+          "text": "Como você descreveria o seu estilo de vida?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_mood_vestir",
+          "text": "Como você se veste e que lojas gosta de comprar?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_mood_musicas",
+          "text": "Quais músicas você escuta?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_mood_rotina",
+          "text": "Resuma a sua rotina, sem muitos detalhes.",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_nar_virada",
+          "text": "Qual foi a sua virada de chave? (Aquele momento específico da sua carreira ou vida pessoal que te fez chegar na metodologia ou no nível de excelência que você tem hoje?)",
+          "type": "long_text",
+          "options": [],
+          "help": "No posicionamento de marca pessoal, as pessoas não compram apenas o seu serviço; elas compram quem você é e no que você acredita.",
+          "sensitive": false
+        },
+        {
+          "key": "pos_nar_conselho",
+          "text": "Se você pudesse dar um único conselho para o seu cliente ideal hoje, qual seria?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_nar_inimigo",
+          "text": "Qual é o inimigo comum do seu público? (O que vocês dois combatem juntos?)",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_universo_inspiracoes",
+          "text": "Agora queremos conhecer suas inspirações, compartilhe com a gente pessoas que te inspiram e o motivo ao lado.",
+          "type": "long_text",
+          "options": [],
+          "help": "Lembrando que, não necessariamente essa pessoa é da sua área de atuação, mas é um posicionamento, um perfil, uma estética que você se identifica e gosta de acompanhar.",
+          "sensitive": false
+        },
+        {
+          "key": "pos_attr_pilares",
+          "text": "Quais são os pilares que você aborda hoje?",
+          "type": "long_text",
+          "options": [],
+          "help": "Não basta definir seu universo de marca, é preciso reforçar e por isso você vai escrever aqui os atributos da sua marca, para sempre voltar ler e reforçar no seu posicionamento.",
+          "sensitive": false
+        },
+        {
+          "key": "pos_attr_frase",
+          "text": "Você tem alguma frase ou jargão?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_attr_emojis",
+          "text": "Quais emojis você mais utiliza?",
+          "type": "text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_rit_atuais",
+          "text": "Quais são os rituais que você já tem no seu dia a dia?",
+          "type": "long_text",
+          "options": [],
+          "help": "Chegamos aos rituais, Os rituais ajudam a dar uma sensação de previsibilidade e pertencimento na sua audiência. É importante que esses rituais tenham significados e relação com as suas crenças.",
+          "sensitive": false
+        },
+        {
+          "key": "pos_rit_desejados",
+          "text": "Quais rituais você gostaria de ter?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_play_musicas",
+          "text": "Quais músicas você gosta de escutar?",
+          "type": "long_text",
+          "options": [],
+          "help": "Ah, essa é nossa parte favorita! Quais músicas transmitem a sensação que você deseja com a sua marca? Não sabe o que colocar? Coloque então as sensações para criarmos ela juntas! Qual é sua missão agora?",
+          "sensitive": false
+        },
+        {
+          "key": "pos_play_favorita",
+          "text": "Qual a sua playlist favorita?",
+          "type": "text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_play_imagem",
+          "text": "O que você acredita que transmite a imagem que você deseja?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_cheiro",
+          "text": "Se sua marca tivesse uma cheiro, qual seria?",
+          "type": "text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_bebida",
+          "text": "Qual será a bebida principal da sua marca pessoal?",
+          "type": "text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "pos_outros",
+          "text": "Tem mais algum elemento que não citamos aqui? Esse é o espaço para eles, conta tudo para a gente!",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        }
+      ]
+    },
+    {
+      "title": "PERSONA",
+      "questions": [
+        {
+          "key": "per_nome",
+          "text": "Nome:",
+          "type": "text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "per_idade",
+          "text": "Idade:",
+          "type": "text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "per_estado_civil",
+          "text": "Estado civil:",
+          "type": "text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "per_filhos",
+          "text": "Tem filhos?",
+          "type": "text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "per_onde_mora",
+          "text": "Onde mora?",
+          "type": "text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "per_escolaridade",
+          "text": "Grau de escolaridade?",
+          "type": "text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "per_poder_aquisitivo",
+          "text": "Poder aquisitivo:",
+          "type": "text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "per_crencas",
+          "text": "Crenças:",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "per_valores",
+          "text": "Valores:",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "per_onde_consome",
+          "text": "Onde esse cliente consome e o que ele valoriza?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "per_dor_silenciosa",
+          "text": "Qual é a maior dor silenciosa dele? (Aquilo que ele não admite para ninguém, mas que o seu serviço resolve)",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "per_simbolos_sucesso",
+          "text": "Quais são os símbolos de sucesso para essa pessoa?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "per_por_que_nao_comprou",
+          "text": "Por que ele ainda não comprou de você ou de um concorrente?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "per_dia_perfeito",
+          "text": "Como é o dia perfeito desse cliente após consumir sua solução? (Descreva o estado de transformação emocional e prática que ele alcança).",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "per_pensamentos",
+          "text": "Quais os os pensamentos que rodeiam sua mente?",
+          "type": "long_text",
+          "options": [],
+          "help": "Não basta conhecer sua persona, é importante entender o que tira o sono dela. Afinal, você precisa ir além do superficial para analisar o que essa pessoa está vivendo no momento. Por isso, chegou o momento de mapear essa pessoa e ir além.",
+          "sensitive": false
+        },
+        {
+          "key": "per_momento_vida",
+          "text": "O que está acontecendo na vida dela neste exato momento para ela te procurar?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "per_inseguranca",
+          "text": "O que pode estar gerando insegurança nessa pessoa?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "per_cliente_nao_quer",
+          "text": "Qual é o cliente que você não quer atrair de forma alguma?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        }
+      ]
+    },
+    {
+      "title": "PRODUTO OU SERVIÇO",
+      "questions": [
+        {
+          "key": "prod_estrela",
+          "text": "Qual é o seu produto estrela? (Aquele que é o seu maior foco de vendas e que precisa de mais autoridade no digital)",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "prod_promessa",
+          "text": "Qual é a promessa inegociável da sua entrega?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "prod_jornada",
+          "text": "Como é a jornada do seu cliente desde o primeiro 'Oi' até o pós-venda?",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "prod_futuros",
+          "text": "Futuros produtos",
+          "type": "long_text",
+          "options": [],
+          "help": "Resposta:",
+          "sensitive": false
+        }
+      ]
+    },
+    {
+      "title": "ROTINA",
+      "questions": [
+        {
+          "key": "rot_manha",
+          "text": "MANHÃ",
+          "type": "long_text",
+          "options": [],
+          "help": "Linha 'MANHÃ' da tabela TURNO | O QUE VOCÊ FAZ? (3 linhas)",
+          "sensitive": false
+        },
+        {
+          "key": "rot_tarde",
+          "text": "TARDE",
+          "type": "long_text",
+          "options": [],
+          "help": "Linha 'TARDE' da tabela (3 linhas)",
+          "sensitive": false
+        },
+        {
+          "key": "rot_noite",
+          "text": "NOITE",
+          "type": "long_text",
+          "options": [],
+          "help": "Linha 'NOITE' da tabela (2 linhas)",
+          "sensitive": false
+        }
+      ]
+    },
+    {
+      "title": "DESIGN E ESTÉTICA DO SEU PERFIL",
+      "questions": [
+        {
+          "key": "des_nao_gostaria",
+          "text": "O que você NÃO gostaria de ver nas artes? (ex: muitas cores, cores fortes, elementos de desenho, muita informação na arte...)",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "des_identidade_visual",
+          "text": "Sua marca possui identidade visual, logo ou cores? Se sim, quais? Pode adicionar ao seu drive.",
+          "type": "long_text",
+          "options": [],
+          "help": "Pode envolver arquivo (logo) — o template pede para adicionar ao drive.",
+          "sensitive": false
+        },
+        {
+          "key": "des_fonte",
+          "text": "Qual estilo de fonte você se identifica?",
+          "type": "select",
+          "options": [
+            "FONTES MAIS FORMAIS E SÉRIAS",
+            "FONTES MAIS INFORMAIS E DESPOJADAS",
+            "MEIO TERMO"
+          ],
+          "help": "Checkboxes no Notion (seleção única esperada)",
+          "sensitive": false
+        },
+        {
+          "key": "des_fundos",
+          "text": "Nos posts, você prefere:",
+          "type": "select",
+          "options": [
+            "FUNDOS LISOS",
+            "FUNDOS COM TEXTURA",
+            "GOSTO DOS DOIS"
+          ],
+          "help": "Checkboxes no Notion (seleção única esperada)",
+          "sensitive": false
+        },
+        {
+          "key": "des_perfis_referencia",
+          "text": "Liste pelo menos 3 perfis que os designs te agradam.",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        },
+        {
+          "key": "des_gostaria",
+          "text": "O que você gostaria de ver nas artes? (ex: minimalismo, fotos de pessoas, ilustrações...)",
+          "type": "long_text",
+          "options": [],
+          "help": null,
+          "sensitive": false
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Ordem dos cartões segundo a view de galeria 'THE BOLD MKT': COMECE AQUI, POSICIONAMENTO, PERSONA, PRODUTO OU SERVIÇO, ROTINA, DESIGN E ESTÉTICA DO SEU PERFIL.",
+    "Nenhum campo é marcado como obrigatório no Notion (são páginas de texto livre); required=null em todos.",
+    "As respostas são texto livre no corpo da página; tipos atribuídos (long_text/text/select/multi_select) são inferidos pelo formato da pergunta. Checkboxes de valores/fonte/fundo são to-dos do Notion.",
+    "COMECE AQUI pede login e senha de Facebook e Instagram — dados sensíveis, nunca migrar valores; em _onboarding_answers.json apenas se indica se o cliente preencheu.",
+    "Alguns clientes escreveram a rotina em texto livre abaixo da tabela ROTINA; nas respostas isso usa question_key 'rot_texto_livre' (não é campo do template).",
+    "Respostas a blocos extras adicionados pelo cliente/equipe (ex.: 'Conteúdos e ideias' no cartão PRODUTO OU SERVIÇO) usam question_key 'extra'.",
+    "Versões anteriores do formulário (PADRÃO 2025 'SEU ESPAÇO', PADRÃO/2024 'ESPAÇO CLIENTE') têm perguntas diferentes (ex.: 'Nesse campo eu quero que você me conte tudo que o digital pode fazer pela sua...'); não mapeadas neste schema."
+  ]
+}
