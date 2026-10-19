@@ -35,14 +35,13 @@ export const ROLE_DEFS = [
   { key: 'cliente', label: 'Cliente', dashboard: 'portal', all_clients: 0, internal: 0, perms: { portal: ['view', 'approve', 'create'] } },
 ];
 
-// Centro de Pendências global: regra de negócio fixa (somente CEO e Operações).
+// Centro de Pendências global: por padrão só CEO e Operações (permissões dos roles). Pode ser liberado a outra pessoa em Usuários → permissões específicas.
 export const PENDENCIAS_ROLES = ['ceo', 'operacoes'];
 
 export function roleOf(user) { return one('SELECT * FROM roles WHERE key=?', user.role_key); }
 
 export function can(user, module, action = 'view') {
   if (!user || !user.active) return false;
-  if (module === 'pendencias' && !PENDENCIAS_ROLES.includes(user.role_key)) return false;
   const ov = one('SELECT effect FROM user_permissions WHERE user_id=? AND module=? AND action=?', user.id, module, action);
   if (ov) return ov.effect === 'grant';
   return !!one('SELECT 1 FROM role_permissions WHERE role_key=? AND module=? AND action=?', user.role_key, module, action);

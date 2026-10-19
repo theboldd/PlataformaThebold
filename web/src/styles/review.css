@@ -1,0 +1,21 @@
+/* ── Sala de Revisão por cliente ── */
+.rr-head { display: flex; align-items: flex-end; gap: 24px; flex-wrap: wrap; padding-bottom: 20px; border-bottom: 1px solid var(--ink); }
+.rr-head .btn-ghost { align-self: flex-start; }
+.rr-progress { display: grid; grid-template-columns: auto auto; align-items: baseline; gap: 4px 8px; min-width: 180px; }
+.rr-progress .num { font-size: 44px; line-height: 1; }
+.rr-bar { grid-column: 1 / -1; height: 3px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.rr-bar i { display: block; height: 100%; background: var(--ink); transition: width var(--t-slow) var(--ease-out); }
+.rr-note { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); margin: 14px 0 24px; flex-wrap: wrap; }
+.rr-decision .rr-draft { border: 1px solid var(--line-strong); border-radius: 12px; padding: 14px 16px; background: var(--surface); }
+.rr-draft.aprovar { border-color: color-mix(in srgb, var(--ok) 45%, transparent); background: var(--ok-soft); }
+.rr-draft.ajuste { border-color: color-mix(in srgb, var(--err) 40%, transparent); background: var(--err-soft); }
+.rr-draft ul { margin: 8px 0; padding-left: 18px; }
+.rr-chip { display: inline-flex; font-size: 11px; font-weight: 600; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); }
+.rr-chip.ok { background: var(--ok-soft); color: var(--ok); }
+.rr-chip.adj { background: var(--err-soft); color: var(--err); }
+.rr-chip.none { color: var(--faint); }
+.rr-prev { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.rr-summary { list-style: none; padding: 0; margin: 0; }
+.rr-summary li { display: flex; gap: 14px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.rr-summary .num { font-size: 32px; width: 44px; flex: none; }
+.rr-summary li.warn { color: var(--warn); }

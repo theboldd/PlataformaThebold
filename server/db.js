@@ -166,6 +166,19 @@ CREATE TABLE IF NOT EXISTS reviews (
   reviewer_id TEXT REFERENCES users(id), status TEXT NOT NULL DEFAULT 'pendente', -- pendente | aprovada | ajuste
   note TEXT, created_at TEXT NOT NULL, decided_at TEXT
 );
+-- Sala de Revisão por cliente: a rodada guarda decisões, ajustes e comentários em rascunho;
+-- nada é aplicado nem fica visível para a equipe até a rodada do cliente ser finalizada.
+CREATE TABLE IF NOT EXISTS review_sessions (
+  id TEXT PRIMARY KEY, client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'aberta', -- aberta | finalizada
+  opened_by TEXT REFERENCES users(id), opened_at TEXT NOT NULL, finished_by TEXT REFERENCES users(id), finished_at TEXT, summary TEXT
+);
+CREATE TABLE IF NOT EXISTS review_drafts (
+  session_id TEXT NOT NULL REFERENCES review_sessions(id) ON DELETE CASCADE, content_id TEXT NOT NULL REFERENCES contents(id) ON DELETE CASCADE,
+  decision TEXT, -- aprovar | ajuste | NULL (só comentários)
+  note TEXT, adjustments TEXT NOT NULL DEFAULT '[]', comments TEXT NOT NULL DEFAULT '[]',
+  reviewer_id TEXT REFERENCES users(id), updated_at TEXT NOT NULL, PRIMARY KEY (session_id, content_id)
+);
 CREATE TABLE IF NOT EXISTS adjustments (
   id TEXT PRIMARY KEY, content_id TEXT NOT NULL REFERENCES contents(id) ON DELETE CASCADE,
   version_id TEXT REFERENCES content_versions(id), origin TEXT NOT NULL, -- interno | cliente

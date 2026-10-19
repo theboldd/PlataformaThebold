@@ -77,7 +77,12 @@ export function clientSummary(client) {
   const risk = clientRisk(client.id);
   const nextC = one(`SELECT * FROM contents WHERE client_id=? AND stage NOT IN ('publicado','cancelado') ORDER BY CASE WHEN blocked=1 THEN 0 ELSE 1 END, planned_at LIMIT 1`, client.id);
   const counts = one(`SELECT COUNT(*) total, SUM(stage IN ('aprovacao_tema','aprovacao_cliente')) aguardando_cliente, SUM(stage IN ('producao','ajuste_interno','ajuste_cliente')) em_producao,
-    SUM(stage='publicado') publicados FROM contents WHERE client_id=? AND stage<>'cancelado'`, client.id);
+    SUM(stage='publicado') publicados,
+    SUM(stage IN ('cronograma','analise_cronograma','ajuste_cronograma')) rascunho, SUM(stage IN ('producao','analise_producao')) producao,
+    SUM(stage IN ('ajuste_interno','ajuste_cliente','revisao_ajuste')) ajuste, SUM(stage IN ('agendamento','agendado','publicado')) aprovados,
+    SUM(stage IN ('analise_cronograma','analise_producao','revisao_ajuste')) em_revisao
+    FROM contents WHERE client_id=? AND stage<>'cancelado'`, client.id);
+  for (const k of Object.keys(counts)) counts[k] = counts[k] || 0;
   const strategist = one("SELECT u.name FROM client_members cm JOIN users u ON u.id=cm.user_id WHERE cm.client_id=? AND cm.function='estrategia' LIMIT 1", client.id)?.name;
   return { ...client, services: parseJSON(client.services, []), risk, counts, strategist,
     next: nextC ? { content: `#${nextC.number} ${nextC.title}`, content_id: nextC.id, stage: STAGES[nextC.stage].label, ...nextAction(nextC) } : null };

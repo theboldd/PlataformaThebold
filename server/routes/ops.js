@@ -401,7 +401,7 @@ ops.get('/review/queue', requirePerm('revisao', 'view'), (req, res) => {
 
 // ═════════════ CENTRO DE PENDÊNCIAS (exclusivo CEO + Operações) ═════════════
 ops.get('/pendencias', (req, res) => {
-  if (!PENDENCIAS_ROLES.includes(req.user.role_key) || !can(req.user, 'pendencias')) throw new HttpError(403, 'Centro de Pendências: acesso exclusivo de Rebeca e Vitória.');
+  if (!can(req.user, 'pendencias')) throw new HttpError(403, 'Centro de Pendências: acesso restrito (liberado pela administração em Usuários).');
   let items = computePendencies();
   if (!can(req.user, 'financeiro')) items = items.filter((i) => !i.financial);
   const count = (s) => items.filter((i) => i.severity === s).length;
@@ -454,7 +454,7 @@ ops.get('/torre', requirePerm('torre', 'view'), (req, res) => {
   const m = opsMetrics(req.user);
   const risks = riskClients(req.user);
   const insights = all("SELECT * FROM ai_insights WHERE status='aberto' ORDER BY CASE severity WHEN 'alta' THEN 0 WHEN 'media' THEN 1 ELSE 2 END, updated_at DESC LIMIT 12");
-  const pend = PENDENCIAS_ROLES.includes(req.user.role_key) ? computePendencies().filter((p) => p.severity === 'critica').length : null;
+  const pend = can(req.user, 'pendencias') ? computePendencies().filter((p) => p.severity === 'critica').length : null;
   res.json({
     metrics: m, risks, stages: stageDistribution(req.user).map((s) => ({ ...s, label: STAGES[s.stage]?.label, lane: STAGES[s.stage]?.lane })), team: teamLoad().map((t) => ({ ...t, functions: parseJSON(t.functions, []) })),
     insights, pendencias_criticas: pend, meetings: upcomingMeetings(req.user), deadlines: deadlines(req.user),
@@ -479,7 +479,7 @@ ops.get('/dashboard', (req, res) => {
       team: teamLoad().slice(0, 8), stages: stageDistribution(u).map((s) => ({ ...s, label: STAGES[s.stage]?.label })), finance: can(u, 'financeiro') ? financeSummary() : null, brief: executiveBrief(m, risks, pend.filter((p) => p.severity === 'critica').length, insights) });
   }
   if (kind === 'operacoes') {
-    const pend = can(u, 'pendencias') && PENDENCIAS_ROLES.includes(u.role_key) ? computePendencies() : [];
+    const pend = can(u, 'pendencias') ? computePendencies() : [];
     const waitingClient = all(`SELECT * FROM contents WHERE ${sc.sql} AND stage IN ('aprovacao_tema','aprovacao_cliente') ORDER BY stage_entered_at LIMIT 12`, ...sc.params).map((c) => contentCard(c, u));
     const waitingTeam = all(`SELECT * FROM contents WHERE ${sc.sql} AND blocked=0 AND stage IN ('producao','ajuste_interno','ajuste_cliente','analise_producao','agendamento') ORDER BY stage_entered_at LIMIT 12`, ...sc.params).map((c) => contentCard(c, u)).filter((c) => c.hours_in_stage > 24);
     const unassigned = all(`SELECT * FROM tasks WHERE assignee_id IS NULL AND status='aberta' AND function<>'cliente' AND (client_id IS NULL OR ${sc.sql})`, ...sc.params).map(taskRow);

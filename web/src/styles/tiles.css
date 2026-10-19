@@ -1,0 +1,37 @@
+/* ── Card de cliente (Clientes e Sala de Revisão) ── */
+.ct-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+.ct-toolbar { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+.ct-toolbar .ct-search { flex: 1; min-width: 240px; position: relative; }
+.ct-toolbar .ct-search input { width: 100%; height: 48px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface); padding: 0 16px 0 44px; font-size: 15px; }
+.ct-toolbar .ct-search svg { position: absolute; left: 16px; top: 16px; color: var(--muted); }
+.ct-toolbar select { height: 48px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface); padding: 0 14px; min-width: 200px; font-size: 15px; }
+.ct-toolbar input:focus, .ct-toolbar select:focus { outline: none; border-color: var(--ink); }
+
+.ct { display: flex; flex-direction: column; border-radius: 18px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); transition: transform var(--t-med) var(--ease-out), box-shadow var(--t-med) var(--ease), border-color var(--t-fast); color: var(--ink); }
+.ct:hover { transform: translateY(-4px); box-shadow: 0 24px 50px -28px rgba(0,0,0,.45); border-color: var(--line-strong); }
+.ct-cover { position: relative; height: 120px; background: #000; overflow: hidden; }
+.ct-mosaic { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(4, 1fr); opacity: .55; filter: grayscale(.2); }
+.ct-mosaic img { width: 100%; height: 100%; object-fit: cover; }
+.ct-cover::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(0,0,0,.7)); }
+.ct-ghost { position: absolute; right: -6px; bottom: -22px; font-family: var(--font-editorial); font-size: 96px; line-height: 1; color: transparent; -webkit-text-stroke: 1px rgba(246,243,240,.16); white-space: nowrap; z-index: 1; transition: transform var(--t-slow) var(--ease-out); }
+.ct:hover .ct-ghost { transform: translateX(-10px); }
+.ct-badge { position: absolute; top: 12px; right: 12px; z-index: 2; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--paper); background: rgba(246,243,240,.12); backdrop-filter: blur(6px); border: 1px solid rgba(246,243,240,.25); padding: 4px 10px; border-radius: 999px; }
+.ct-body { position: relative; padding: 0 22px 22px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.ct-avatar { width: 76px; height: 76px; margin-top: -40px; border-radius: 18px; background: #0B0B0B; color: var(--paper); border: 4px solid var(--surface); display: flex; align-items: center; justify-content: center; font-family: var(--font-editorial); font-size: 30px; position: relative; z-index: 2; box-shadow: 0 10px 24px -12px rgba(0,0,0,.5); }
+.ct-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.ct-name { font-size: 19px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; min-width: 0; }
+.ct-status { flex: none; font-size: 12px; font-weight: 600; padding: 3px 12px; border-radius: 999px; background: var(--ink); color: var(--bg); }
+.ct-status.s-onboarding { background: var(--bordo); color: var(--paper); }
+.ct-status.s-pausado, .ct-status.s-encerrado { background: var(--surface-2); color: var(--muted); }
+.ct-seg { align-self: flex-start; font-size: 13px; font-weight: 500; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line-strong); }
+.ct-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--line); }
+.ct-chip { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; font-size: 14px; font-weight: 500; background: var(--surface-2); }
+.ct-chip i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.ct-chip.t-neutral { color: var(--ink-2); }
+.ct-chip.t-adjust { color: var(--err); background: var(--err-soft); }
+.ct-chip.t-wait { color: var(--warn); background: var(--warn-soft); }
+.ct-chip.t-ok { color: var(--ok); background: var(--ok-soft); }
+.ct-chip.t-info { color: var(--info); background: var(--info-soft); }
+.ct-chip.zero { opacity: .55; }
+.ct-foot { font-size: 12px; color: var(--muted); margin-top: auto; padding-top: 4px; }
+.ct-foot .alert { color: var(--err); font-weight: 600; }

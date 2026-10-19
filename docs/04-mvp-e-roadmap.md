@@ -34,10 +34,11 @@
 - Análise preditiva de atraso, previsão de capacidade da equipe e performance de conteúdo (Insights da Meta).
 - Teste A/B de memória: banco × Obsidian × sistema próprio.
 
-## Pendências de decisão (precisam de resposta da The Bold)
-1. Google **Workspace ou Gmail?** Define o escopo do Drive, o Shared Drive e a gravação/transcrição do Meet.
-2. Fonte editorial oficial (arquivo `.woff2`) e logo vetorial. `[PLACEHOLDER]` em `web/src/styles/tokens.css`.
-3. A Vivian deve ver o Centro de Pendências?
-4. Prazo formal de aprovação de arte/vídeo pelo cliente (hoje: 27–28 + régua).
-5. Depois do ajuste do cliente, a nova versão volta ao cliente (padrão) ou vai direto para agendamento (processo atual)?
-6. Acesso ao MindMeister para validar as etapas.
+## Decisões tomadas pela The Bold (19/10/2026)
+1. **Google:** a The Bold **não usa Workspace** (conta Gmail). O Drive usará o escopo `drive.file` + Google Picker, e uploads novos passam pela plataforma. Não há gravação nativa do Meet, por isso a recomendação de sala própria (LiveKit) se mantém.
+2. **Fonte editorial:** não há arquivo próprio. A **Instrument Serif** é a fonte oficial da plataforma.
+3. **Centro de Pendências:** por padrão, Rebeca e Vitória. A Rebeca pode liberar para outra pessoa em **Usuários → permissões específicas** (não é mais trava fixa no código).
+4. **Ajuste pedido pelo cliente:** depois da conferência da estrategista, o conteúdo **vai direto para agendamento** (`reenviar_cliente_apos_ajuste = false`). A nova versão é congelada como versão liberada.
+
+## Pendências de decisão
+1. Acesso ao MindMeister para validar as etapas.

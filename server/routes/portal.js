@@ -1,11 +1,11 @@
 // ÁREA DO CLIENTE — endpoints exclusivos do cliente. Nunca expõem dados internos:
 // comentários internos, tarefas internas, financeiro, outros clientes, problemas internos ou notas da equipe.
 import { Router } from 'express';
-import { one, all, insert, update, run, uid, now, parseJSON } from '../db.js';
+import { one, all, insert, update, run, uid, now, parseJSON, tx } from '../db.js';
 import { requireClientUser } from '../lib/auth.js';
 import { HttpError } from '../lib/permissions.js';
 import { log, notify } from '../lib/core.js';
-import { STAGES, publicStatus, clientDecision, versionMedia, unblockContent } from '../engine/process.js';
+import { STAGES, publicStatus, clientDecision, versionMedia, unblockContent, editableVersion } from '../engine/process.js';
 import { fileDTO, ingest } from '../services/media.js';
 import { addComment, upload, checkOnboardingComplete } from './ops.js';
 import { createMeeting } from './comms.js';
@@ -92,6 +92,26 @@ portal.post('/contents/:id/adjust', upload.single('file'), async (req, res) => {
   const t = req.body.video_timestamp ? Number(req.body.video_timestamp) : null;
   clientDecision(c.id, req.user, { decision: 'ajuste', note, carousel_page: page, video_timestamp: t }, req);
   addComment(one('SELECT * FROM contents WHERE id=?', c.id), req.user, { body: `Ajuste solicitado: ${note}`, anchor: page || t != null ? { page, t } : null, file_id: fileId });
+  res.json(feedItem(one('SELECT * FROM contents WHERE id=?', c.id), one('SELECT * FROM clients WHERE id=?', c.client_id)));
+});
+// Cliente edita a legenda direto no feed → nova versão (a anterior é preservada) + equipe notificada
+portal.post('/contents/:id/caption', (req, res) => {
+  const c = getMyContent(req);
+  if (c.stage !== 'aprovacao_cliente' || c.blocked) throw new HttpError(409, 'A legenda só pode ser editada enquanto o conteúdo aguarda sua aprovação.');
+  const caption = String(req.body?.caption ?? '').trim();
+  if (!caption) throw new HttpError(422, 'A legenda não pode ficar vazia.');
+  if (caption.length > 2200) throw new HttpError(422, 'O Instagram aceita até 2.200 caracteres na legenda.');
+  const cur = one('SELECT * FROM content_versions WHERE id=?', c.current_version_id);
+  if (cur && cur.caption.trim() === caption) throw new HttpError(422, 'Nenhuma alteração na legenda.');
+  const v = tx(() => {
+    const v = editableVersion(c, req.user.id);
+    update('content_versions', { id: v.id }, { caption, status: 'enviada_cliente', locked: 1, sent_to_client_at: now(), notes: 'Legenda editada pelo cliente' });
+    return one('SELECT * FROM content_versions WHERE id=?', v.id);
+  });
+  log({ actor: req.user.id, action: 'legenda.editada_cliente', entity: 'content', id: c.id, client: c.client_id, content: c.id, visibility: 'client',
+    summary: `${req.user.name} editou a legenda (V${cur?.number} → V${v.number})`, before: cur?.caption, after: caption });
+  const team = all("SELECT DISTINCT user_id FROM client_members WHERE client_id=? AND function IN ('estrategia','copy','atendimento')", c.client_id).map((r) => r.user_id);
+  notify(team, { level: 'atencao', type: 'legenda_cliente', title: `${one('SELECT name FROM clients WHERE id=?', c.client_id).name.replace(' [DEMO]', '')} editou uma legenda`, body: `#${c.number} ${c.title} — nova versão V${v.number}`, link: `/conteudos/${c.id}`, content: c.id, client: c.client_id });
   res.json(feedItem(one('SELECT * FROM contents WHERE id=?', c.id), one('SELECT * FROM clients WHERE id=?', c.client_id)));
 });
 portal.post('/contents/:id/comments', (req, res) => {

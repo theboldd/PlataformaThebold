@@ -60,6 +60,7 @@ export default function App() {
                     <Route path="/conteudos/novo" element={<NovoConteudo />} />
                     <Route path="/conteudos/:id" element={<ConteudoDetalhe />} />
                     <Route path="/revisao" element={<Revisao />} />
+                    <Route path="/revisao/:clientId" element={<Revisao />} />
                     <Route path="/calendario" element={<Calendario />} />
                     <Route path="/reunioes" element={<Reunioes />} />
                     <Route path="/comunicacao" element={<Comunicacao />} />

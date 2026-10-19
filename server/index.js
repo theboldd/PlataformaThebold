@@ -13,6 +13,7 @@ import { ops } from './routes/ops.js';
 import { comms } from './routes/comms.js';
 import { business, oauthCallback } from './routes/business.js';
 import { portal } from './routes/portal.js';
+import { review } from './routes/review.js';
 
 export function bootstrap() {
   for (const r of ROLE_DEFS) {
@@ -45,6 +46,7 @@ export function createApp() {
   app.use('/api', core);
   app.use('/api/portal', portal);
   app.use('/api', comms);
+  app.use('/api', review);
   app.use('/api', ops);
   app.use('/api', business);
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'Rota não encontrada.')));

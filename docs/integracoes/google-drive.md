@@ -50,7 +50,7 @@ Isso é possível porque a camada de arquivos da plataforma usa um **StorageDriv
 
 **Recomendação.** Se a The Bold usa **Google Workspace**, configure o app OAuth como *Internal* e use a Opção A (`drive`). Se a conta da agência for **@gmail.com** (pessoal), use a Opção B e faça **todo upload novo passar pela plataforma**. Em modo "Testing", um app External com escopo restrito tem refresh tokens que **expiram em 7 dias**, o que inviabiliza a operação.
 
-> ❓ **Pergunta em aberto:** a The Bold opera em Google Workspace (domínio próprio) ou em conta Gmail? Essa resposta define o escopo, o uso de Shared Drives e a viabilidade de detectar arquivos colocados direto no Drive.
+> ✅ **Decidido (19/10/2026):** a The Bold usa **conta Gmail**, sem Workspace. Vale a **Opção B**: `drive.file` + Google Picker, e todo upload novo passa pela plataforma. Arquivos colocados direto no Drive por outras pessoas só entram na plataforma quando alguém os vincula pelo Picker. Shared Drives não estão disponíveis.
 
 ### 1.4 Ciclo de vida do token
 - **Refresh automático** antes da expiração.

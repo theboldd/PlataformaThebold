@@ -30,7 +30,7 @@ core.get('/auth/me', requireAuth, (req, res) => {
   const role = roleOf(u);
   const clients = u.role_key === 'cliente' ? all("SELECT c.id, c.name, c.handle, c.color FROM client_members cm JOIN clients c ON c.id=cm.client_id WHERE cm.user_id=? AND cm.function='cliente'", u.id) : [];
   res.json({ user: userDTO(u), role: { key: role.key, label: role.label, dashboard: role.dashboard, all_clients: !!role.all_clients }, permissions: permissionMap(u), internal: isInternal(u), clients,
-    pendencias: PENDENCIAS_ROLES.includes(u.role_key) && can(u, 'pendencias') });
+    pendencias: can(u, 'pendencias') });
 });
 core.post('/auth/password', requireAuth, (req, res) => {
   const { current, next } = req.body || {};

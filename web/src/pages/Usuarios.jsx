@@ -56,7 +56,7 @@ export default function Usuarios() {
               ))}</tbody>
             </table></div>
           )}
-          <p className="xs faint mt-5">O Centro de Pendências global é fixo para CEO e Operações (Rebeca e Vitória), por regra de negócio. O quadro de Processos é visível a toda a equipe interna; dados detalhados seguem os vínculos com clientes.</p>
+          <p className="xs faint mt-5">O Centro de Pendências global vem liberado só para CEO e Operações (Rebeca e Vitória). Para dar acesso a outra pessoa, edite o usuário → permissões específicas → Pendências: permitir. O quadro de Processos é visível a toda a equipe interna; dados detalhados seguem os vínculos com clientes.</p>
         </>
       ) : <Roles data={data} admin={admin} reload={reload} />}
       {edit && <EditUser user={edit} data={data} clients={clients} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); reload(); }} />}

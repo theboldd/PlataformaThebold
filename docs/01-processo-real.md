@@ -103,11 +103,11 @@ Padrões informais que **viram registros oficiais** na plataforma:
 5. **Não há prazo formal para aprovar arte/vídeo.**
    → **Decisão:** marco `cliente_aprova_final` (27–28) + régua de 24/48/72h. ❓ Confirmar com a Rebeca.
 6. **Vivian × Vitória.** As notificações vão para Vitória/Rebeca, mas quem opera é a Vivian. O pedido diz "Centro de Pendências: só Rebeca + Vitória".
-   → **Implementado assim.** A Vivian recebe follow-ups e tarefas de agendamento e atendimento. ❓ Avaliar se a Vivian também deve ver o Centro de Pendências.
+   → **Decidido:** a Vivian não vê o Centro de Pendências. A Rebeca pode liberar o acesso em Usuários.
 7. **Calendário de referência do manual** (dia 7 cliente, 18–25 produção) **≠ Calendar atual** (8–15, 16–22).
    → **Decisão:** usar o Calendar atual (configurável).
 8. **Reenvio ao cliente após ajuste.** O processo real manda direto para agendamento depois da conferência da estrategista. O pedido exige aprovação da versão final.
-   → **Configurável** (`reenviar_cliente_apos_ajuste`, padrão: sim). Ajuste marcado como "simples" volta direto ao cliente.
+   → **Decidido:** vai direto para agendamento depois da conferência (`reenviar_cliente_apos_ajuste = false`). Continua configurável.
 9. **Material fora do prazo** ("vai para a semana seguinte ou para o mês seguinte?"). Quem decide é a Vivian.
    → Escalada de 72h para Operações com essa pergunta. ❓ Formalizar a regra.
 10. **Dezembro:** formulário no lugar da reunião mensal.

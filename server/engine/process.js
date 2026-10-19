@@ -54,7 +54,7 @@ export const DEFAULT_SETTINGS = {
     tudo_pronto: [27, 27], cliente_aprova_final: [27, 28], ajustes_cliente: [29, 30], agendamento: [29, 30],
   },
   analise_cronograma_ativa: true,      // PDF: "em breve não teremos essa fase" → desligável
-  reenviar_cliente_apos_ajuste: true,  // ajuste normal do cliente volta para o cliente aprovar a nova versão
+  reenviar_cliente_apos_ajuste: false, // definido pela The Bold: após o ajuste do cliente (conferido pela estrategista) vai direto para agendamento
   revisores_padrao_roles: ['qualidade', 'ceo'], // Rebeca + Raísa
   cc_roles: ['operacoes'],             // Vitória recebe cópia das etapas-chave
   agendamento_roles: ['gestao'],       // Vivian agenda
@@ -327,10 +327,24 @@ function advance(c, actor, meta) {
       automation('ajuste.concluido', { entity: 'content', id: c.id, client: c.client_id });
       const sizes = all("SELECT size FROM adjustments WHERE content_id=? AND origin='cliente' AND status='concluido' AND version_id=(SELECT version_id FROM adjustments WHERE content_id=? AND origin='cliente' ORDER BY created_at DESC LIMIT 1)", c.id, c.id).map((r) => r.size);
       const simple = sizes.length && sizes.every((s) => s === 'simples');
-      return enterStage(c, simple ? 'aprovacao_cliente' : 'revisao_ajuste', actor, { reason: simple ? 'ajuste simples concluído' : 'ajuste concluído' });
+      if (!simple) return enterStage(c, 'revisao_ajuste', actor, { reason: 'ajuste concluído — estrategista confere' });
+      return setting('reenviar_cliente_apos_ajuste') ? enterStage(c, 'aprovacao_cliente', actor, { reason: 'ajuste simples concluído' }) : releaseAfterClientAdjust(c, actor, 'ajuste simples concluído');
     }
     default: return null;
   }
+}
+
+// Regra da The Bold: o ajuste pedido pelo cliente, depois de conferido, segue direto para agendamento.
+// A nova versão é congelada como versão liberada (o cliente já aprovou o conteúdo e pediu só aquele ajuste).
+function releaseAfterClientAdjust(c, actor, reason) {
+  const v = currentVersion(c.id);
+  if (v) {
+    update('content_versions', { id: v.id }, { status: 'aprovada', locked: 1, approved_by: actor?.id || null, approved_at: now() });
+    update('contents', { id: c.id }, { approved_version_id: v.id });
+  }
+  log({ actor: actor?.id, action: 'versao.liberada', entity: 'content', id: c.id, client: c.client_id, content: c.id, visibility: 'client',
+    summary: `V${v?.number} liberada para agendamento após o ajuste solicitado pelo cliente (${reason})` });
+  return enterStage(c, 'agendamento', actor, { reason });
 }
 
 // Decisão de revisão interna (Sala de Revisão) — aprovar ou pedir ajuste
@@ -348,6 +362,7 @@ export function reviewDecision(contentId, actor, { decision, note, adjustments =
     if (decision === 'aprovar') {
       if (c.stage === 'analise_cronograma') { const cl = one('SELECT requires_theme_approval FROM clients WHERE id=?', c.client_id); return enterStage(c, cl.requires_theme_approval ? 'aprovacao_tema' : 'producao', actor, { reason: 'cronograma aprovado internamente' }); }
       automation('revisao.aprovada', { entity: 'content', id: c.id, client: c.client_id });
+      if (c.stage === 'revisao_ajuste' && !setting('reenviar_cliente_apos_ajuste')) return releaseAfterClientAdjust(c, actor, 'ajuste do cliente conferido');
       return enterStage(c, 'aprovacao_cliente', actor, { reason: 'aprovado internamente — enviado ao cliente' });
     }
     if (!adjustments.length && !note) throw new HttpError(422, 'Descreva o ajuste necessário.');
@@ -416,7 +431,7 @@ export function clientDecision(contentId, actor, { decision, note, carousel_page
       return next;
     }
     const next = enterStage(c, 'ajuste_cliente', actor, { reason: 'cliente solicitou ajuste' });
-    createAdjustment(next, actor, { description: note, origin: 'cliente', size: size === 'simples' ? 'simples' : setting('reenviar_cliente_apos_ajuste') ? 'normal' : 'simples', carousel_page, video_timestamp, region });
+    createAdjustment(next, actor, { description: note, origin: 'cliente', size: size === 'simples' ? 'simples' : 'normal', carousel_page, video_timestamp, region });
     automation('cliente.ajuste', { entity: 'content', id: c.id, client: c.client_id });
     return one('SELECT * FROM contents WHERE id=?', c.id);
   });

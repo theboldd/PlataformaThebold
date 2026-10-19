@@ -19,6 +19,8 @@ export default function Feed() {
   const [filter, setFilter] = useState('');
   const [month, setMonth] = useState('');
   const [format, setFormat] = useState('');
+  const [view, setView] = useState('grade');
+  const [openId, setOpenId] = useState(null);
   const qs = new URLSearchParams(Object.entries({ filter, month, format }).filter(([, v]) => v)).toString();
   const feed = useApi(`/portal/feed${qs ? `?${qs}` : ''}`, []);
   const items = feed.data?.items || [];
@@ -27,6 +29,12 @@ export default function Feed() {
   const pending = counts.aguardando || 0;
 
   const replace = (it) => feed.setData((d) => ({ ...d, items: d.items.map((x) => (x.id === it.id ? it : x)) }));
+  const openItem = items.find((x) => x.id === openId);
+  // Prévia do feed: um mês por vez, na ordem em que vai ao ar
+  const months = [...new Set(items.map((x) => (x.planned_at || '').slice(0, 7)).filter(Boolean))].sort();
+  const firstPending = items.find((x) => x.can_decide)?.planned_at?.slice(0, 7);
+  const gridMonth = month || (months.includes(firstPending) ? firstPending : months[months.length - 1]);
+  const gridItems = items.filter((x) => (x.planned_at || '').slice(0, 7) === gridMonth).sort((a, b) => String(a.planned_at).localeCompare(String(b.planned_at)));
   const afterDecision = (it) => { replace(it); reloadMe?.(); };
 
   return (
@@ -51,6 +59,10 @@ export default function Feed() {
           {FILTERS.map((f) => <button key={f.value} className={filter === f.value ? 'active' : ''} aria-pressed={filter === f.value} onClick={() => setFilter(f.value)}>{f.label}</button>)}
         </div>
         <div className="row gap-2">
+          <div className="p-viewtoggle" role="group" aria-label="Visualização">
+            <button className={view === 'grade' ? 'active' : ''} onClick={() => setView('grade')} aria-pressed={view === 'grade'}>Prévia do feed</button>
+            <button className={view === 'lista' ? 'active' : ''} onClick={() => setView('lista')} aria-pressed={view === 'lista'}>Lista</button>
+          </div>
           <select className="p-select" value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Mês">
             <option value="">Todos os meses</option>
             {(feed.data?.months || []).map((m) => <option key={m} value={m}>{fmtMonth(m)}</option>)}
@@ -66,12 +78,70 @@ export default function Feed() {
       {feed.loading && !feed.data ? <div className="p-post"><Loading rows={6} /></div> : !items.length ? (
         <Empty title={filter === 'aguardando' ? 'Nada aguardando você.' : 'Nenhum conteúdo aqui ainda.'}>{filter === 'aguardando' ? 'Assim que novos conteúdos estiverem prontos, eles aparecem aqui e você recebe uma notificação.' : 'Tente outro filtro.'}</Empty>
       ) : (
+        view === 'grade' ? (
+          <FeedGrid month={gridMonth} months={months} onMonth={setMonth} items={gridItems} brand={me?.client} onOpen={setOpenId} />
+        ) : (
         <div className="p-stream">
           {items.map((it) => <Post key={it.id} it={it} team={me?.team || []} onUpdate={replace} onDecided={afterDecision} />)}
           <div className="p-end caps">Você chegou ao fim · THE BOLD<span className="bordo">.</span></div>
         </div>
+        )
+      )}
+      {openItem && (
+        <div className="p-overlay" role="dialog" aria-modal="true" aria-label={openItem.title} onMouseDown={(e) => e.target === e.currentTarget && setOpenId(null)}>
+          <div className="p-overlay-in">
+            <div className="p-overlay-bar">
+              <button className="p-icon-text" onClick={() => { const i = gridItems.findIndex((x) => x.id === openId); if (i > 0) setOpenId(gridItems[i - 1].id); }} aria-label="Anterior"><I.left size={18} /></button>
+              <span className="caps">{String(gridItems.findIndex((x) => x.id === openId) + 1).padStart(2, '0')} / {String(gridItems.length).padStart(2, '0')}</span>
+              <button className="p-icon-text" onClick={() => { const i = gridItems.findIndex((x) => x.id === openId); if (i < gridItems.length - 1) setOpenId(gridItems[i + 1].id); }} aria-label="Próximo"><I.right size={18} /></button>
+              <button className="p-icon-text p-close" onClick={() => setOpenId(null)} aria-label="Fechar"><I.x size={20} /></button>
+            </div>
+            <Post key={openItem.id} it={openItem} team={me?.team || []} onUpdate={replace} onDecided={afterDecision} />
+          </div>
+        </div>
       )}
     </div>
+  );
+}
+
+const TYPE_ICON = { carrossel: I.layers, reel: I.play, video: I.play, estatico: I.content, foto: I.content, stories: I.content };
+function FeedGrid({ month, months, onMonth, items, brand, onOpen }) {
+  const MES = month ? fmtMonth(month).replace(/^./, (c) => c.toUpperCase()).replace(' de ', ' ') : '';
+  return (
+    <section className="p-grid-wrap">
+      <header className="p-grid-head">
+        <span className="p-grid-logo ed" aria-hidden>{initials(cleanName(brand?.name || 'B'))}</span>
+        <div className="grow">
+          <div className="caps">Prévia do feed · Aprovação</div>
+          <h2 className="ed-lg">{MES}</h2>
+        </div>
+        {months.length > 1 && <div className="p-grid-months">{months.map((m) => <button key={m} className={m === month ? 'active' : ''} onClick={() => onMonth(m)}>{fmtMonth(m).split(' ')[0].slice(0, 3)}</button>)}</div>}
+      </header>
+      <div className="p-grid-hint">
+        <p>Toque em qualquer post para ver o conteúdo completo: carrosséis deslizam e reels tocam o vídeo. Tudo como vai ao ar.</p>
+        <div className="p-grid-legend"><span><I.layers size={13} /> Carrossel</span><span><I.play size={13} /> Reel</span><span><I.content size={13} /> Imagem</span></div>
+      </div>
+      {!items.length ? <Empty title="Nada neste mês ainda." /> : (
+        <div className="p-grid">
+          {items.map((it, i) => {
+            const Icon = TYPE_ICON[it.format] || I.content;
+            const m = it.version?.media?.[0];
+            const thumb = m?.urls.thumb || m?.urls.poster || m?.urls.preview;
+            return (
+              <button key={it.id} className={`p-tile ${it.can_decide ? 'pending' : ''}`} onClick={() => onOpen(it.id)} data-cursor="VER" aria-label={`${String(i + 1).padStart(2, '0')} ${it.title}`}>
+                {thumb ? <img src={thumb} alt="" loading="lazy" /> : (
+                  <span className="p-tile-text"><span className="caps">{it.is_theme ? 'Tema' : FORMATS[it.format]}</span><span className="ed">{it.title}</span></span>
+                )}
+                <span className="p-tile-n">{String(i + 1).padStart(2, '0')}</span>
+                <span className="p-tile-type"><Icon size={13} /></span>
+                <span className={`p-tile-state s-${it.status}`}>{it.can_decide ? 'Aprovar' : it.status === 'aprovado' || it.status === 'agendado' || it.status === 'publicado' ? '✓' : it.status === 'ajuste_solicitado' ? 'Em ajuste' : ''}</span>
+                <span className="p-tile-date">{fmtDate(it.scheduled_at || it.planned_at)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -84,6 +154,13 @@ function Post({ it, team, onUpdate, onDecided }) {
   const [busy, setBusy] = useState(false);
   const [justApproved, setJustApproved] = useState(null);
   const [showComments, setShowComments] = useState(it.comments.length > 0 && it.comments.length <= 3);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const saveCaption = async () => {
+    setBusy(true);
+    try { const updated = await api.post(`/portal/contents/${it.id}/caption`, { caption: draft }); onUpdate(updated); setEditing(false); toast('Legenda atualizada. A equipe foi avisada.'); }
+    catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
+  };
   const media = it.version?.media || [];
   const isVideo = media[0]?.kind === 'video';
   const caption = it.version?.caption || '';
@@ -137,12 +214,21 @@ function Post({ it, team, onUpdate, onDecided }) {
           </div>
         )}
         {!it.is_theme && <h2 className="p-title ed" id={`t-${it.id}`}>#{it.number} {it.title}</h2>}
-        {caption && (
+        {editing ? (
+          <div className="p-caption-edit">
+            <textarea className="p-textarea" value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus rows={8} maxLength={2200} aria-label="Editar legenda" />
+            <div className="row between xs muted"><span>{draft.length}/2200 · ao salvar, uma nova versão é criada e a equipe é avisada</span></div>
+            <div className="row gap-2 mt-2"><Button size="sm" onClick={() => setEditing(false)} disabled={busy}>Cancelar</Button><Button size="sm" className="p-approve" onClick={saveCaption} disabled={busy || !draft.trim() || draft.trim() === caption.trim()}>Salvar legenda</Button></div>
+          </div>
+        ) : caption && (
           <div className={`p-caption ${expanded || !long ? 'open' : ''}`}>
             <b>{it.brand.handle?.replace('@', '') || cleanName(it.brand.name)}</b> {caption}
           </div>
         )}
-        {caption && long && <button className="p-link" onClick={() => setExpanded((e) => !e)}>{expanded ? 'mostrar menos' : 'mais'}</button>}
+        {!editing && <div className="row gap-4">
+          {caption && long && <button className="p-link" onClick={() => setExpanded((e) => !e)}>{expanded ? 'mostrar menos' : 'mais'}</button>}
+          {it.can_decide && !it.is_theme && <button className="p-link" onClick={() => { setDraft(caption); setEditing(true); }}><I.edit size={13} /> Editar legenda</button>}
+        </div>}
         {it.version && <div className="xs faint mt-2">Versão V{it.version.number}{it.version.approved ? ' · ✓ versão aprovada' : ''}</div>}
 
         {it.open_adjustments?.length > 0 && (
