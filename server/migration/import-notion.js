@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { one, all, insert, run, uid, now, tx } from '../db.js';
 import { log } from '../lib/core.js';
-import { activeForm } from '../services/onboarding.js';
+import { activeForm, brainSectionFor } from '../services/onboarding.js';
 import { BRAIN_SECTIONS } from '../ai/memory.js';
 
 const DIR = process.env.BOLD_MIGRATION_DIR || path.resolve('storage', 'migration', 'notion');
@@ -72,9 +72,9 @@ function importClient(file) {
       for (const s of BRAIN_SECTIONS) insert('client_brain', { client_id: c.id, section: s, body: '', updated_at: ts });
       insert('channels', { id: uid('ch_'), kind: 'cliente', client_id: c.id, name: d.name, topic: 'Conversa oficial com o cliente', created_by: null, created_at: ts });
       insert('onboarding', { id: uid('ob_'), client_id: c.id, status: 'migrado', started_at: ts });
-      if (d.status_hint !== 'ativo') issue(c.id, d.name, 'status', 'Status do cliente não está explícito no Notion — confirmar (ativo, pausado, encerrado).', 'notion');
     }
 
+    if (c.status === 'a_confirmar') issue(c.id, d.name, 'status', 'Status do cliente não está explícito no Notion — confirmar (ativo, pausado, encerrado).', 'notion');
     const stats = { fields: 0, empty: 0, answers: 0, entries: 0, links: 0, files: 0, issues: 0, sections: {} };
     const answered = new Map(); // question_key → [{content, field}]
     for (const f of d.fields || []) {
@@ -140,6 +140,54 @@ function importClient(file) {
 
 for (const f of files) importClient(f);
 
+
+run("DELETE FROM migration_issues WHERE source='notion:geral' AND status='aberto'");
+// Respostas do formulário extraídas cartão a cartão (_onboarding_answers.json): completam as fichas sem duplicar
+const ansFile = path.join(DIR, '_onboarding_answers.json');
+report.answersOutside = [];
+if (fs.existsSync(ansFile)) {
+  const A = JSON.parse(fs.readFileSync(ansFile, 'utf8'));
+  const allReal = all('SELECT id, name, aliases FROM clients WHERE is_demo=0 AND notion_url IS NOT NULL');
+  const find = (name) => { const n = norm(name); return allReal.find((c) => norm(c.name) === n || JSON.parse(c.aliases || '[]').some((a) => norm(a) === n)); };
+  for (const block of A.answers || []) {
+    const c = find(block.client_name);
+    if (!c) { report.answersOutside.push(`${block.client_name} (${block.items.length} respostas) — ${block.source?.url || ''}`); continue; }
+    tx(() => {
+      const entries = all('SELECT id, content, source_type FROM client_brain_entries WHERE client_id=?', c.id);
+      const has = (txt) => entries.find((e) => norm(e.content) === norm(txt));
+      let added = 0;
+      for (const it of block.items || []) {
+        const val = String(it.answer ?? '').trim();
+        if (!val || it.question_key?.startsWith('acesso_')) continue;
+        const q = questions.find((x) => x.key === it.question_key);
+        const dup = has(val);
+        if (q) {
+          const prev = one('SELECT * FROM onboarding_answers WHERE client_id=? AND question_key=?', c.id, q.key);
+          if (prev && norm(prev.answer) !== norm(val) && !norm(prev.answer).includes(norm(val))) {
+            issue(c.id, c.name, 'conflito', `"${q.text}": a página do cliente e o cartão do formulário trazem respostas diferentes. Ficha: "${prev.answer.slice(0, 140)}" · Cartão: "${val.slice(0, 140)}". Ambas preservadas.`, 'notion');
+            if (!dup) insert('client_brain_entries', { id: uid('be_'), client_id: c.id, section: brainSectionFor(q.key) || 'outro', label: `${q.text} (cartão do formulário)`, content: val, origin: 'onboarding_cliente', source_type: 'notion', source_ref: block.source?.url, source_page: q.section_title, source_url: block.source?.url || null, created_at: now() });
+            continue;
+          }
+          if (!prev) {
+            insert('onboarding_answers', { id: uid('oa_'), client_id: c.id, form_id: form.id, question_key: q.key, question_text: q.text, answer: val, origin: 'onboarding_cliente', source_type: 'notion', source_ref: block.source?.cards?.[q.section_title] || block.source?.url || null, answered_by: null, answered_at: now(), updated_at: now() });
+            added++;
+          }
+          if (dup) run("UPDATE client_brain_entries SET source_type='notion_onboarding', source_ref=? WHERE id=? AND source_type='notion'", `onboarding:${q.key}`, dup.id);
+          else insert('client_brain_entries', { id: uid('be_'), client_id: c.id, section: brainSectionFor(q.key) || 'outro', label: q.text, content: val, origin: 'onboarding_cliente', source_type: 'notion_onboarding', source_ref: `onboarding:${q.key}`, source_page: q.section_title, source_url: block.source?.cards?.[q.section_title] || block.source?.url || null, created_at: now() });
+        } else if (!dup) {
+          // Blocos fora do modelo (rotina em texto livre, extras do cliente): guardados, nunca descartados
+          insert('client_brain_entries', { id: uid('be_'), client_id: c.id, section: it.question_key === 'rot_texto_livre' ? 'identidade' : 'outro', label: it.question_text || 'Informação adicional do formulário', content: val, origin: 'onboarding_cliente', source_type: 'notion', source_ref: block.source?.url, source_page: 'Formulário Sua marca', source_url: block.source?.url || null, created_at: now() });
+        }
+      }
+      if (added) run("UPDATE onboarding SET form_status='concluido' WHERE client_id=?", c.id);
+      const rc = report.clients.find((x) => x.id === c.id);
+      if (rc) { rc.answers += added; report.totals.answers += added; }
+    });
+  }
+  for (const u of A.unmatched || []) issue(find(u.client_name)?.id || null, u.client_name, 'formulario_antigo', `Formulário não extraído por pergunta: ${u.reason}${u.url ? ` (${u.url})` : ''}`, 'notion:geral');
+  for (const o of report.answersOutside) issue(null, o.split(' (')[0], 'escopo', `Há respostas de onboarding no Notion para quem não está em CLIENTES MKT / ADVS MKT: ${o}. Não migrado nesta etapa.`, 'notion:geral');
+}
+
 // Duplicados: mesmo nome normalizado ou alias compartilhado entre fichas diferentes
 const real = all('SELECT id, name, aliases, notion_section FROM clients WHERE is_demo=0 AND notion_url IS NOT NULL');
 const seen = new Map();
@@ -153,7 +201,6 @@ for (const dup of [...new Set(report.duplicates)]) issue(null, null, 'duplicado'
 
 // Pontos gerais levantados na varredura (fora de uma ficha específica)
 const general = fs.existsSync(path.join(DIR, '_issues.json')) ? JSON.parse(fs.readFileSync(path.join(DIR, '_issues.json'), 'utf8')) : [];
-run("DELETE FROM migration_issues WHERE source='notion:geral' AND status='aberto'");
 for (const g of general) {
   const c = g.client_name ? real.find((x) => norm(x.name) === norm(g.client_name)) : null;
   issue(c?.id || null, g.client_name || null, g.kind, g.description, 'notion:geral');
@@ -201,7 +248,7 @@ Nenhum descartado: seções novas criadas no Client Brain (${BRAIN_SECTIONS.join
 ## 10. Calendários editoriais — NÃO migrados
 ${list(report.skippedCalendar)}
 
-## Pontos gerais\n${list(general.map((g) => g.description))}\n\n## Equipe não vinculada (revisar)
+## Respostas de onboarding de quem não está em MKT/ADVS (não migradas)\n${list(report.answersOutside)}\n\n## Pontos gerais\n${list(general.map((g) => g.description))}\n\n## Equipe não vinculada (revisar)
 ${teamMap ? list(report.unmatchedTeam) : '- mapa de equipe ainda não disponível (_team_map.json)'}
 `;
 fs.writeFileSync(REPORT, md);
