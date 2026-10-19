@@ -16,26 +16,36 @@ export function useCrumbs(...parts) {
 
 // Navegação: cada item exige uma permissão de módulo (vinda do servidor). O cliente nunca vê módulos internos.
 const NAV = [
-  { to: '/', label: 'Visão geral', icon: I.home, mod: 'dashboard', end: true },
-  { to: '/torre', label: 'Torre de Controle', icon: I.tower, mod: 'torre' },
-  { to: '/processos', label: 'Processos', icon: I.flow, mod: 'processos' },
-  { to: '/clientes', label: 'Clientes', icon: I.clients, mod: 'clientes' },
-  { to: '/conteudos', label: 'Conteúdos', icon: I.content, mod: 'conteudos' },
-  { to: '/revisao', label: 'Sala de Revisão', icon: I.review, mod: 'revisao' },
-  { to: '/calendario', label: 'Calendário', icon: I.calendar, mod: 'calendario' },
-  { to: '/reunioes', label: 'Reuniões', icon: I.meeting, mod: 'reunioes' },
-  { to: '/comunicacao', label: 'Comunicação', icon: I.chat, mod: 'chat', badge: 'chat' },
-  { to: '/pendencias', label: 'Pendências', icon: I.alert, mod: 'pendencias', special: 'pendencias' },
-  { sep: true },
-  { to: '/crm', label: 'CRM', icon: I.crm, mod: 'crm' },
-  { to: '/financeiro', label: 'Financeiro', icon: I.money, mod: 'financeiro' },
-  { to: '/insights', label: 'Insights', icon: I.spark, mod: 'insights' },
-  { to: '/brain', label: 'The Bold Brain', icon: I.brain, mod: 'brain' },
-  { sep: true },
-  { to: '/automacoes', label: 'Automações', icon: I.bolt, mod: 'automacoes' },
-  { to: '/integracoes', label: 'Integrações', icon: I.plug, mod: 'integracoes' },
-  { to: '/usuarios', label: 'Usuários', icon: I.users, mod: 'usuarios' },
-  { to: '/historico', label: 'Histórico', icon: I.history, mod: 'historico' },
+  { group: 'Operação', primary: true, items: [
+    { to: '/', label: 'Visão geral', icon: I.home, mod: 'dashboard', end: true },
+    { to: '/torre', label: 'Torre de Controle', icon: I.tower, mod: 'torre' },
+    { to: '/processos', label: 'Processos', icon: I.flow, mod: 'processos' },
+    { to: '/pendencias', label: 'Pendências', icon: I.alert, mod: 'pendencias', special: 'pendencias' },
+  ] },
+  { group: 'Clientes', items: [
+    { to: '/clientes', label: 'Clientes', icon: I.clients, mod: 'clientes' },
+    { to: '/conteudos', label: 'Conteúdos', icon: I.content, mod: 'conteudos' },
+    { to: '/revisao', label: 'Sala de Revisão', icon: I.review, mod: 'revisao' },
+  ] },
+  { group: 'Agenda', items: [
+    { to: '/calendario', label: 'Calendário', icon: I.calendar, mod: 'calendario' },
+    { to: '/reunioes', label: 'Reuniões', icon: I.meeting, mod: 'reunioes' },
+    { to: '/comunicacao', label: 'Comunicação', icon: I.chat, mod: 'chat', badge: 'chat' },
+  ] },
+  { group: 'Negócio', items: [
+    { to: '/crm', label: 'CRM', icon: I.crm, mod: 'crm' },
+    { to: '/financeiro', label: 'Financeiro', icon: I.money, mod: 'financeiro' },
+  ] },
+  { group: 'Inteligência', items: [
+    { to: '/insights', label: 'Insights', icon: I.spark, mod: 'insights' },
+    { to: '/brain', label: 'The Bold Brain', icon: I.brain, mod: 'brain' },
+    { to: '/automacoes', label: 'Automações', icon: I.bolt, mod: 'automacoes' },
+  ] },
+  { group: 'Sistema', items: [
+    { to: '/integracoes', label: 'Integrações', icon: I.plug, mod: 'integracoes' },
+    { to: '/usuarios', label: 'Usuários e permissões', icon: I.users, mod: 'usuarios' },
+    { to: '/historico', label: 'Histórico', icon: I.history, mod: 'historico' },
+  ] },
 ];
 
 export function Shell({ children }) {
@@ -59,18 +69,23 @@ export function Shell({ children }) {
     return () => { window.removeEventListener('bold:notification', h); window.removeEventListener('bold:message', h); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const items = NAV.filter((n) => n.sep || (auth.permissions[n.mod]?.includes('view') && (n.special !== 'pendencias' || auth.pendencias)));
-  const cleaned = items.filter((n, i) => !n.sep || (i > 0 && !items[i - 1].sep && i < items.length - 1));
+  const allowed = (n) => auth.permissions[n.mod]?.includes('view') && (n.special !== 'pendencias' || auth.pendencias);
+  const groups = NAV.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length);
   return (
     <CrumbCtx.Provider value={setCrumbs}>
       <div className={`shell ${navOpen ? 'nav-open' : ''}`}>
         <aside className="sidebar" aria-label="Navegação principal">
           <Link to="/" className="brand" data-cursor="B."><span className="word">THE BOLD<i>.</i></span><span className="os">OS</span></Link>
           <nav className="nav">
-            {cleaned.map((n, i) => n.sep ? <div className="nav-sep" key={`s${i}`} /> : (
-              <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? 'active' : '')}>
-                <n.icon />{n.label}{n.badge === 'chat' && chatUnread > 0 && <span className="count">{chatUnread}</span>}
-              </NavLink>
+            {groups.map((g) => (
+              <div key={g.group} className={`nav-group ${g.primary ? 'primary' : ''}`} role="group" aria-label={g.group}>
+                <div className="nav-label">{g.group}</div>
+                {g.items.map((n) => (
+                  <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? 'active' : '')}>
+                    <n.icon />{n.label}{n.badge === 'chat' && chatUnread > 0 && <span className="count">{chatUnread}</span>}
+                  </NavLink>
+                ))}
+              </div>
             ))}
           </nav>
           <div className="side-foot">

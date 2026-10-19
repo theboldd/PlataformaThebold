@@ -17,8 +17,10 @@ const QUESTION = {
 export default function Dashboard() {
   useCrumbs('Visão geral');
   const auth = useAuth();
-  const { data: d, error, loading, reload } = useApi('/dashboard');
+  const ceo = auth.role.dashboard === 'ceo';
+  const { data: d, error, loading, reload } = useApi(ceo ? null : '/dashboard');
   const today = new Date();
+  if (ceo) return <div className="page"><Executive /></div>;
   return (
     <div className="page">
       <header className="cover">
@@ -28,7 +30,7 @@ export default function Dashboard() {
       </header>
       <ErrorBox error={error} />
       {loading && !d ? <Loading rows={6} /> : d && (
-        d.kind === 'ceo' ? <Executive d={d} /> : d.kind === 'operacoes' ? <Ops d={d} reload={reload} /> : d.kind === 'revisao' ? <Review d={d} reload={reload} />
+        d.kind === 'operacoes' ? <Ops d={d} reload={reload} /> : d.kind === 'revisao' ? <Review d={d} reload={reload} />
           : d.kind === 'estrategia' ? <Strategy d={d} reload={reload} /> : d.kind === 'comercial' ? <Commercial d={d} reload={reload} /> : <Production d={d} reload={reload} />
       )}
     </div>

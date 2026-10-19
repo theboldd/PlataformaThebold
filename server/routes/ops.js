@@ -9,6 +9,7 @@ import { STAGES, LANES, STAGE_ORDER, publicStatus, productionTracks, createConte
 import { automation, automationStats } from '../engine/automations.js';
 import { computePendencies, clientSummary, clientRisk, runDetectors, opsMetrics, stageDistribution, teamLoad, OPERATING } from '../engine/intelligence.js';
 import { executiveOverview } from '../engine/executive.js';
+import { tower, automationRuns, personTasks } from '../engine/tower.js';
 import { ingest, fileDTO, TMP_DIR } from '../services/media.js';
 import { BRAIN_SECTIONS, exportClientBrainMarkdown } from '../ai/memory.js';
 import { integrationStatus } from '../integrations/vault.js';
@@ -450,20 +451,10 @@ function executiveBrief(m, risks, pend, insights) {
   if (insights[0]) parts.push(`Gargalo em destaque: ${insights[0].problem}`);
   return parts.join(' ');
 }
-ops.get('/torre', requirePerm('torre', 'view'), (req, res) => {
-  const m = opsMetrics(req.user);
-  const risks = riskClients(req.user);
-  const insights = all("SELECT * FROM ai_insights WHERE status='aberto' ORDER BY CASE severity WHEN 'alta' THEN 0 WHEN 'media' THEN 1 ELSE 2 END, updated_at DESC LIMIT 12");
-  const pend = can(req.user, 'pendencias') ? computePendencies().filter((p) => p.severity === 'critica').length : null;
-  res.json({
-    metrics: m, risks, stages: stageDistribution(req.user).map((s) => ({ ...s, label: STAGES[s.stage]?.label, lane: STAGES[s.stage]?.lane })), team: teamLoad().map((t) => ({ ...t, functions: parseJSON(t.functions, []) })),
-    insights, pendencias_criticas: pend, meetings: upcomingMeetings(req.user), deadlines: deadlines(req.user),
-    finance: can(req.user, 'financeiro') ? financeSummary() : null, crm: can(req.user, 'crm') ? crmSummary() : null,
-    automations: { runs_24h: one('SELECT COUNT(*) n FROM automation_runs WHERE created_at > ?', new Date(Date.now() - 864e5).toISOString()).n, active: one('SELECT COUNT(*) n FROM automations WHERE implemented=1 AND enabled=1').n,
-      top: all('SELECT automation_key, COUNT(*) n FROM automation_runs WHERE created_at > ? GROUP BY automation_key ORDER BY n DESC LIMIT 6', new Date(Date.now() - 7 * 864e5).toISOString()) },
-    brief: executiveBrief(m, risks, pend, insights),
-  });
-});
+// Torre de Controle: período (hoje | 7d | 30d | custom) e filtros (cliente, responsável, etapa, formato, prioridade)
+ops.get('/torre', requirePerm('torre', 'view'), (req, res) => res.json(tower(req.user, req.query)));
+ops.get('/torre/automations', requirePerm('torre', 'view'), (req, res) => res.json(automationRuns(req.query)));
+ops.get('/torre/people/:id/tasks', requirePerm('torre', 'view'), (req, res) => res.json(personTasks(req.params.id)));
 ops.get('/dashboard', (req, res) => {
   const u = req.user;
   const kind = roleOf(u).dashboard;
@@ -473,7 +464,7 @@ ops.get('/dashboard', (req, res) => {
   const sc = scopeSQL(u, 'client_id');
   if (kind === 'ceo') {
     // Visão executiva: resumo → prioridade → contexto; o detalhe completo continua na Torre de Controle
-    const exec = executiveOverview(u);
+    const exec = executiveOverview(u, req.query);
     if (!can(u, 'financeiro')) exec.finance = null;
     if (!can(u, 'clientes', 'admin')) exec.attention = exec.attention.filter((x) => !x.id.startsWith('mig:'));
     return res.json({ ...base, exec });
