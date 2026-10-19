@@ -33,7 +33,7 @@ export default function CRM() {
       </PageHead>
       <div className="stats mb-5 crm-stats">
         <Stat value={open.length} label="Negócios abertos" />
-        <Stat value={money(total)} label="Em negociação" hint="Valor mensal [DEMO]" />
+        <Stat value={money(total)} label="Em negociação" hint="Valor mensal" />
         <Stat value={money(weighted)} label="Ponderado" hint="Por probabilidade" />
         <Stat value={late} label="Follow-ups vencidos" alert={late > 0} hint="Viram tarefa automaticamente" />
       </div>

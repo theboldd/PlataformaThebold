@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useApi } from '../lib/hooks.js';
 import { useCrumbs } from '../components/Shell.jsx';
 import { PageHead, Loading, Empty } from '../components/ui.jsx';
@@ -11,7 +11,8 @@ import '../styles/intel.css';
 export default function Pendencias() {
   useCrumbs('Centro de Pendências');
   const { data, error, loading } = useApi('/pendencias');
-  const [sev, setSev] = useState(null);
+  const [params] = useSearchParams();
+  const [sev, setSev] = useState(params.get('sev'));
   const [client, setClient] = useState('');
   const [proc, setProc] = useState('');
   const items = data?.items || [];

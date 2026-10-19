@@ -7,7 +7,8 @@ import { log, notify, parseMentions, recordMentions, userName, businessDaysFrom 
 import { STAGES, LANES, STAGE_ORDER, publicStatus, productionTracks, createContent, completeTask, reviewDecision, clientDecision, schedule, confirmPublished,
   blockContent, unblockContent, cancelContent, returnToStage, nextAction, contentRisk, editableVersion, currentVersion, versionMedia, resolveAssignee, ensureCycle, setting, DEFAULT_SETTINGS, buildMilestones } from '../engine/process.js';
 import { automation, automationStats } from '../engine/automations.js';
-import { computePendencies, clientSummary, clientRisk, runDetectors, opsMetrics, stageDistribution, teamLoad } from '../engine/intelligence.js';
+import { computePendencies, clientSummary, clientRisk, runDetectors, opsMetrics, stageDistribution, teamLoad, OPERATING } from '../engine/intelligence.js';
+import { executiveOverview } from '../engine/executive.js';
 import { ingest, fileDTO, TMP_DIR } from '../services/media.js';
 import { BRAIN_SECTIONS, exportClientBrainMarkdown } from '../ai/memory.js';
 import { integrationStatus } from '../integrations/vault.js';
@@ -318,7 +319,7 @@ ops.get('/process/board', requirePerm('processos', 'view'), (req, res) => {
   const where = ["c.stage NOT IN ('cancelado')"]; const p = [];
   if (!req.query.include_published) where.push("NOT (c.stage='publicado' AND c.published_at < ?)"), p.push(new Date(Date.now() - 7 * 864e5).toISOString());
   if (client_id) { where.push('c.client_id=?'); p.push(client_id); }
-  if (stage) { where.push('c.stage=?'); p.push(stage); }
+  if (stage) { const st = String(stage).split(','); where.push(`c.stage IN (${st.map(() => '?').join(',')})`); p.push(...st); }
   if (priority) { where.push('c.priority=?'); p.push(priority); }
   if (q) { where.push('(c.title LIKE ? OR cl.name LIKE ?)'); p.push(`%${q}%`, `%${q}%`); }
   let cards = all(`SELECT c.* FROM contents c JOIN clients cl ON cl.id=c.client_id WHERE ${where.join(' AND ')} ORDER BY c.planned_at`, ...p).map((c) => contentCard(c, req.user));
@@ -425,7 +426,7 @@ function crmSummary() {
 }
 function riskClients(user) {
   const sc = scopeSQL(user, 'id');
-  return all(`SELECT * FROM clients WHERE status IN ('ativo','onboarding') AND ${sc.sql}`, ...sc.params).map((c) => ({ c, r: clientRisk(c.id) }))
+  return all(`SELECT * FROM clients WHERE status IN (${OPERATING.map(() => '?').join(',')}) AND ${sc.sql}`, ...OPERATING, ...sc.params).map((c) => ({ c, r: clientRisk(c.id) }))
     .filter((x) => ['alto', 'critico'].includes(x.r.level)).map(({ c, r }) => {
       const s = clientSummary(c);
       return { id: c.id, name: c.name, level: r.level, reasons: r.reasons, next: s.next, strategist: s.strategist };
@@ -471,11 +472,11 @@ ops.get('/dashboard', (req, res) => {
   const base = { kind, metrics: m, my_tasks: mine, meetings: upcomingMeetings(u, 3) };
   const sc = scopeSQL(u, 'client_id');
   if (kind === 'ceo') {
-    const risks = riskClients(u);
-    const insights = all("SELECT * FROM ai_insights WHERE status='aberto' ORDER BY CASE severity WHEN 'alta' THEN 0 WHEN 'media' THEN 1 ELSE 2 END LIMIT 5");
-    const pend = computePendencies();
-    return res.json({ ...base, risks, insights, critical: pend.filter((p) => p.severity === 'critica').slice(0, 5), critical_count: pend.filter((p) => p.severity === 'critica').length, deadlines: deadlines(u, 6),
-      team: teamLoad().slice(0, 8), stages: stageDistribution(u).map((s) => ({ ...s, label: STAGES[s.stage]?.label })), finance: can(u, 'financeiro') ? financeSummary() : null, brief: executiveBrief(m, risks, pend.filter((p) => p.severity === 'critica').length, insights) });
+    // Visão executiva: resumo → prioridade → contexto; o detalhe completo continua na Torre de Controle
+    const exec = executiveOverview(u);
+    if (!can(u, 'financeiro')) exec.finance = null;
+    if (!can(u, 'clientes', 'admin')) exec.attention = exec.attention.filter((x) => !x.id.startsWith('mig:'));
+    return res.json({ ...base, exec });
   }
   if (kind === 'operacoes') {
     const pend = can(u, 'pendencias') ? computePendencies() : [];

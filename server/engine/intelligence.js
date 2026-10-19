@@ -9,6 +9,10 @@ const ago = (iso) => (Date.now() - new Date(iso).getTime());
 const fmtDays = (ms) => { const d = ms / 864e5; return d < 1 ? `${Math.max(1, Math.round(ms / H))}h` : `${Math.round(d)} dia${Math.round(d) > 1 ? 's' : ''}`; };
 
 // ── CENTRO DE PENDÊNCIAS (derivado do estado; nunca fica desatualizado) ──
+// Clientes que fazem parte da operação. "a_confirmar" = cliente real migrado do Notion cujo status ainda não foi confirmado.
+export const OPERATING = ['ativo', 'onboarding', 'a_confirmar'];
+const OP_SQL = OPERATING.map((s) => `'${s}'`).join(',');
+
 export function computePendencies() {
   const out = [];
   const t = Date.now();
@@ -117,7 +121,7 @@ export function runDetectors() {
     FROM approvals ap WHERE ap.kind IN ('cliente','tema') AND ap.created_at > ?`, new Date(Date.now() - 60 * 864e5).toISOString()).filter((r) => r.sent);
   if (appr.length >= 3) {
     const avg = appr.reduce((s, r) => s + (new Date(r.created_at) - new Date(r.sent)), 0) / appr.length / 864e5;
-    put('aprovacao:media', { detector: 'tempo_aprovacao', severity: avg > 2 ? 'media' : 'baixa', metric: Math.round(avg * 10) / 10, problem: `Clientes levam em média ${avg.toFixed(1)} dia(s) para aprovar.`,
+    put('aprovacao:media', { detector: 'tempo_aprovacao', severity: avg > 2 ? 'media' : 'baixa', metric: Math.round(avg * 10) / 10, problem: `Clientes levam em média ${avg.toFixed(1).replace('.', ',')} ${avg >= 0.95 && avg < 1.05 ? 'dia' : 'dias'} para aprovar.`,
       cause: avg > 2 ? 'Lembretes ainda dependem de mensagem manual no WhatsApp.' : 'Dentro do esperado.', impact: 'Define a folga real entre produção e publicação.',
       suggestion: avg > 2 ? 'Ativar régua de cobrança automática no portal e reduzir o lote enviado por vez.' : 'Manter régua atual.', action: 'Ver automações', action_payload: JSON.stringify({ link: '/automacoes' }) });
   }
@@ -141,7 +145,7 @@ export function runDetectors() {
   }
   // 7. Funções sem pessoa vinculada em clientes ativos
   for (const r of all(`SELECT cl.id, cl.name, f.fn FROM clients cl, (SELECT 'estrategia' fn UNION SELECT 'design' UNION SELECT 'edicao') f
-    WHERE cl.status IN ('ativo','onboarding') AND NOT EXISTS (SELECT 1 FROM client_members cm WHERE cm.client_id=cl.id AND cm.function=f.fn)`)) {
+    WHERE cl.status IN (${OP_SQL}) AND NOT EXISTS (SELECT 1 FROM client_members cm WHERE cm.client_id=cl.id AND cm.function=f.fn)`)) {
     put(`semfuncao:${r.id}:${r.fn}`, { detector: 'sem_responsavel', client_id: r.id, severity: 'alta', problem: `${r.name} não tem ninguém vinculado na função “${r.fn}”.`, cause: 'Divisão de equipe não cadastrada (hoje: 3 fontes diferentes no Notion).', impact: 'Tarefas dessa função nascem sem responsável.', suggestion: 'Vincular responsável na ficha do cliente → Equipe.', action: 'Abrir ficha', action_payload: JSON.stringify({ link: `/clientes/${r.id}?tab=equipe` }) });
   }
   // Insights que deixaram de ser verdade são resolvidos automaticamente
@@ -157,7 +161,7 @@ export function opsMetrics(user) {
   const nowIso = now();
   const today = new Date(); today.setHours(23, 59, 59, 999);
   return {
-    clientes_ativos: one(`SELECT COUNT(*) n FROM clients WHERE status IN ('ativo','onboarding') AND ${scopeSQL(user, 'id').sql}`, ...scopeSQL(user, 'id').params).n,
+    clientes_ativos: one(`SELECT COUNT(*) n FROM clients WHERE status IN (${OP_SQL}) AND ${scopeSQL(user, 'id').sql}`, ...scopeSQL(user, 'id').params).n,
     em_producao: q("SELECT COUNT(*) n FROM contents WHERE {S} AND stage IN ('producao','analise_producao','ajuste_interno','ajuste_cliente','revisao_ajuste')").n,
     aguardando_cliente: q("SELECT COUNT(*) n FROM contents WHERE {S} AND stage IN ('aprovacao_tema','aprovacao_cliente')").n,
     em_revisao: q("SELECT COUNT(*) n FROM contents WHERE {S} AND stage IN ('analise_cronograma','analise_producao','revisao_ajuste')").n,

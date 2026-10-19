@@ -27,7 +27,7 @@ export default function Financeiro() {
   const debtors = Object.values(data.overdue.reduce((acc, i) => { (acc[i.client_id] ||= { id: i.client_id, name: i.client_name, total: 0, n: 0, since: i.due_at }).total += i.amount; acc[i.client_id].n++; return acc; }, {}));
   return (
     <div className="page">
-      <PageHead kicker="Acesso restrito" title="Financeiro" sub="Contratos, parcelas e recebimentos. Valores de demonstração [DEMO].">
+      <PageHead kicker="Acesso restrito" title="Financeiro" sub="Contratos, parcelas e recebimentos.">
         {auth.can('financeiro', 'create') && <Button variant="primary" icon={<I.plus size={15} />} onClick={() => setNewContract(true)}>Novo contrato</Button>}
       </PageHead>
       <div className="fin-grid">

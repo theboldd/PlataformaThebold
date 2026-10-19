@@ -5,6 +5,7 @@ import { useCrumbs } from '../components/Shell.jsx';
 import { Stat, Section, Loading, ErrorBox, Empty, Drawer, Status, ContentCard } from '../components/ui.jsx';
 import { greeting, firstName, fmtDate, fmtDateTime, money, cleanName, ago, fmtWeekday } from '../lib/format.js';
 import { FORMATS } from '../lib/status.js';
+import Executive from './dash/Executive.jsx';
 import { Meter, MyTasks, ContentRows, PendRows, RiskList, MeetingRows, InsightMini, CopyText, n2 } from './intel/parts.jsx';
 
 const DEAL_STAGE = { lead: 'Lead', contato: 'Contato', qualificacao: 'Qualificação', reuniao: 'Reunião', proposta: 'Proposta', negociacao: 'Negociação', fechado: 'Fechado', onboarding: 'Onboarding', perdido: 'Perdido' };
@@ -27,68 +28,11 @@ export default function Dashboard() {
       </header>
       <ErrorBox error={error} />
       {loading && !d ? <Loading rows={6} /> : d && (
-        d.kind === 'ceo' ? <Ceo d={d} reload={reload} /> : d.kind === 'operacoes' ? <Ops d={d} reload={reload} /> : d.kind === 'revisao' ? <Review d={d} reload={reload} />
+        d.kind === 'ceo' ? <Executive d={d} /> : d.kind === 'operacoes' ? <Ops d={d} reload={reload} /> : d.kind === 'revisao' ? <Review d={d} reload={reload} />
           : d.kind === 'estrategia' ? <Strategy d={d} reload={reload} /> : d.kind === 'comercial' ? <Commercial d={d} reload={reload} /> : <Production d={d} reload={reload} />
       )}
     </div>
   );
-}
-
-function Ceo({ d, reload }) {
-  const m = d.metrics;
-  const [drill, setDrill] = useState(null);
-  const maxStage = Math.max(1, ...d.stages.map((s) => s.n));
-  return (
-    <>
-      <div className="hero-stats">
-        <Stat value={d.risks.length} label="Clientes em risco" alert={d.risks.length > 0} onClick={() => setDrill('risks')} hint="ver motivos" />
-        <Stat value={d.critical_count} label="Pendências críticas" alert={d.critical_count > 0} to="/pendencias" />
-        <Stat value={m.em_producao} label="Em produção" to="/processos" />
-        <Stat value={m.aguardando_cliente} label="Aguardando clientes" to="/processos" />
-        <Stat value={m.atrasadas} label="Tarefas atrasadas" alert={m.atrasadas > 0} to="/pendencias" />
-      </div>
-      <p className="brief">{d.brief}</p>
-      <div className="cols mt-6">
-        <div>
-          <Section title="Atenção" kicker="Pendências críticas" action={<Link className="btn btn-sm btn-ghost" to="/pendencias">Centro de Pendências →</Link>}><PendRows items={d.critical} /></Section>
-          <Section title="Clientes em risco" kicker="Clique para entender o motivo"><RiskList risks={d.risks} /></Section>
-          <Section title="Operação" kicker="Onde os conteúdos estão agora" action={<Link className="btn btn-sm btn-ghost" to="/processos">Quadro →</Link>}>
-            {d.stages.filter((s) => s.n).sort((a, b) => b.n - a.n).map((s) => <Meter key={s.stage} label={s.label} value={s.n} max={maxStage} display={`${s.n}${s.blocked ? ` · ${s.blocked} bloq.` : ''}`} to={`/processos?stage=${s.stage}`} />)}
-          </Section>
-        </div>
-        <div>
-          <Section title="Insights" kicker="Inteligência operacional"><InsightMini items={d.insights.slice(0, 3)} /></Section>
-          <Section title="Próximos prazos"><DeadlineList items={d.deadlines} /></Section>
-          <Section title="Capacidade da equipe" kicker="Tarefas abertas · traço = capacidade semanal">
-            {d.team.map((t) => <Meter key={t.id} label={t.name} value={t.open} max={Math.max(...d.team.map((x) => Math.max(x.open, x.capacity)), 1)} mark={t.capacity} display={`${t.open}${t.late ? ` · ${t.late} atr.` : ''}`} title={`${t.name}: ${t.open} abertas, ${t.late} atrasadas, capacidade ${t.capacity}`} />)}
-          </Section>
-          {d.finance && (
-            <Section title="Financeiro" action={<Link className="btn btn-sm btn-ghost" to="/financeiro">Abrir →</Link>}>
-              <div className="grid-2 money-stats">
-                <Stat value={money(d.finance.recebido_mes)} label="Recebido no mês" />
-                <Stat value={money(d.finance.atrasado)} label="Em atraso" alert={d.finance.atrasado > 0} />
-              </div>
-            </Section>
-          )}
-          <Section title="Agenda"><MeetingRows items={d.meetings} /></Section>
-          <Section title="Minhas tarefas"><MyTasks tasks={d.my_tasks} reload={reload} /></Section>
-        </div>
-      </div>
-      {drill === 'risks' && (
-        <Drawer open onClose={() => setDrill(null)} title="Clientes em risco" kicker={`${d.risks.length} cliente(s)`}><RiskList risks={d.risks} /></Drawer>
-      )}
-    </>
-  );
-}
-
-function DeadlineList({ items }) {
-  if (!items?.length) return <Empty title="Sem prazos próximos." />;
-  return items.map((t) => (
-    <Link key={t.id} to={t.content_id ? `/conteudos/${t.content_id}` : '/processos'} className="erow link" style={{ gridTemplateColumns: '78px minmax(0,1fr)' }} data-cursor="ABRIR">
-      <div><div className="deadline-date" style={{ color: t.overdue ? 'var(--err)' : undefined }}>{fmtDate(t.due_at)}</div><div className="xs faint">{t.overdue ? 'vencido' : ago(t.due_at)}</div></div>
-      <div style={{ minWidth: 0 }}><div className="t clip">{t.title}</div><div className="s">{cleanName(t.client || '')}</div></div>
-    </Link>
-  ));
 }
 
 function Ops({ d, reload }) {

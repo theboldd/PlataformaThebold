@@ -28,6 +28,8 @@ export default function Login({ onLogin }) {
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const [phrase, setPhrase] = useState(0);
+  const [demo, setDemo] = useState(false);
+  useEffect(() => { api.get('/health').then((h) => setDemo(!!h.demo)).catch(() => {}); }, []);
   const root = useRef(null);
   const clock = useClock();
 
@@ -78,11 +80,11 @@ export default function Login({ onLogin }) {
           <label className="lg-field"><span>Senha</span><input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••••" /></label>
           {err && <div className="lg-err" role="alert">{err}</div>}
           <Button variant="ink" size="lg" magnetic arrow disabled={busy} type="submit" className="lg-cta" cursor="ENTRAR">{busy ? 'Entrando…' : 'Viver o efeito Bold'}</Button>
-          <details className="lg-demo">
+          {demo && <details className="lg-demo">
             <summary>Ambiente de demonstração — perfis de teste</summary>
             <p>Senha de todos: <code>thebold2026</code> · clientes fictícios [DEMO]</p>
             <div className="lg-chips">{DEMO.map(([e, l]) => <button type="button" key={e} onClick={() => { setEmail(e); setPassword('thebold2026'); }}>{l}</button>)}</div>
-          </details>
+          </details>}
         </form>
       </main>
 

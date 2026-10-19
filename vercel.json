@@ -5,7 +5,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "web/dist",
   "functions": {
-    "api/index.js": { "includeFiles": "{server/**,demo-snapshot/**}", "maxDuration": 60, "memory": 1024 }
+    "api/index.js": { "includeFiles": "{server/**,demo-snapshot/**,real-snapshot/**}", "maxDuration": 60, "memory": 1024 }
   },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
