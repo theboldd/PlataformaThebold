@@ -7,6 +7,10 @@
 2. `npm run base:real` cria o banco só com a equipe e importa os clientes reais.
    - `npm run migrar:notion` reimporta sem duplicar: identifica cada cliente pela `notion_url`, substitui só o que veio do Notion e preserva o que foi feito na plataforma.
    - `npm run seed` cria só a equipe, sem clientes. Não existe base de exemplo.
+   - `npm run migrar:quadros` importa os quadros mensais do PROCESSO (`_board_outubro.json`, `_board_novembro.json`) com `server/migration/import-notion-quadro.js <mes>`.
+     - Cada item da lista do card (ex.: "4 reels") vira um conteúdo. Título e data vêm do post citado no card ou no cronograma; sem post, o título fica "(tema a definir)".
+     - A coluna define a etapa. "Pendente por material" vira bloqueio aguardando o cliente.
+     - É idempotente: a origem fica em `reference`. O relatório sai em `storage/migration/relatorio-<mes>.md`.
 3. O relatório de validação, com as 10 checagens, é gerado em `storage/migration/relatorio-migracao.md`.
 
 ## Regras aplicadas

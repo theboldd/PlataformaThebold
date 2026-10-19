@@ -9,7 +9,7 @@ import { cleanName } from '../lib/format.js';
 import { ISSUE } from './client/Ficha.jsx';
 import '../styles/exec.css';
 
-const ORDER = ['status', 'equipe', 'duplicado', 'escopo', 'conflito', 'resposta_multipla', 'inconsistencia', 'pagina_inacessivel', 'formulario_antigo', 'arquivos_nao_lidos', 'arquivo_no_notion', 'campo_sem_secao'];
+const ORDER = ['status', 'equipe', 'duplicado', 'escopo', 'quadro_mensal', 'conflito', 'resposta_multipla', 'inconsistencia', 'pagina_inacessivel', 'formulario_antigo', 'arquivos_nao_lidos', 'arquivo_no_notion', 'campo_sem_secao'];
 
 export default function Migracao() {
   useCrumbs('Clientes', 'Decisões da migração');

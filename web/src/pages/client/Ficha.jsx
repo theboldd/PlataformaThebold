@@ -19,7 +19,7 @@ export const ORIGIN = {
   observacao_interna: ['Observação interna', 'o-interna'], indefinido: ['Origem a confirmar', 'o-indef'],
 };
 const SOURCE = { notion: 'Notion', notion_onboarding: 'Notion · formulário', onboarding: 'Plataforma · formulário', plataforma: 'Plataforma' };
-export const ISSUE = { escopo: 'Escopo', formulario_antigo: 'Formulário antigo', arquivos_nao_lidos: 'Arquivos não lidos', inconsistencia: 'Inconsistência', conflito: 'Conflito', resposta_multipla: 'Resposta múltipla', duplicado: 'Possível duplicado', pagina_inacessivel: 'Página não lida', arquivo_no_notion: 'Arquivo no Notion', status: 'Status', equipe: 'Equipe', campo_sem_secao: 'Sem seção' };
+export const ISSUE = { escopo: 'Escopo', formulario_antigo: 'Formulário antigo', arquivos_nao_lidos: 'Arquivos não lidos', inconsistencia: 'Inconsistência', conflito: 'Conflito', resposta_multipla: 'Resposta múltipla', duplicado: 'Possível duplicado', pagina_inacessivel: 'Página não lida', arquivo_no_notion: 'Arquivo no Notion', status: 'Status', equipe: 'Equipe', campo_sem_secao: 'Sem seção', quadro_mensal: 'Quadro mensal', novembro: 'Quadro mensal' };
 
 export function OriginChip({ origin }) {
   const [label, cls] = ORIGIN[origin] || ORIGIN.indefinido;
