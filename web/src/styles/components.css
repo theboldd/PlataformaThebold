@@ -133,3 +133,4 @@
 .cursor.on .dot { width: 56px; height: 56px; background: var(--bordo); transform: translate(14px, 14px); box-shadow: 0 6px 18px -6px rgba(0,0,0,.4); }
 .cursor.on .dot span { opacity: 1; }
 @media (hover: none), (pointer: coarse) { .cursor { display: none; } }
+.tag-matreq { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 4px; background: #F6E3B8; color: #6B4A00; font-size: 11px; font-weight: 700; letter-spacing: .02em; margin-bottom: 8px; }

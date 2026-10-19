@@ -96,3 +96,5 @@
 .jb-col.jb-col-min { width: 150px; min-width: 150px; flex-basis: 150px; }
 .jb-col.jb-col-min .jb-col-title { white-space: normal; }
 .jb-key, .jb-due { white-space: nowrap; }
+/* Etiqueta: equipe precisa que o cliente envie material */
+.jb-matreq { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 4px; background: #F6E3B8; color: #6B4A00; font-size: 11px; font-weight: 700; letter-spacing: .02em; }

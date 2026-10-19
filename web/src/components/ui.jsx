@@ -104,6 +104,7 @@ export function ContentCard({ c, compact }) {
         <div className="grow"><div className="title">#{c.number} {c.title}</div></div>
         {c.thumb && !compact && <img className="thumb" src={c.thumb} alt="" loading="lazy" />}
       </div>
+      {c.needs_material && <span className="tag-matreq">Material do cliente</span>}
       {c.blocked && <div className="xs" style={{ color: 'var(--err)', marginBottom: 8 }}>■ {c.block_reason}</div>}
       <div className="meta">
         <span className={c.owner === 'SEM RESPONSÁVEL' ? 'strong' : ''} style={c.owner === 'SEM RESPONSÁVEL' ? { color: 'var(--err)' } : null}>{c.owner || '—'}</span>

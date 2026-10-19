@@ -213,7 +213,8 @@ function Card({ c, moved, track }) {
       <div className="jb-card-title">{c.title}</div>
       <div className="jb-card-labels">
         <span className="jb-label" style={{ background: toneOf(c.client_id) }}>{cleanName(c.client || '')}</span>
-        {c.blocked && <span className="jb-flag" title={c.block_reason}>■ Bloqueado</span>}
+        {c.needs_material ? <span className="jb-matreq" title={c.block_reason || 'Aguardando material do cliente'}>Material do cliente</span>
+          : c.blocked && <span className="jb-flag" title={c.block_reason}>■ Bloqueado</span>}
         {c.material_url && <button type="button" className="jb-mat" title={c.material_url} onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(c.material_url, '_blank', 'noopener'); }}>Material ↗</button>}
       </div>
       {c.blocked && <div className="jb-block">{c.block_reason}</div>}

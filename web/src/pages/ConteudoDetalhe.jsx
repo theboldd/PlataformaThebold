@@ -74,8 +74,9 @@ export default function ConteudoDetalhe() {
       <div className="next-action mb-5">
         <div className="caps">Próxima ação</div>
         <div className="sm mt-2"><b>{na.who || '—'}</b>{na.who ? ' · ' : ''}{na.text}{na.unassigned && <span style={{ color: 'var(--err)' }}> — existe tarefa sem responsável</span>}</div>
-        {risk.reasons?.length > 0 && <div className="xs mt-2" style={{ color: 'var(--err)' }}>{risk.reasons.join(' · ')}</div>}
-        {c.blocked ? <div className="xs mt-2" style={{ color: 'var(--err)' }}>■ Bloqueado — {c.block_reason} (aguardando {c.waiting_on})</div> : null}
+        {risk.reasons?.filter((r) => !(c.blocked && r.startsWith('Bloqueado'))).length > 0 && <div className="xs mt-2" style={{ color: 'var(--err)' }}>{risk.reasons.filter((r) => !(c.blocked && r.startsWith('Bloqueado'))).join(' · ')}</div>}
+        {(c.material_status === 'aguardando' || (c.blocked && c.waiting_on === 'cliente')) ? <div className="mt-2"><span className="tag-matreq">Material do cliente</span> <span className="xs">{c.block_reason?.replace(/^Material do cliente:\s*/, '') || 'aguardando envio'} · o cliente vê o pedido em Materiais e o envio libera o conteúdo</span></div>
+          : c.blocked ? <div className="xs mt-2" style={{ color: 'var(--err)' }}>■ Bloqueado — {c.block_reason} (aguardando {c.waiting_on})</div> : null}
       </div>
 
       <div className="cd-grid">
@@ -164,6 +165,7 @@ export default function ConteudoDetalhe() {
         onSubmit={(body) => act(() => api.post(`/contents/${c.id}/review`, body), 'Ajuste enviado. Tarefas criadas e responsáveis notificados.')} />
       <EditModal open={modal === 'edit'} onClose={() => setModal(null)} c={c} onSave={(b) => act(() => api.patch(`/contents/${c.id}`, b), 'Alterações salvas.')} busy={busy} />
       <ClientDecisionModal open={modal === 'client'} onClose={() => setModal(null)} c={c} busy={busy} onSave={(b) => act(() => api.post(`/contents/${c.id}/client-decision`, b), b.decision === 'aprovar' ? 'Aprovação do cliente registrada.' : 'Ajuste do cliente registrado.')} />
+      <MaterialModal open={modal === 'material'} onClose={() => setModal(null)} busy={busy} onSave={(what) => act(() => api.post(`/contents/${c.id}/material`, { what }), 'Pedido enviado — o cliente vê em Materiais.')} />
       <BlockModal open={modal === 'block'} onClose={() => setModal(null)} busy={busy} onSave={(b) => act(() => api.post(`/contents/${c.id}/block`, b), 'Conteúdo bloqueado — pendência criada.')} />
       <ScheduleModal open={modal === 'schedule'} onClose={() => setModal(null)} c={c} meta={data.meta_connected} busy={busy} onSave={(b) => act(() => api.post(`/contents/${c.id}/schedule`, b), b.mode === 'meta' ? 'Agendado para publicação via Meta.' : 'Marcado como agendado externamente.')} />
       <ReasonModal open={modal === 'cancel'} title="Cancelar conteúdo" label="Motivo do cancelamento" danger onClose={() => setModal(null)} busy={busy} onSave={(reason) => act(() => api.post(`/contents/${c.id}/cancel`, { reason }), 'Conteúdo cancelado.')} />
@@ -190,7 +192,11 @@ function ActionsPanel({ data, myOpen, busy, onComplete, setModal, act }) {
   if (['agendamento', 'agendado'].includes(c.stage) && (pm.approve || myOpen.some((t) => t.kind === 'agendamento'))) items.push(<Button key="sc" variant={c.stage === 'agendamento' ? 'primary' : undefined} magnetic disabled={busy} onClick={() => setModal('schedule')} data-cursor="AGENDAR">{c.stage === 'agendado' ? 'Reagendar' : 'Agendar'}</Button>);
   if (c.stage === 'agendado' && (pm.approve || pm.edit)) items.push(<Button key="pb" disabled={busy} onClick={() => act(() => api.post(`/contents/${c.id}/published`, {}), 'Publicação confirmada.')}>Confirmar publicação</Button>);
   const secondary = [];
-  if (pm.edit && !final) secondary.push(c.blocked
+  const waitingMaterial = c.material_status === 'aguardando' || (c.blocked && c.waiting_on === 'cliente');
+  if (pm.edit && !final) secondary.push(waitingMaterial
+    ? <Button key="mr" size="sm" disabled={busy} onClick={() => act(() => api.post(`/contents/${c.id}/unblock`, { note: 'material do cliente recebido' }), 'Material recebido — conteúdo liberado.')}>Material recebido</Button>
+    : <Button key="mp" size="sm" variant="ghost" disabled={busy} onClick={() => setModal('material')}>Pedir material ao cliente</Button>);
+  if (pm.edit && !final && !waitingMaterial) secondary.push(c.blocked
     ? <Button key="ub" size="sm" disabled={busy} onClick={() => act(() => api.post(`/contents/${c.id}/unblock`, { note: 'destravado manualmente' }), 'Conteúdo desbloqueado.')}>Desbloquear</Button>
     : <Button key="bl" size="sm" variant="ghost" disabled={busy} onClick={() => setModal('block')}>Bloquear</Button>);
   if (pm.approve && !final && c.stage !== 'cronograma') secondary.push(<Button key="rt" size="sm" variant="ghost" onClick={() => setModal('return')}>Devolver etapa</Button>);
@@ -321,6 +327,17 @@ function ClientDecisionModal({ open, onClose, c, onSave, busy }) {
         <Field label="Origem (obrigatório)"><input className="input" value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder="Onde e quando o cliente aprovou" /></Field>
         {decision === 'ajuste' && <Field label="O que o cliente pediu?"><textarea className="textarea" value={note} onChange={(e) => setNote(e.target.value)} /></Field>}
         {decision === 'ajuste' && c.stage === 'aprovacao_cliente' && <div className="seg"><button className={size === 'normal' ? 'active' : ''} onClick={() => setSize('normal')}>Ajuste normal</button><button className={size === 'simples' ? 'active' : ''} onClick={() => setSize('simples')}>Ajuste simples (volta direto ao cliente)</button></div>}
+      </div>
+    </Modal>
+  );
+}
+
+function MaterialModal({ open, onClose, onSave, busy }) {
+  const [what, setWhat] = useState('');
+  return (
+    <Modal open={open} onClose={onClose} title="Pedir material ao cliente" footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" disabled={busy || !what.trim()} onClick={() => onSave(what)}>Pedir material</Button></>}>
+      <div className="col gap-4">
+        <Field label="O que o cliente precisa enviar?" hint="O card ganha a etiqueta “Material do cliente”, o conteúdo fica parado aguardando o cliente e ele é avisado na área dele (Materiais). Quando ele enviar por lá, o conteúdo segue sozinho."><textarea className="textarea" value={what} onChange={(e) => setWhat(e.target.value)} placeholder="O que falta, de forma específica" /></Field>
       </div>
     </Modal>
   );

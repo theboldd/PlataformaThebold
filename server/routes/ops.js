@@ -167,7 +167,8 @@ export function contentCard(c, user = null) {
     priority: c.priority, planned_at: c.planned_at, blocked: !!c.blocked, block_reason: c.block_reason, waiting_on: c.waiting_on, owner: owner?.name || (owner ? 'SEM RESPONSÁVEL' : null), owner_id: owner?.assignee_id,
     due_at: owner?.due_at, hours_in_stage: hoursSince(c.stage_entered_at), risk: risk.level, risk_reasons: risk.reasons, version: v?.number || null, thumb: thumb ? fileDTO(thumb).urls.thumb : null,
     restricted: user ? !canAccessClient(user, c.client_id) : false, rounds: c.revision_rounds + c.client_adjust_rounds, month: c.cycle_month || c.planned_at?.slice(0, 7) || null,
-    material_url: user && !canAccessClient(user, c.client_id) ? null : c.material_url || null };
+    material_url: user && !canAccessClient(user, c.client_id) ? null : c.material_url || null,
+    needs_material: c.material_status === 'aguardando' || (!!c.blocked && c.waiting_on === 'cliente') };
 }
 ops.get('/contents', requirePerm('conteudos', 'view'), (req, res) => {
   const sc = scopeSQL(req.user, 'client_id');
@@ -213,12 +214,17 @@ ops.patch('/contents/:id', requirePerm('conteudos', 'edit'), (req, res) => {
   const allowed = ['title', 'theme', 'objective', 'reference', 'briefing', 'internal_notes', 'planned_at', 'priority', 'format', 'strategy_tags', 'material_status', 'material_url'];
   if (req.body?.material_url && !/^https?:\/\/\S+$/i.test(req.body.material_url)) throw new HttpError(422, 'Link do material inválido: use um endereço que comece com http(s)://');
   const patch = Object.fromEntries(Object.entries(req.body || {}).filter(([k]) => allowed.includes(k)));
+  // material marcado no formulário segue a mesma regra do pedido: aguardando = parado pelo cliente; recebido = libera
+  const askMaterial = patch.material_status === 'aguardando' && c.material_status !== 'aguardando' && !c.blocked;
+  const gotMaterial = patch.material_status && patch.material_status !== 'aguardando' && c.material_status === 'aguardando' && c.blocked && c.waiting_on === 'cliente';
   if (patch.strategy_tags) patch.strategy_tags = JSON.stringify(patch.strategy_tags);
   if (patch.planned_at) { patch.planned_at = new Date(patch.planned_at).toISOString(); const m = patch.planned_at.slice(0, 7); if (m !== c.cycle_month) { const cy = ensureCycle(c.client_id, m); patch.cycle_id = cy.id; patch.cycle_month = m; } }
   if (!Object.keys(patch).length) return res.json({ ok: true });
   update('contents', { id: c.id }, { ...patch, updated_at: now() });
   log({ actor: req.user.id, action: 'conteudo.alterado', entity: 'content', id: c.id, client: c.client_id, content: c.id, summary: `Alterado: ${Object.keys(patch).filter((k) => !['cycle_id', 'cycle_month'].includes(k)).join(', ')}`,
     before: JSON.stringify(Object.fromEntries(Object.keys(patch).map((k) => [k, c[k]]))), after: JSON.stringify(patch) });
+  if (askMaterial) blockContent(c.id, 'Material do cliente: ver observações do conteúdo', 'cliente', req.user);
+  if (gotMaterial) unblockContent(c.id, req.user, 'material marcado como recebido');
   res.json({ ok: true });
 });
 // Legenda: sempre na versão editável (nova versão se a atual já foi enviada)
@@ -273,6 +279,20 @@ ops.post('/contents/:id/client-decision', (req, res) => res.json(clientDecision(
 ops.post('/contents/:id/schedule', (req, res) => res.json(schedule(req.params.id, req.user, req.body || {})));
 ops.post('/contents/:id/published', (req, res) => res.json(confirmPublished(req.params.id, req.user, req.body || {})));
 ops.post('/contents/:id/block', requirePerm('conteudos', 'edit'), (req, res) => { blockContent(req.params.id, req.body?.reason, req.body?.waiting_on, req.user); res.json({ ok: true }); });
+// Pedir material ao cliente: etiqueta "Material do cliente" no card, conteúdo parado aguardando o cliente,
+// aviso na área do cliente (Materiais). O envio pelo portal desbloqueia sozinho; a equipe também pode marcar como recebido.
+ops.post('/contents/:id/material', requirePerm('conteudos', 'edit'), (req, res) => {
+  const c = getContentOr404(req.params.id);
+  assertClient(req.user, c.client_id);
+  const what = String(req.body?.what || '').trim();
+  if (!what) throw new HttpError(422, 'Diga qual material o cliente precisa enviar.');
+  tx(() => {
+    if (c.blocked) unblockContent(c.id, null, 'substituído pelo pedido de material');
+    update('contents', { id: c.id }, { material_status: 'aguardando', updated_at: now() });
+    blockContent(c.id, `Material do cliente: ${what}`, 'cliente', req.user);
+  });
+  res.json({ ok: true });
+});
 ops.post('/contents/:id/unblock', requirePerm('conteudos', 'edit'), (req, res) => { unblockContent(req.params.id, req.user, req.body?.note); res.json({ ok: true }); });
 ops.post('/contents/:id/cancel', (req, res) => res.json(cancelContent(req.params.id, req.user, req.body?.reason)));
 ops.post('/contents/:id/return', (req, res) => res.json(returnToStage(req.params.id, req.user, req.body?.stage, req.body?.reason)));
