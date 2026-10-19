@@ -151,6 +151,14 @@ for (const c of real) for (const a of [c.name, ...JSON.parse(c.aliases || '[]')]
 }
 for (const dup of [...new Set(report.duplicates)]) issue(null, null, 'duplicado', `Possível cliente duplicado — ${dup}`, 'notion');
 
+// Pontos gerais levantados na varredura (fora de uma ficha específica)
+const general = fs.existsSync(path.join(DIR, '_issues.json')) ? JSON.parse(fs.readFileSync(path.join(DIR, '_issues.json'), 'utf8')) : [];
+run("DELETE FROM migration_issues WHERE source='notion:geral' AND status='aberto'");
+for (const g of general) {
+  const c = g.client_name ? real.find((x) => norm(x.name) === norm(g.client_name)) : null;
+  issue(c?.id || null, g.client_name || null, g.kind, g.description, 'notion:geral');
+}
+
 // ─── Relatório de validação ───
 const list = (arr) => (arr.length ? arr.map((x) => `- ${x}`).join('\n') : '- nenhum');
 const md = `# Relatório de migração — Notion → THE BOLD OS
@@ -193,7 +201,7 @@ Nenhum descartado: seções novas criadas no Client Brain (${BRAIN_SECTIONS.join
 ## 10. Calendários editoriais — NÃO migrados
 ${list(report.skippedCalendar)}
 
-## Equipe não vinculada (revisar)
+## Pontos gerais\n${list(general.map((g) => g.description))}\n\n## Equipe não vinculada (revisar)
 ${teamMap ? list(report.unmatchedTeam) : '- mapa de equipe ainda não disponível (_team_map.json)'}
 `;
 fs.writeFileSync(REPORT, md);
