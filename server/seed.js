@@ -46,19 +46,19 @@ for (const [key, name, role, title, fns, cap] of TEAM) {
 
 // ─────────── CLIENTES (fictícios) ───────────
 const CLIENTS = [
-  { key: 'helena', name: 'Dra. Helena Prado [DEMO]', handle: '@drahelenaprado.demo', segment: 'Dermatologia', services: ['Estratégia editorial', 'Design', 'Reels', 'Legendas', 'Agendamento'],
+  { key: 'helena', contact: 'Helena Prado', name: 'Dra. Helena Prado [DEMO]', handle: '@drahelenaprado.demo', segment: 'Dermatologia', services: ['Estratégia editorial', 'Design', 'Reels', 'Legendas', 'Agendamento'],
     team: [['juliane', 'estrategia'], ['juliane', 'copy'], ['felipe', 'design'], ['leo', 'edicao'], ['vivian', 'atendimento'], ['vivian', 'agendamento'], ['raisa', 'revisao']],
     brain: { posicionamento: 'Dermatologista que une ciência e naturalidade: resultados visíveis sem exageros. [DEMO]', publico: 'Mulheres de 30 a 55 anos, classes A/B, que buscam cuidado preventivo e procedimentos discretos.', tom: 'Acolhedor, técnico na medida certa, nunca alarmista. Evitar promessas de resultado.', linguagem: 'Frases curtas, termos médicos explicados em linguagem simples. Sem gírias.', oferta: 'Consultas de rotina, protocolos de rejuvenescimento, check-up de pele.', objetivos: 'Autoridade em skincare preventivo e agenda cheia para o 1º trimestre.', restricoes: 'CFM: não mostrar antes/depois, não citar preços, não usar “o melhor”.', preferencias: 'Gosta de capas claras, tipografia fina e fotos com luz natural.', referencias: '[PLACEHOLDER: perfis de referência enviados pela cliente]' } },
-  { key: 'moretti', name: 'Moretti Advocacia [DEMO]', handle: '@morettiadv.demo', segment: 'Advocacia empresarial', services: ['Estratégia editorial', 'Design', 'Legendas', 'Agendamento', 'MKT jurídico'],
+  { key: 'moretti', contact: 'Carlos Moretti', name: 'Moretti Advocacia [DEMO]', handle: '@morettiadv.demo', segment: 'Advocacia empresarial', services: ['Estratégia editorial', 'Design', 'Legendas', 'Agendamento', 'MKT jurídico'],
     team: [['monique', 'estrategia'], ['monique', 'copy'], ['felipe', 'design'], ['nicole', 'edicao'], ['vivian', 'atendimento'], ['vivian', 'agendamento'], ['raisa', 'revisao']],
     brain: { posicionamento: 'Escritório boutique que traduz o direito empresarial para decisões de negócio. [DEMO]', publico: 'Sócios e diretores de PMEs, 35–60 anos.', tom: 'Sóbrio, seguro, objetivo. Autoridade sem juridiquês.', restricoes: 'Provimento OAB 205/2021: sem captação, sem resultados de causas, sem preços.', preferencias: 'Paleta azul-marinho e areia; carrosséis educativos.', objetivos: 'Ser lembrado como referência em contratos societários.' } },
-  { key: 'atelier', name: 'Atelier Lumière [DEMO]', handle: '@atelierlumiere.demo', segment: 'Moda autoral', services: ['Estratégia editorial', 'Design', 'Reels', 'Legendas'],
+  { key: 'atelier', contact: 'Lia Fontaine', name: 'Atelier Lumière [DEMO]', handle: '@atelierlumiere.demo', segment: 'Moda autoral', services: ['Estratégia editorial', 'Design', 'Reels', 'Legendas'],
     team: [['juliane', 'estrategia'], ['juliane', 'copy'], ['nicole', 'design'], ['leo', 'edicao'], ['vivian', 'atendimento'], ['vivian', 'agendamento']],
     brain: { posicionamento: 'Moda autoral feita à mão, peças atemporais em pequenas tiragens. [DEMO]', publico: 'Mulheres 28–45 que valorizam processo e exclusividade.', tom: 'Poético, sensorial, elegante.', preferencias: 'Ama bastidores do ateliê; não gosta de fundo branco chapado.', restricoes: 'Não usar a palavra “barato” nem “promoção”.' } },
-  { key: 'vertice', name: 'Clínica Vértice [DEMO]', handle: '@clinicavertice.demo', segment: 'Odontologia', services: ['Estratégia editorial', 'Design', 'Reels', 'Legendas', 'Agendamento'],
+  { key: 'vertice', contact: 'Rafael Costa', name: 'Clínica Vértice [DEMO]', handle: '@clinicavertice.demo', segment: 'Odontologia', services: ['Estratégia editorial', 'Design', 'Reels', 'Legendas', 'Agendamento'],
     team: [['monique', 'estrategia'], ['monique', 'copy'], ['felipe', 'design'], ['nicole', 'edicao'], ['vivian', 'atendimento'], ['vivian', 'agendamento'], ['raisa', 'revisao']],
     brain: { posicionamento: 'Odontologia estética com planejamento digital do sorriso. [DEMO]', publico: 'Adultos 25–50 que querem estética com segurança.', tom: 'Leve, didático, confiante.', restricoes: 'CFO: sem antes/depois sem autorização; sem preços.', preferencias: 'Reels curtos com a equipe; legendas com CTA para agendamento via direct.' } },
-  { key: 'aurora', name: 'Casa Aurora Resort [DEMO]', handle: '@casaaurora.demo', segment: 'Hotelaria', services: ['Estratégia editorial', 'Design', 'Reels', 'Agendamento'],
+  { key: 'aurora', contact: 'Marina Aurora', name: 'Casa Aurora Resort [DEMO]', handle: '@casaaurora.demo', segment: 'Hotelaria', services: ['Estratégia editorial', 'Design', 'Reels', 'Agendamento'],
     team: [['juliane', 'estrategia'], ['felipe', 'design'], ['leo', 'edicao'], ['vivian', 'atendimento'], ['vivian', 'agendamento']],
     brain: { posicionamento: 'Refúgio de natureza com gastronomia de origem. [DEMO]', publico: 'Casais 30–55 de capitais do Sudeste.', tom: 'Convidativo, calmo, sensorial.' } },
 ];
@@ -69,7 +69,7 @@ for (const def of CLIENTS) {
   const team = def.team.map(([u, f]) => ({ user_id: U[u].id, function: f }));
   const c = startClient({ name: def.name, handle: def.handle, segment: def.segment, services: def.services, monthly_posts: 12, requires_theme_approval: true, team, is_demo: 1 }, U.rebeca);
   C[def.key] = c;
-  const cu = insert('users', { id: uid('u_'), name: `${def.name.split(' [')[0].replace(/^Dra\. /, '').split(' ')[0]} (cliente)`, email: `${def.key}@cliente.demo`, password_hash: pw, role_key: 'cliente', title: 'Cliente', functions: '[]', capacity: 0, active: 1, avatar_color: '#000000', created_at: now() });
+  const cu = insert('users', { id: uid('u_'), name: def.contact, email: `${def.key}@cliente.demo`, password_hash: pw, role_key: 'cliente', title: 'Cliente', functions: '[]', capacity: 0, active: 1, avatar_color: '#000000', created_at: now() });
   insert('client_members', { client_id: c.id, user_id: cu.id, function: 'cliente' });
   clientUsers[def.key] = cu;
   for (const [s, body] of Object.entries(def.brain)) run('UPDATE client_brain SET body=?, updated_by=?, updated_at=? WHERE client_id=? AND section=?', body, U[def.team[0][0]].id, now(), c.id, s);
@@ -83,7 +83,7 @@ for (const def of CLIENTS) {
 at('2026-10-06');
 C.sena = startClient({ name: 'Instituto Sena [DEMO]', handle: '@institutosena.demo', segment: 'Consultoria em gestão', services: ['Estratégia editorial', 'Design', 'Legendas'], monthly_posts: 8, requires_theme_approval: true,
   team: [{ user_id: U.monique.id, function: 'estrategia' }, { user_id: U.vivian.id, function: 'atendimento' }], is_demo: 1 }, U.rebeca);
-clientUsers.sena = insert('users', { id: uid('u_'), name: 'Paulo (cliente)', email: 'sena@cliente.demo', password_hash: pw, role_key: 'cliente', title: 'Cliente', functions: '[]', capacity: 0, active: 1, avatar_color: '#000000', created_at: now() });
+clientUsers.sena = insert('users', { id: uid('u_'), name: 'Paulo Sena', email: 'sena@cliente.demo', password_hash: pw, role_key: 'cliente', title: 'Cliente', functions: '[]', capacity: 0, active: 1, avatar_color: '#000000', created_at: now() });
 insert('client_members', { client_id: C.sena.id, user_id: clientUsers.sena.id, function: 'cliente' });
 at('2026-10-09');
 for (const label of ['Briefing “Sua marca”: posicionamento', 'Briefing: público-alvo e persona', 'Contrato assinado (duração e plano)', 'Reunião de Diagnóstico de Marca']) {

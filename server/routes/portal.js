@@ -11,6 +11,7 @@ import { addComment, upload, checkOnboardingComplete } from './ops.js';
 import { createMeeting } from './comms.js';
 
 export const portal = Router();
+portal.use((req, _res, next) => (req.user ? next() : next(new HttpError(401, 'Faça login para continuar.'))));
 portal.use(requireClientUser);
 
 const myClient = (req) => {

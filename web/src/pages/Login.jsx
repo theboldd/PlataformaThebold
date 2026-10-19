@@ -1,42 +1,95 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api.js';
-import { Button, Field } from '../components/ui.jsx';
+import { Button } from '../components/ui.jsx';
+import '../styles/login.css';
 
 const DEMO = [
   ['rebeca@thebold.demo', 'Rebeca · CEO'], ['vitoria@thebold.demo', 'Vitória · Operações'], ['vivian@thebold.demo', 'Vivian · Gestão'], ['raisa@thebold.demo', 'Raísa · Qualidade'],
   ['juliane@thebold.demo', 'Juliane · Estratégia'], ['felipe@thebold.demo', 'Felipe · Design'], ['leo@thebold.demo', 'Léo · Edição'], ['matheus@thebold.demo', 'Matheus · Comercial'],
   ['helena@cliente.demo', 'Cliente · Dra. Helena'], ['vertice@cliente.demo', 'Cliente · Vértice'],
 ];
+const PHRASES = ['quem precisa agir.', 'o que está atrasado.', 'qual é a próxima etapa.', 'o que está faltando.', 'o que precisa acontecer.'];
+const STAGES = ['Estratégia', 'Produção', 'Revisão', 'Cliente', 'Agendamento', 'Publicação'];
+const MARQUEE = ['Estratégia', 'Conteúdo', 'Aprovação', 'Processo', 'Inteligência', 'Criatividade', 'Controle', 'Personalidade'];
+
+function useClock() {
+  const [t, setT] = useState(new Date());
+  useEffect(() => { const i = setInterval(() => setT(new Date()), 1000); return () => clearInterval(i); }, []);
+  const tz = { timeZone: 'America/Sao_Paulo' };
+  return {
+    time: t.toLocaleTimeString('pt-BR', { ...tz, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    date: t.toLocaleDateString('pt-BR', { ...tz, weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
+  };
+}
 
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [phrase, setPhrase] = useState(0);
+  const root = useRef(null);
+  const clock = useClock();
+
+  useEffect(() => { const i = setInterval(() => setPhrase((p) => (p + 1) % PHRASES.length), 2600); return () => clearInterval(i); }, []);
+  // Brilho bordô que acompanha o ponteiro
+  useEffect(() => {
+    const el = root.current;
+    if (!el || window.matchMedia('(pointer: coarse)').matches) return;
+    const h = (e) => { el.style.setProperty('--mx', `${e.clientX}px`); el.style.setProperty('--my', `${e.clientY}px`); };
+    window.addEventListener('mousemove', h);
+    return () => window.removeEventListener('mousemove', h);
+  }, []);
+
   const submit = async (e) => {
     e.preventDefault(); setBusy(true); setErr(null);
     try { await api.post('/auth/login', { email, password }); await onLogin(); } catch (x) { setErr(x.message); } finally { setBusy(false); }
   };
+
   return (
-    <div className="login">
-      <div className="login-art">
-        <div className="glow" aria-hidden />
-        <div className="row" style={{ position: 'relative' }}><span className="ed" style={{ fontSize: 28 }}>THE BOLD<span style={{ color: '#C9708A' }}>.</span></span><span className="caps" style={{ color: 'rgba(246,243,240,.5)' }}>Operating System</span></div>
-        <div className="big" style={{ position: 'relative' }}>O sistema<br />sabe o que<br /><i>precisa acontecer.</i></div>
-        <div className="caps" style={{ color: 'rgba(246,243,240,.45)', position: 'relative' }}>Estratégia · Produção · Aprovação · Operação</div>
+    <div className="lg" ref={root}>
+      <div className="lg-glow" aria-hidden />
+      <div className="lg-grain" aria-hidden />
+
+      <header className="lg-top">
+        <span className="lg-mark">B.</span>
+        <span className="lg-meta">Nº 01 — Operating System</span>
+        <span className="lg-meta lg-clock" aria-label="Horário de São Paulo">{clock.date} · <b>{clock.time}</b> SP</span>
+      </header>
+
+      <main className="lg-grid">
+        <section className="lg-hero">
+          <p className="lg-kicker"><span className="lg-line" />A plataforma da agência</p>
+          <h1 className="lg-title">
+            <span className="lg-row"><span>O sistema</span></span>
+            <span className="lg-row"><span>sabe</span></span>
+            <span className="lg-row lg-rot" aria-live="polite"><span key={phrase} className="lg-phrase">{PHRASES[phrase]}</span></span>
+          </h1>
+          <div className="lg-track" aria-hidden>
+            {STAGES.map((s, i) => <span key={s} className="lg-stage" style={{ '--i': i }}><i />{s}</span>)}
+            <span className="lg-runner" />
+          </div>
+        </section>
+
+        <form className="lg-form" onSubmit={submit}>
+          <div className="lg-form-head"><span className="lg-meta">Acesso</span><span className="lg-meta">01 / 01</span></div>
+          <h2 className="lg-enter">Entrar<span>.</span></h2>
+          <label className="lg-field"><span>E-mail</span><input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="voce@thebold.com.br" /></label>
+          <label className="lg-field"><span>Senha</span><input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••••" /></label>
+          {err && <div className="lg-err" role="alert">{err}</div>}
+          <Button variant="ink" size="lg" magnetic arrow disabled={busy} type="submit" className="lg-cta" cursor="ENTRAR">{busy ? 'Entrando…' : 'Viver o efeito Bold'}</Button>
+          <details className="lg-demo">
+            <summary>Ambiente de demonstração — perfis de teste</summary>
+            <p>Senha de todos: <code>thebold2026</code> · clientes fictícios [DEMO]</p>
+            <div className="lg-chips">{DEMO.map(([e, l]) => <button type="button" key={e} onClick={() => { setEmail(e); setPassword('thebold2026'); }}>{l}</button>)}</div>
+          </details>
+        </form>
+      </main>
+
+      <div className="lg-marquee" aria-hidden>
+        <div className="lg-marquee-in">{[...MARQUEE, ...MARQUEE, ...MARQUEE].map((w, i) => <span key={i}>{w}<em>✦</em></span>)}</div>
       </div>
-      <form className="login-form" onSubmit={submit}>
-        <div><div className="caps">Acesso</div><h1 className="ed-xl mt-2">Entrar</h1></div>
-        <Field label="E-mail"><input className="input" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required /></Field>
-        <Field label="Senha"><input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></Field>
-        {err && <div className="hint-err" role="alert">{err}</div>}
-        <Button variant="primary" size="lg" magnetic arrow disabled={busy} type="submit">{busy ? 'Entrando…' : 'Entrar'}</Button>
-        <details className="sm muted" style={{ borderTop: '1px solid var(--line)', paddingTop: 16 }}>
-          <summary style={{ cursor: 'pointer' }}>Ambiente de demonstração — perfis de teste</summary>
-          <p className="xs">Senha de todos: <code>thebold2026</code>. Dados de clientes são fictícios [DEMO].</p>
-          <div className="row wrap gap-2">{DEMO.map(([e, l]) => <button type="button" key={e} className="tag" style={{ cursor: 'pointer', background: 'none' }} onClick={() => { setEmail(e); setPassword('thebold2026'); }}>{l}</button>)}</div>
-        </details>
-      </form>
+      <div className="lg-word" aria-hidden>THE BOLD<span>.</span></div>
     </div>
   );
 }

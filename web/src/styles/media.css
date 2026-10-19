@@ -22,7 +22,7 @@
 .mv-video:hover .mv-controls, .mv-video:focus-within .mv-controls { opacity: 1; }
 @media (pointer: coarse) { .mv-controls { opacity: 1; } }
 .mv-controls button { background: none; border: 0; color: inherit; display: flex; cursor: pointer; padding: 4px; }
-.mv-controls input[type=range] { flex: 1; accent-color: #C9708A; height: 3px; }
+.mv-controls input[type=range] { flex: 1; accent-color: var(--bordo-vivo); height: 3px; }
 .mv-time { font-size: 11px; font-variant-numeric: tabular-nums; opacity: .85; }
 .mv-zoom { position: fixed; inset: 0; z-index: 150; background: rgba(0,0,0,.94); display: flex; align-items: center; justify-content: center; cursor: zoom-out; overflow: auto; animation: fade var(--t-med) both; }
 .mv-zoom img { max-width: none; max-height: none; width: auto; height: auto; min-width: min(100vw, 100%); object-fit: contain; }

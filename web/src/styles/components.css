@@ -130,6 +130,6 @@
 .cursor { position: fixed; top: 0; left: 0; z-index: 200; pointer-events: none; transform: translate3d(-100px, -100px, 0); transition: opacity var(--t-med); }
 .cursor .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bordo); transform: translate(-50%, -50%); transition: width var(--t-med) var(--ease-out), height var(--t-med) var(--ease-out), background var(--t-med); display: flex; align-items: center; justify-content: center; }
 .cursor .dot span { font-size: 10px; letter-spacing: .14em; color: var(--paper); opacity: 0; transition: opacity var(--t-fast); font-weight: 600; }
-.cursor.on .dot { width: 64px; height: 64px; background: var(--bordo); }
+.cursor.on .dot { width: 56px; height: 56px; background: var(--bordo); transform: translate(14px, 14px); box-shadow: 0 6px 18px -6px rgba(0,0,0,.4); }
 .cursor.on .dot span { opacity: 1; }
 @media (hover: none), (pointer: coarse) { .cursor { display: none; } }

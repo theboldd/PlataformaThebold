@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { STATUS, STATUS_GLYPH, RISK, FORMATS } from '../lib/status.js';
 import { initials, fmtDate, ago } from '../lib/format.js';
@@ -62,27 +63,25 @@ export const ErrorBox = ({ error }) => (error ? <div className="panel" style={{ 
 export function Modal({ open, onClose, title, children, wide, footer }) {
   useEffect(() => { if (!open) return; const h = (e) => e.key === 'Escape' && onClose?.(); window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }, [open, onClose]);
   if (!open) return null;
-  return (
+  return createPortal(
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()} role="dialog" aria-modal="true" aria-label={title}>
       <div className={`modal ${wide ? 'wide' : ''}`}>
         <div className="row between mb-5"><h2 className="ed-lg">{title}</h2><Button variant="ghost" icon={<I.x />} onClick={onClose} aria-label="Fechar" /></div>
         {children}
         {footer && <div className="row end mt-5">{footer}</div>}
       </div>
-    </div>
-  );
+    </div>, document.body);
 }
 export function Drawer({ open, onClose, title, kicker, children, wide }) {
   useEffect(() => { if (!open) return; const h = (e) => e.key === 'Escape' && onClose?.(); window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }, [open, onClose]);
   if (!open) return null;
-  return (
+  return createPortal(
     <div className="overlay drawer-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()} role="dialog" aria-modal="true" aria-label={title}>
       <aside className={`drawer ${wide ? 'wide' : ''}`}>
         <div className="row between mb-5"><div>{kicker && <div className="caps">{kicker}</div>}<h2 className="ed-lg">{title}</h2></div><Button variant="ghost" icon={<I.x />} onClick={onClose} aria-label="Fechar" /></div>
         {children}
       </aside>
-    </div>
-  );
+    </div>, document.body);
 }
 export function Tabs({ tabs, value, onChange }) {
   return <div className="tabs" role="tablist">{tabs.map((t) => <button key={t.key} role="tab" aria-selected={value === t.key} className={`tab ${value === t.key ? 'active' : ''}`} onClick={() => onChange(t.key)}>{t.label}{t.count ? <span className="faint"> {t.count}</span> : null}</button>)}</div>;

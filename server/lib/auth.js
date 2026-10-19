@@ -66,5 +66,5 @@ export function csrf(req, _res, next) {
 
 export const requireAuth = (req, _res, next) => (req.user ? next() : next(new HttpError(401, 'Faça login para continuar.')));
 export const requireInternal = (req, _res, next) => (!req.user ? next(new HttpError(401, 'Faça login.')) : isInternal(req.user) ? next() : next(new HttpError(403, 'Área exclusiva da equipe The Bold.')));
-export const requireClientUser = (req, _res, next) => (req.user?.role_key === 'cliente' ? next() : next(new HttpError(403, 'Área exclusiva do cliente.')));
+export const requireClientUser = (req, _res, next) => (!req.user ? next(new HttpError(401, 'Faça login para continuar.')) : req.user.role_key === 'cliente' ? next() : next(new HttpError(403, 'Área exclusiva do cliente.')));
 export const requirePerm = (module, action = 'view') => (req, _res, next) => (can(req.user, module, action) ? next() : next(new HttpError(403, 'Sem permissão para esta ação.')));

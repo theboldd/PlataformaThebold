@@ -18,6 +18,7 @@
   --bordo: #4A1725;
   --bordo-ink: #3A111D;
   --bordo-hover: #5E1F31;
+  --bordo-vivo: #8E2238;   /* bordô vinho para acentos sobre fundo preto */
   --bordo-soft: rgba(74, 23, 37, 0.07);
   --bordo-line: rgba(74, 23, 37, 0.28);
   --black: #000000;
@@ -64,7 +65,7 @@
     --bg: #0E0C0C; --surface: #151212; --surface-2: #1E1919;
     --ink: #F3EEE9; --ink-2: #D2CBC4; --muted: #9A928B; --faint: #6D6660;
     --line: rgba(246, 243, 240, 0.10); --line-strong: rgba(246, 243, 240, 0.22);
-    --bordo-soft: rgba(176, 72, 99, 0.14); --bordo-line: rgba(176, 72, 99, 0.4);
+    --bordo-soft: rgba(142, 34, 56, 0.14); --bordo-line: rgba(142, 34, 56, 0.4);
     --ok: #7FB08E; --warn: #D7A55B; --err: #DB7A6C; --info: #8FA9C4;
     --shadow-1: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.6);
   }
@@ -73,6 +74,6 @@
   --bg: #0E0C0C; --surface: #151212; --surface-2: #1E1919;
   --ink: #F3EEE9; --ink-2: #D2CBC4; --muted: #9A928B; --faint: #6D6660;
   --line: rgba(246, 243, 240, 0.10); --line-strong: rgba(246, 243, 240, 0.22);
-  --bordo-soft: rgba(176, 72, 99, 0.14); --bordo-line: rgba(176, 72, 99, 0.4);
+  --bordo-soft: rgba(142, 34, 56, 0.14); --bordo-line: rgba(142, 34, 56, 0.4);
   --ok: #7FB08E; --warn: #D7A55B; --err: #DB7A6C; --info: #8FA9C4;
 }
