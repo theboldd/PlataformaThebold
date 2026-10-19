@@ -299,7 +299,7 @@ export function addComment(c, user, { body, visibility, parent_id, anchor, file_
   const mentioned = parseMentions(body, allowed, c.client_id).filter((id) => id !== user.id);
   recordMentions('comment', cm.id, mentioned, user.id);
   const isClientAuthor = user.role_key === 'cliente';
-  notify(mentioned, { level: 'atencao', type: 'mencao', title: `${user.name} mencionou você`, body: `#${c.number} ${c.title}: ${body.slice(0, 140)}`, link: one('SELECT role_key FROM users WHERE id=?', mentioned[0] || '')?.role_key === 'cliente' ? '/portal/feed' : `/conteudos/${c.id}`, content: c.id, client: c.client_id });
+  notify(mentioned, { level: 'atencao', type: 'mencao', title: `${user.name} mencionou você`, body: `#${c.number} ${c.title}: ${body.slice(0, 140)}`, link: one('SELECT role_key FROM users WHERE id=?', mentioned[0] || '')?.role_key === 'cliente' ? '/portal/conteudos' : `/conteudos/${c.id}`, content: c.id, client: c.client_id });
   if (mentioned.length) automation('mencao', { entity: 'comment', id: cm.id, client: c.client_id, detail: `${mentioned.length}` });
   if (isClientAuthor) {
     const team = all("SELECT user_id FROM client_members WHERE client_id=? AND function IN ('estrategia','atendimento')", c.client_id).map((r) => r.user_id).filter((id) => !mentioned.includes(id));
@@ -307,7 +307,7 @@ export function addComment(c, user, { body, visibility, parent_id, anchor, file_
     automation('comentario.cliente', { entity: 'comment', id: cm.id, client: c.client_id });
   } else if (vis === 'client' && parent_id) {
     const parent = one('SELECT author_id FROM comments WHERE id=?', parent_id);
-    if (parent && parent.author_id !== user.id && !mentioned.includes(parent.author_id)) notify(parent.author_id, { level: 'info', type: 'resposta', title: `${user.name} respondeu seu comentário`, body: body.slice(0, 140), link: one('SELECT role_key FROM users WHERE id=?', parent.author_id).role_key === 'cliente' ? '/portal/feed' : `/conteudos/${c.id}`, content: c.id, client: c.client_id });
+    if (parent && parent.author_id !== user.id && !mentioned.includes(parent.author_id)) notify(parent.author_id, { level: 'info', type: 'resposta', title: `${user.name} respondeu seu comentário`, body: body.slice(0, 140), link: one('SELECT role_key FROM users WHERE id=?', parent.author_id).role_key === 'cliente' ? '/portal/conteudos' : `/conteudos/${c.id}`, content: c.id, client: c.client_id });
   }
   log({ actor: user.id, action: 'comentario.criado', entity: 'comment', id: cm.id, client: c.client_id, content: c.id, summary: `${vis === 'internal' ? 'Comentário interno' : 'Comentário'} de ${user.name}${anchor?.page ? ` (página ${anchor.page})` : ''}${anchor?.t != null ? ` (${anchor.t}s)` : ''}`, visibility: vis === 'internal' ? 'internal' : 'client' });
   return cm;

@@ -74,7 +74,7 @@ comms.post('/chat/channels/:id/messages', requireAuth, upload.single('file'), as
   const people = all(`SELECT id, name FROM users WHERE active=1 AND id IN (${members.map(() => '?').join(',') || "''"})`, ...members);
   const mentioned = parseMentions(body, people, ch.client_id).filter((id) => id !== req.user.id);
   recordMentions('message', m.id, mentioned, req.user.id);
-  const link = (uidv) => (one('SELECT role_key FROM users WHERE id=?', uidv)?.role_key === 'cliente' ? '/portal/conversa' : `/comunicacao/${ch.id}${parent_id ? `?thread=${parent_id}` : ''}`);
+  const link = (uidv) => (one('SELECT role_key FROM users WHERE id=?', uidv)?.role_key === 'cliente' ? '/portal/comunicacao' : `/comunicacao/${ch.id}${parent_id ? `?thread=${parent_id}` : ''}`);
   for (const id of mentioned) notify(id, { level: 'atencao', type: 'mencao', title: `${req.user.name} mencionou você`, body: body.slice(0, 140), link: link(id), client: ch.client_id });
   if (mentioned.length) automation('mencao', { entity: 'message', id: m.id, client: ch.client_id });
   if (parent_id) { const p = one('SELECT author_id FROM messages WHERE id=?', parent_id); if (p && p.author_id !== req.user.id && !mentioned.includes(p.author_id)) notify(p.author_id, { level: 'info', type: 'resposta', title: `${req.user.name} respondeu na thread`, body: body.slice(0, 140), link: link(p.author_id), groupKey: `thread:${parent_id}:${p.author_id}` }); }

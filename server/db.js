@@ -186,7 +186,8 @@ CREATE TABLE IF NOT EXISTS adjustments (
   description TEXT NOT NULL, carousel_page INTEGER, video_timestamp REAL, region TEXT, -- region: JSON {x,y,w,h} (V2)
   requested_by TEXT REFERENCES users(id), assigned_to TEXT REFERENCES users(id), task_id TEXT,
   status TEXT NOT NULL DEFAULT 'aberto', -- aberto | concluido | verificado
-  due_at TEXT, created_at TEXT NOT NULL, done_at TEXT, resolved_version_id TEXT
+  due_at TEXT, created_at TEXT NOT NULL, done_at TEXT, resolved_version_id TEXT,
+  reapproval INTEGER NOT NULL DEFAULT 0 -- 1 = pedido após aprovação: a nova versão volta para o cliente aprovar
 );
 CREATE TABLE IF NOT EXISTS approvals (
   id TEXT PRIMARY KEY, content_id TEXT NOT NULL REFERENCES contents(id) ON DELETE CASCADE,
@@ -335,6 +336,8 @@ CREATE TABLE IF NOT EXISTS reports (
 );
 `;
 db.exec(SCHEMA);
+// Migrações leves (colunas adicionadas depois da primeira versão)
+for (const sql of ['ALTER TABLE adjustments ADD COLUMN reapproval INTEGER NOT NULL DEFAULT 0']) { try { db.exec(sql); } catch { /* já existe */ } }
 
 // ── helpers ───────────────────────────────────────────
 export const one = (sql, ...p) => db.prepare(sql).get(...p);

@@ -9,7 +9,7 @@ import { usePortal } from './PortalApp.jsx';
 
 const KIND = { formulario: 'Formulário', material: 'Material', acesso: 'Acesso' };
 
-export default function Pendencias() {
+export default function Pendencias({ embedded }) {
   const { data, error, reload } = useApi('/portal/pendencias');
   const { reloadMe } = usePortal() || {};
   const refresh = () => { reload(); reloadMe?.(); };
@@ -18,12 +18,13 @@ export default function Pendencias() {
   const openOnb = data.onboarding.filter((o) => o.status === 'pendente');
   const nothing = !openOnb.length && !data.approvals.length && !data.materials.length;
   return (
-    <div className="p-page" style={{ maxWidth: 820 }}>
+    <div className={embedded ? '' : 'p-page'} style={{ maxWidth: 820 }}>
+      {embedded ? <div className="p-sec-h"><span className="caps">O que depende de você</span></div> : (
       <header className="p-page-head">
         <div className="caps">O que precisa de você</div>
         <h1 className="ed-xl">Pendências</h1>
         <p className="p-lede">Tudo aqui destrava o seu conteúdo. Leva poucos minutos.</p>
-      </header>
+      </header>)}
       {nothing && <Empty title="Nenhuma pendência com você.">Obrigado! Está tudo em dia.</Empty>}
 
       {data.approvals.length > 0 && (
@@ -33,7 +34,7 @@ export default function Pendencias() {
             <div key={a.id} className="p-pend">
               <span className="k" aria-hidden />
               <div className="grow"><div className="ttl">#{a.number} {a.title}</div><div className="sm muted">{a.stage === 'aprovacao_tema' ? 'Tema aguardando sua aprovação' : 'Conteúdo pronto para você aprovar'} · enviado {ago(a.stage_entered_at)}</div></div>
-              <Link to="/portal" className="btn btn-sm" data-cursor="VER">Ver no feed</Link>
+              <Link to="/portal/conteudos" className="btn btn-sm" data-cursor="VER">Ver conteúdo</Link>
             </div>
           ))}
         </section>

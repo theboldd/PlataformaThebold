@@ -9,11 +9,11 @@ import { I } from '../components/Icons.jsx';
 import { Avatar, Button, Loading } from '../components/ui.jsx';
 import { Notifications } from '../components/Shell.jsx';
 import Feed from './Feed.jsx';
+import Inicio from './Inicio.jsx';
 import '../styles/portal.css';
 
-const Inicio = lazy(() => import('./Inicio.jsx'));
 const Calendario = lazy(() => import('./Calendario.jsx'));
-const Pendencias = lazy(() => import('./Pendencias.jsx'));
+const Projeto = lazy(() => import('./Projeto.jsx'));
 const Materiais = lazy(() => import('./Materiais.jsx'));
 const Reunioes = lazy(() => import('./Reunioes.jsx'));
 const Conversa = lazy(() => import('./Conversa.jsx'));
@@ -23,13 +23,13 @@ const PortalCtx = createContext(null);
 export const usePortal = () => useContext(PortalCtx);
 
 const NAV = [
-  { to: '/portal', label: 'Feed', icon: I.content, end: true },
-  { to: '/portal/inicio', label: 'Início', icon: I.home },
+  { to: '/portal', label: 'Início', icon: I.home, end: true },
+  { to: '/portal/conteudos', label: 'Conteúdos', icon: I.content, badge: true },
   { to: '/portal/calendario', label: 'Calendário', icon: I.calendar },
-  { to: '/portal/pendencias', label: 'Pendências', icon: I.alert },
-  { to: '/portal/materiais', label: 'Materiais', icon: I.upload },
   { to: '/portal/reunioes', label: 'Reuniões', icon: I.meeting },
-  { to: '/portal/conversa', label: 'Conversa', icon: I.chat },
+  { to: '/portal/materiais', label: 'Materiais', icon: I.upload },
+  { to: '/portal/comunicacao', label: 'Comunicação', icon: I.chat },
+  { to: '/portal/projeto', label: 'Meu projeto', icon: I.flow },
 ];
 
 export default function PortalApp() {
@@ -62,8 +62,8 @@ export default function PortalApp() {
           <span className="p-client clip">{cleanName(client?.name || '')}</span>
           <nav className="p-nav" aria-label="Navegação da área do cliente">
             {NAV.map((n) => (
-              <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive || (n.to === '/portal' && loc.pathname === '/portal/feed') ? 'active' : '')}>
-                {n.label}{n.to === '/portal' && pending > 0 && <span className="p-badge">{pending}</span>}
+              <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? 'active' : '')}>
+                {n.label}{n.badge && pending > 0 && <span className="p-badge">{pending}</span>}
               </NavLink>
             ))}
           </nav>
@@ -79,14 +79,17 @@ export default function PortalApp() {
         <main className="p-main" id="main">
           <Suspense fallback={<div className="p-page"><Loading /></div>}>
             <Routes>
-              <Route index element={<Feed />} />
-              <Route path="feed" element={<Feed />} />
-              <Route path="inicio" element={<Inicio />} />
+              <Route index element={<Inicio />} />
+              <Route path="conteudos" element={<Feed />} />
+              <Route path="feed" element={<Navigate to="/portal/conteudos" replace />} />
+              <Route path="inicio" element={<Navigate to="/portal" replace />} />
               <Route path="calendario" element={<Calendario />} />
-              <Route path="pendencias" element={<Pendencias />} />
+              <Route path="projeto" element={<Projeto />} />
+              <Route path="pendencias" element={<Navigate to="/portal/projeto" replace />} />
               <Route path="materiais" element={<Materiais />} />
               <Route path="reunioes" element={<Reunioes />} />
-              <Route path="conversa" element={<Conversa />} />
+              <Route path="comunicacao" element={<Conversa />} />
+              <Route path="conversa" element={<Navigate to="/portal/comunicacao" replace />} />
               <Route path="perfil" element={<Perfil />} />
               <Route path="*" element={<Navigate to="/portal" replace />} />
             </Routes>
@@ -95,11 +98,11 @@ export default function PortalApp() {
 
         {/* Barra inferior (celular) */}
         <nav className="p-tabbar" aria-label="Navegação">
-          <NavLink to="/portal" end className={({ isActive }) => (isActive || loc.pathname === '/portal/feed' ? 'active' : '')}><I.content size={20} /><span>Feed</span>{pending > 0 && <span className="p-badge">{pending}</span>}</NavLink>
-          <NavLink to="/portal/inicio" className={({ isActive }) => (isActive ? 'active' : '')}><I.home size={20} /><span>Início</span></NavLink>
+          <NavLink to="/portal" end className={({ isActive }) => (isActive ? 'active' : '')}><I.home size={20} /><span>Início</span></NavLink>
+          <NavLink to="/portal/conteudos" className={({ isActive }) => (isActive ? 'active' : '')}><I.content size={20} /><span>Conteúdos</span>{pending > 0 && <span className="p-badge">{pending}</span>}</NavLink>
           <NavLink to="/portal/calendario" className={({ isActive }) => (isActive ? 'active' : '')}><I.calendar size={20} /><span>Agenda</span></NavLink>
-          <NavLink to="/portal/pendencias" className={({ isActive }) => (isActive ? 'active' : '')}><I.alert size={20} /><span>Pendências</span>{pendCount > 0 && <span className="p-badge dot" aria-hidden />}</NavLink>
-          <button className={['/portal/materiais', '/portal/reunioes', '/portal/conversa', '/portal/perfil'].includes(loc.pathname) ? 'active' : ''} onClick={() => setMoreOpen(true)} aria-haspopup="dialog"><I.menu size={20} /><span>Mais</span></button>
+          <NavLink to="/portal/comunicacao" className={({ isActive }) => (isActive ? 'active' : '')}><I.chat size={20} /><span>Mensagens</span></NavLink>
+          <button className={['/portal/materiais', '/portal/reunioes', '/portal/projeto', '/portal/perfil'].includes(loc.pathname) ? 'active' : ''} onClick={() => setMoreOpen(true)} aria-haspopup="dialog"><I.menu size={20} /><span>Mais</span>{pendCount > 0 && <span className="p-badge dot" aria-hidden />}</button>
         </nav>
 
         {moreOpen && (
@@ -108,9 +111,9 @@ export default function PortalApp() {
               <div className="p-sheet-grip" aria-hidden />
               <div className="caps mb-4">{cleanName(client?.name || '')}</div>
               <div className="p-more">
-                <Link to="/portal/materiais"><I.upload size={20} /><span>Materiais</span><small>Envie fotos, vídeos e arquivos</small></Link>
-                <Link to="/portal/reunioes"><I.meeting size={20} /><span>Reuniões</span><small>Agenda e reserva de horários</small></Link>
-                <Link to="/portal/conversa"><I.chat size={20} /><span>Conversa</span><small>Fale com a equipe The Bold</small></Link>
+                <Link to="/portal/projeto"><I.flow size={20} /><span>Meu projeto</span><small>Andamento, o que depende de você e histórico</small></Link>
+                <Link to="/portal/reunioes"><I.meeting size={20} /><span>Reuniões</span><small>Próxima reunião e agendamento</small></Link>
+                <Link to="/portal/materiais"><I.upload size={20} /><span>Materiais</span><small>Arquivos do seu projeto</small></Link>
                 <Link to="/portal/perfil"><I.users size={20} /><span>Meu perfil</span><small>Senha e acesso</small></Link>
               </div>
               <Button className="mt-5" style={{ width: '100%' }} onClick={auth.logout} icon={<I.logout size={16} />}>Sair</Button>

@@ -5,7 +5,8 @@ import { one, all, insert, update, run, uid, now, parseJSON, tx } from '../db.js
 import { requireClientUser } from '../lib/auth.js';
 import { HttpError } from '../lib/permissions.js';
 import { log, notify } from '../lib/core.js';
-import { STAGES, publicStatus, clientDecision, versionMedia, unblockContent, editableVersion } from '../engine/process.js';
+import { STAGES, publicStatus, clientDecision, versionMedia, unblockContent, editableVersion, undoClientApproval, clientAdjustmentRequest } from '../engine/process.js';
+import { detectAdjustment } from '../lib/intent.js';
 import { fileDTO, ingest } from '../services/media.js';
 import { addComment, upload, checkOnboardingComplete } from './ops.js';
 import { createMeeting } from './comms.js';
@@ -20,7 +21,8 @@ const myClient = (req) => {
   if (!id || !links.includes(id)) throw new HttpError(403, 'Sem acesso a este projeto.');
   return one('SELECT * FROM clients WHERE id=?', id);
 };
-const CLIENT_STAGES = Object.entries(STAGES).filter(([, s]) => s.client).map(([k]) => k);
+// revisao_ajuste também aparece (como "em ajuste"); temas aprovados em produção aparecem como ♥ até virarem conteúdo
+const CLIENT_STAGES = [...Object.entries(STAGES).filter(([, s]) => s.client).map(([k]) => k), 'revisao_ajuste'];
 
 // Versão visível ao cliente: a mais recente que foi enviada a ele (ou aprovada). Nunca rascunhos internos.
 function clientVersion(c) {
@@ -30,17 +32,54 @@ function clientVersion(c) {
 function feedItem(c, client) {
   const v = clientVersion(c);
   const approval = one("SELECT ap.created_at, u.name, v.number FROM approvals ap JOIN users u ON u.id=ap.user_id LEFT JOIN content_versions v ON v.id=ap.version_id WHERE ap.content_id=? AND ap.decision='aprovado' AND ap.kind IN ('cliente','tema') ORDER BY ap.created_at DESC LIMIT 1", c.id);
-  const comments = all("SELECT cm.id, cm.body, cm.parent_id, cm.anchor, cm.created_at, u.name author_name, u.role_key='cliente' is_client, v.number version_number FROM comments cm JOIN users u ON u.id=cm.author_id LEFT JOIN content_versions v ON v.id=cm.version_id WHERE cm.content_id=? AND cm.visibility='client' ORDER BY cm.created_at", c.id)
-    .map((x) => ({ ...x, anchor: parseJSON(x.anchor), is_client: !!x.is_client }));
-  const openAdj = all("SELECT description, carousel_page, created_at FROM adjustments WHERE content_id=? AND origin='cliente' AND status='aberto'", c.id);
+  const lastClient = one("SELECT * FROM approvals WHERE content_id=? AND kind IN ('cliente','tema') ORDER BY created_at DESC LIMIT 1", c.id);
+  const comments = all("SELECT cm.id, cm.body, cm.parent_id, cm.anchor, cm.adjustment_id, cm.created_at, u.name author_name, u.role_key='cliente' is_client, v.number version_number FROM comments cm JOIN users u ON u.id=cm.author_id LEFT JOIN content_versions v ON v.id=cm.version_id WHERE cm.content_id=? AND cm.visibility='client' ORDER BY cm.created_at", c.id)
+    .map((x) => ({ ...x, anchor: parseJSON(x.anchor), is_client: !!x.is_client, is_adjustment: !!x.adjustment_id }));
+  const openAdj = all("SELECT description, carousel_page, video_timestamp, created_at FROM adjustments WHERE content_id=? AND origin='cliente' AND status='aberto'", c.id);
+  // Histórico de versões que o cliente já viu (nunca rascunhos internos)
+  const versions = c.stage === 'aprovacao_tema' ? [] : all("SELECT * FROM content_versions WHERE content_id=? AND (sent_to_client_at IS NOT NULL OR status='aprovada') ORDER BY number DESC", c.id)
+    .map((x) => ({ number: x.number, caption: x.caption, approved: x.status === 'aprovada', current: x.id === v?.id, sent_at: x.sent_to_client_at, approved_at: x.approved_at, media: versionMedia(x.id).map(fileDTO) }));
+  const liked = ['agendamento', 'agendado', 'publicado'].includes(c.stage) || (c.stage === 'producao' && lastClient?.kind === 'tema' && lastClient.decision === 'aprovado');
+  const hrs = lastClient ? (Date.now() - new Date(lastClient.created_at).getTime()) / 3600e3 : 99;
+  const canUnlike = lastClient?.decision === 'aprovado' && hrs <= 24 && ((c.stage === 'agendamento' && !c.scheduled_at && lastClient.kind === 'cliente') || (c.stage === 'producao' && lastClient.kind === 'tema' && !c.current_version_id));
+  const adjustState = openAdj.length || c.stage === 'revisao_ajuste' ? 'solicitado' : c.stage === 'aprovacao_cliente' && c.client_adjust_rounds > 0 ? 'concluido' : null;
   return {
     id: c.id, number: c.number, title: c.title, format: c.format, planned_at: c.planned_at, scheduled_at: c.scheduled_at, status: publicStatus(c), stage: c.stage,
-    is_theme: c.stage === 'aprovacao_tema', theme: c.theme, objective: c.objective, reference: c.reference,
+    is_theme: c.stage === 'aprovacao_tema' || c.stage === 'producao', theme: c.theme, objective: c.objective, reference: c.reference,
     brand: { name: client.name, handle: client.handle },
     version: v ? { number: v.number, caption: v.caption, approved: v.status === 'aprovada', media: versionMedia(v.id).map(fileDTO) } : null,
-    can_decide: ['aprovacao_tema', 'aprovacao_cliente'].includes(c.stage) && !c.blocked,
+    versions, liked, can_like: ['aprovacao_tema', 'aprovacao_cliente'].includes(c.stage) && !c.blocked, can_unlike: !!canUnlike,
+    can_decide: ['aprovacao_tema', 'aprovacao_cliente'].includes(c.stage) && !c.blocked, adjust_state: adjustState,
+    can_request_adjust: !['publicado'].includes(c.stage),
     approval, comments, open_adjustments: openAdj, schedule_mode: c.schedule_mode,
   };
+}
+
+// Andamento simplificado do projeto (5 etapas) a partir do ciclo atual
+const STEP_OF = { cronograma: 0, analise_cronograma: 0, ajuste_cronograma: 0, aprovacao_tema: 0, producao: 1, analise_producao: 1, ajuste_interno: 1, aprovacao_cliente: 2, ajuste_cliente: 2, revisao_ajuste: 2, agendamento: 3, agendado: 4, publicado: 4 };
+const STEPS = ['Estratégia', 'Produção', 'Aprovação', 'Agendamento', 'Publicação'];
+function projectTrack(clientId) {
+  // Ciclo "vivo": o primeiro com trabalho ainda em andamento (não só agendado/publicado)
+  const cycle = one("SELECT * FROM cycles WHERE client_id=? AND EXISTS (SELECT 1 FROM contents WHERE cycle_id=cycles.id AND stage NOT IN ('agendado','publicado','cancelado')) ORDER BY month LIMIT 1", clientId)
+    || one("SELECT * FROM cycles WHERE client_id=? AND EXISTS (SELECT 1 FROM contents WHERE cycle_id=cycles.id AND stage NOT IN ('publicado','cancelado')) ORDER BY month LIMIT 1", clientId)
+    || one("SELECT * FROM cycles WHERE client_id=? ORDER BY month DESC LIMIT 1", clientId);
+  if (!cycle) return null;
+  const cs = all("SELECT stage FROM contents WHERE cycle_id=? AND stage<>'cancelado'", cycle.id);
+  if (!cs.length) return { month: cycle.month, steps: STEPS.map((label) => ({ label, state: 'next' })) };
+  const idx = cs.map((x) => STEP_OF[x.stage]);
+  const min = Math.min(...idx);
+  const allPublished = cs.every((x) => x.stage === 'publicado');
+  const steps = STEPS.map((label, i) => {
+    const here = cs.filter((x) => STEP_OF[x.stage] === i);
+    const waitingYou = here.some((x) => ['aprovacao_tema', 'aprovacao_cliente'].includes(x.stage));
+    const max = Math.max(...idx);
+    let state = i < min ? 'done' : here.length ? (waitingYou ? 'you' : 'current') : i < max ? 'partial' : 'next';
+    if (i === 4 && allPublished) state = 'done';
+    const n = here.length;
+    const note = state === 'partial' ? 'parte concluída' : state === 'done' ? 'concluída' : state === 'you' ? 'aguardando você' : state === 'current' ? (i === 4 ? `${n} agendado(s)` : 'em andamento') : 'próxima etapa';
+    return { label, state, note, count: n };
+  });
+  return { month: cycle.month, steps };
 }
 
 portal.get('/me', (req, res) => {
@@ -52,18 +91,21 @@ portal.get('/me', (req, res) => {
   const timeline = all("SELECT created_at, summary FROM activity_logs WHERE client_id=? AND visibility='client' ORDER BY created_at DESC LIMIT 25", c.id);
   const cycle = one("SELECT * FROM cycles WHERE client_id=? AND status<>'encerrado' ORDER BY month LIMIT 1", c.id);
   const steps = [];
-  if (counts.aguardando) steps.push({ text: `Aprovar ${counts.aguardando} conteúdo(s) no feed`, link: '/portal/feed' });
+  if (counts.aguardando) steps.push({ text: counts.aguardando === 1 ? '1 conteúdo aguardando sua aprovação.' : `${counts.aguardando} conteúdos aguardando sua aprovação.`, link: '/portal/conteudos', cta: 'Ver conteúdos' });
   const mat = one("SELECT COUNT(*) n FROM contents WHERE client_id=? AND blocked=1 AND waiting_on='cliente'", c.id).n;
-  if (mat) steps.push({ text: `Enviar ${mat} material(is) pendente(s)`, link: '/portal/pendencias' });
-  if (ob && ob.status !== 'concluido') steps.push({ text: 'Completar o onboarding', link: '/portal/pendencias' });
-  if (next) steps.push({ text: `Reunião em ${new Date(next.starts_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' })}`, link: '/portal/reunioes' });
+  if (mat) steps.push({ text: `Enviar ${mat} material(is) pendente(s)`, link: '/portal/projeto', cta: 'Enviar materiais' });
+  if (ob && ob.status !== 'concluido') steps.push({ text: 'Faltam algumas informações para começarmos.', link: '/portal/projeto', cta: 'Completar' });
+  if (next) steps.push({ text: `Reunião em ${new Date(next.starts_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' })}`, link: '/portal/reunioes', cta: 'Ver reunião' });
   res.json({ client: { id: c.id, name: c.name, handle: c.handle, status: c.status, services: parseJSON(c.services, []) }, team: team.map(({ id, name, function: f }) => ({ id, name, function: f })), counts, next_meeting: next, timeline, steps,
     cycle: cycle ? { month: cycle.month, status: cycle.status, milestones: Object.fromEntries(Object.entries(parseJSON(cycle.milestones, {})).filter(([k]) => ['cliente_aprova_temas', 'cliente_aprova_final', 'ajustes_cliente'].includes(k))) } : null,
-    onboarding: ob ? { status: ob.status } : null });
+    onboarding: ob ? { status: ob.status } : null, track: projectTrack(c.id),
+    upcoming: all("SELECT id, title, format, COALESCE(scheduled_at, planned_at) date, stage FROM contents WHERE client_id=? AND stage IN ('aprovacao_cliente','agendamento','agendado') AND COALESCE(scheduled_at, planned_at) >= ? ORDER BY date LIMIT 4", c.id, now()).map((x) => ({ ...x, status: publicStatus(x) })),
+    in_preparation: one("SELECT COUNT(*) n FROM contents WHERE client_id=? AND stage IN ('cronograma','analise_cronograma','ajuste_cronograma','producao','analise_producao','ajuste_interno')", c.id).n,
+    deadlines: cycle ? Object.entries(parseJSON(cycle.milestones, {})).filter(([k, m]) => ['cliente_aprova_temas', 'cliente_aprova_final'].includes(k) && m.end >= now().slice(0, 10)).map(([k, m]) => ({ label: k === 'cliente_aprova_temas' ? 'Aprovar os temas do mês' : 'Aprovar os conteúdos do mês', date: m.end })) : [] });
 });
 portal.get('/feed', (req, res) => {
   const c = myClient(req);
-  const where = [`client_id=?`, `stage IN (${CLIENT_STAGES.map(() => '?').join(',')})`]; const p = [c.id, ...CLIENT_STAGES];
+  const where = [`client_id=?`, `(stage IN (${CLIENT_STAGES.map(() => '?').join(',')}) OR (stage='producao' AND current_version_id IS NULL))`]; const p = [c.id, ...CLIENT_STAGES];
   const f = req.query.filter;
   const map = { aguardando: ['aprovacao_tema', 'aprovacao_cliente'], aprovados: ['agendamento', 'agendado', 'publicado'], ajuste: ['ajuste_cliente'], agendados: ['agendado'], publicados: ['publicado'] };
   if (map[f]) { where.push(`stage IN (${map[f].map(() => '?').join(',')})`); p.push(...map[f]); }
@@ -75,7 +117,7 @@ portal.get('/feed', (req, res) => {
 });
 const getMyContent = (req) => {
   const c = one('SELECT * FROM contents WHERE id=?', req.params.id);
-  if (!c || !CLIENT_STAGES.includes(c.stage) || !one("SELECT 1 FROM client_members WHERE user_id=? AND client_id=? AND function='cliente'", req.user.id, c.client_id)) throw new HttpError(404, 'Conteúdo não encontrado.');
+  if (!c || !(CLIENT_STAGES.includes(c.stage) || (c.stage === 'producao' && !c.current_version_id)) || !one("SELECT 1 FROM client_members WHERE user_id=? AND client_id=? AND function='cliente'", req.user.id, c.client_id)) throw new HttpError(404, 'Conteúdo não encontrado.');
   return c;
 };
 portal.post('/contents/:id/approve', (req, res) => {
@@ -114,11 +156,43 @@ portal.post('/contents/:id/caption', (req, res) => {
   notify(team, { level: 'atencao', type: 'legenda_cliente', title: `${one('SELECT name FROM clients WHERE id=?', c.client_id).name.replace(' [DEMO]', '')} editou uma legenda`, body: `#${c.number} ${c.title} — nova versão V${v.number}`, link: `/conteudos/${c.id}`, content: c.id, client: c.client_id });
   res.json(feedItem(one('SELECT * FROM contents WHERE id=?', c.id), one('SELECT * FROM clients WHERE id=?', c.client_id)));
 });
-portal.post('/contents/:id/comments', (req, res) => {
+// LIKE = aprovação formal (registra usuário, data/hora, IP, versão; congela a versão; avança o processo)
+portal.post('/contents/:id/like', (req, res) => {
   const c = getMyContent(req);
-  addComment(c, req.user, { body: req.body?.body, parent_id: req.body?.parent_id, anchor: req.body?.anchor });
+  clientDecision(c.id, req.user, { decision: 'aprovar' }, req);
   res.json(feedItem(one('SELECT * FROM contents WHERE id=?', c.id), one('SELECT * FROM clients WHERE id=?', c.client_id)));
 });
+portal.delete('/contents/:id/like', (req, res) => {
+  const c = getMyContent(req);
+  undoClientApproval(c.id, req.user);
+  res.json(feedItem(one('SELECT * FROM contents WHERE id=?', c.id), one('SELECT * FROM clients WHERE id=?', c.client_id)));
+});
+// Comentário: conversa OU pedido de ajuste (detectado automaticamente; o cliente pode confirmar "é só um comentário")
+portal.post('/contents/:id/comments', upload.single('file'), async (req, res) => {
+  const c = getMyContent(req);
+  const body = String(req.body?.body || '').trim();
+  if (!body) throw new HttpError(422, 'Escreva o comentário.');
+  let file_id = null;
+  if (req.file) file_id = (await ingest(req.file.path, { originalName: Buffer.from(req.file.originalname, 'latin1').toString('utf8'), mime: req.file.mimetype, clientId: c.client_id, userId: req.user.id, visibility: 'client' })).id;
+  const detected = detectAdjustment(body);
+  const page = req.body.page ? Number(req.body.page) : detected.page;
+  const t = req.body.t != null && req.body.t !== '' ? Number(req.body.t) : detected.t;
+  const intent = req.body.intent === 'comentario' ? 'comentario' : req.body.intent === 'ajuste' ? 'ajuste' : detected.isAdjustment ? 'ajuste' : 'comentario';
+  let action = null;
+  if (intent === 'ajuste' && !req.body.parent_id && c.stage !== 'publicado') {
+    const r = clientAdjustmentRequest(c.id, req.user, { note: body, carousel_page: page, video_timestamp: t }, req);
+    const adj = r.adjustment || one("SELECT * FROM adjustments WHERE content_id=? AND origin='cliente' ORDER BY created_at DESC LIMIT 1", c.id);
+    action = { type: 'ajuste', mode: r.mode, adjustment_id: adj?.id };
+  }
+  const cm = addComment(one('SELECT * FROM contents WHERE id=?', c.id), req.user, { body, parent_id: req.body.parent_id || null, anchor: page || t != null ? { page, t } : null, file_id });
+  if (action?.adjustment_id) update('comments', { id: cm.id }, { adjustment_id: action.adjustment_id });
+  if (intent === 'ajuste' && c.stage === 'publicado') {
+    const team = all("SELECT DISTINCT user_id FROM client_members WHERE client_id=? AND function IN ('estrategia','atendimento')", c.client_id).map((r) => r.user_id);
+    notify(team, { level: 'atencao', type: 'comentario_publicado', title: 'Pedido do cliente em conteúdo já publicado', body: `#${c.number} ${c.title}: ${body.slice(0, 120)}`, link: `/conteudos/${c.id}`, content: c.id, client: c.client_id });
+  }
+  res.json({ item: feedItem(one('SELECT * FROM contents WHERE id=?', c.id), one('SELECT * FROM clients WHERE id=?', c.client_id)), action });
+});
+portal.post('/intent', (req, res) => res.json(detectAdjustment(req.body?.body)));
 portal.get('/calendar', (req, res) => {
   const c = myClient(req);
   const items = all(`SELECT * FROM contents WHERE client_id=? AND stage IN (${CLIENT_STAGES.map(() => '?').join(',')}) AND planned_at IS NOT NULL ORDER BY planned_at`, c.id, ...CLIENT_STAGES)
@@ -152,7 +226,16 @@ portal.post('/onboarding/:itemId', (req, res) => {
 // Materiais: upload direto (original preservado), visível ao cliente e à equipe
 portal.get('/materials', (req, res) => {
   const c = myClient(req);
-  res.json(all("SELECT * FROM files WHERE client_id=? AND visibility='client' ORDER BY created_at DESC", c.id).map(fileDTO));
+  const files = all("SELECT f.*, u.role_key uploader_role FROM files f LEFT JOIN users u ON u.id=f.uploaded_by WHERE f.client_id=? AND f.visibility='client' ORDER BY f.created_at DESC", c.id);
+  const ob = one('SELECT id FROM onboarding WHERE client_id=?', c.id);
+  res.json({
+    requested: [
+      ...all("SELECT id, number, title, block_reason reason, planned_at FROM contents WHERE client_id=? AND blocked=1 AND waiting_on='cliente'", c.id).map((x) => ({ kind: 'conteudo', id: x.id, title: x.reason, context: `Para o conteúdo “${x.title}”`, due: x.planned_at })),
+      ...(ob ? all("SELECT id, label, due_at FROM onboarding_items WHERE onboarding_id=? AND who='cliente' AND kind IN ('material','acesso') AND status='pendente'", ob.id).map((x) => ({ kind: 'onboarding', id: x.id, title: x.label, context: 'Início do projeto', due: x.due_at })) : []),
+    ],
+    sent: files.filter((f) => f.uploader_role === 'cliente').map(fileDTO),
+    from_team: files.filter((f) => f.uploader_role !== 'cliente').map(fileDTO),
+  });
 });
 portal.post('/materials', upload.array('files', 20), async (req, res) => {
   const c = myClient(req);
@@ -176,7 +259,7 @@ portal.post('/materials', upload.array('files', 20), async (req, res) => {
 portal.get('/meetings', (req, res) => {
   const c = myClient(req);
   res.json({
-    meetings: all("SELECT id, title, starts_at, ends_at, location, status, summary FROM meetings WHERE client_id=? ORDER BY starts_at DESC", c.id),
+    meetings: all("SELECT id, title, starts_at, ends_at, location, status, CASE WHEN status='realizada' THEN summary END summary FROM meetings WHERE client_id=? ORDER BY starts_at DESC", c.id),
     slots: all('SELECT id, starts_at, ends_at, window_label FROM meeting_slots WHERE meeting_id IS NULL AND starts_at > ? ORDER BY starts_at', new Date(Date.now() + 2 * 3600e3).toISOString()),
     has_upcoming: !!one("SELECT 1 FROM meetings WHERE client_id=? AND status='agendada' AND starts_at > ? AND kind='mensal'", c.id, now()),
   });

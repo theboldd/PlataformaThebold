@@ -216,8 +216,9 @@ function enterStage(content, stage, actor, ctx = {}) {
         if (v) update('content_versions', { id: v.id }, { sent_to_client_at: ts });
       }
       mk(stage === 'aprovacao_tema' ? `Aprovar tema — ${content.title}` : `Aprovar conteúdo — ${content.title}`, 'cliente', 'aprovacao');
-      notify(clientUsers(content.client_id), { level: 'atencao', type: 'aprovacao', title: stage === 'aprovacao_tema' ? 'Novos temas para aprovar' : 'Novos conteúdos para aprovar',
-        body: 'A The Bold enviou conteúdos para você revisar.', link: '/portal/feed', groupKey: `aprovacao:${content.client_id}:${stage}`, client: content.client_id });
+      const updated = stage === 'aprovacao_cliente' && content.client_adjust_rounds > 0;
+      notify(clientUsers(content.client_id), { level: 'atencao', type: 'aprovacao', title: updated ? 'O conteúdo atualizado está disponível para revisão.' : stage === 'aprovacao_tema' ? 'Novos temas disponíveis para aprovação.' : 'Novo conteúdo disponível para aprovação.',
+        body: updated ? `${content.title} — nova versão com o ajuste que você pediu.` : 'Abra seus conteúdos e curta o que estiver aprovado.', link: '/portal/conteudos', groupKey: `aprovacao:${content.client_id}:${stage}:${updated ? 'u' : 'n'}`, client: content.client_id });
       automation('cliente.notificado_aprovacao', { entity: 'content', id: content.id, client: content.client_id });
       break;
     }
@@ -327,7 +328,7 @@ function advance(c, actor, meta) {
       automation('ajuste.concluido', { entity: 'content', id: c.id, client: c.client_id });
       const sizes = all("SELECT size FROM adjustments WHERE content_id=? AND origin='cliente' AND status='concluido' AND version_id=(SELECT version_id FROM adjustments WHERE content_id=? AND origin='cliente' ORDER BY created_at DESC LIMIT 1)", c.id, c.id).map((r) => r.size);
       const simple = sizes.length && sizes.every((s) => s === 'simples');
-      if (!simple) return enterStage(c, 'revisao_ajuste', actor, { reason: 'ajuste concluído — estrategista confere' });
+      if (!simple || roundNeedsReapproval(c.id)) return enterStage(c, 'revisao_ajuste', actor, { reason: 'ajuste concluído — estrategista confere' });
       return setting('reenviar_cliente_apos_ajuste') ? enterStage(c, 'aprovacao_cliente', actor, { reason: 'ajuste simples concluído' }) : releaseAfterClientAdjust(c, actor, 'ajuste simples concluído');
     }
     default: return null;
@@ -336,6 +337,11 @@ function advance(c, actor, meta) {
 
 // Regra da The Bold: o ajuste pedido pelo cliente, depois de conferido, segue direto para agendamento.
 // A nova versão é congelada como versão liberada (o cliente já aprovou o conteúdo e pediu só aquele ajuste).
+// Pedido feito DEPOIS de o cliente ter aprovado → a nova versão precisa de nova aprovação do cliente
+function roundNeedsReapproval(contentId) {
+  const last = one("SELECT version_id FROM adjustments WHERE content_id=? AND origin='cliente' ORDER BY created_at DESC LIMIT 1", contentId);
+  return !!(last && one("SELECT 1 FROM adjustments WHERE content_id=? AND origin='cliente' AND reapproval=1 AND version_id IS ?", contentId, last.version_id));
+}
 function releaseAfterClientAdjust(c, actor, reason) {
   const v = currentVersion(c.id);
   if (v) {
@@ -362,7 +368,7 @@ export function reviewDecision(contentId, actor, { decision, note, adjustments =
     if (decision === 'aprovar') {
       if (c.stage === 'analise_cronograma') { const cl = one('SELECT requires_theme_approval FROM clients WHERE id=?', c.client_id); return enterStage(c, cl.requires_theme_approval ? 'aprovacao_tema' : 'producao', actor, { reason: 'cronograma aprovado internamente' }); }
       automation('revisao.aprovada', { entity: 'content', id: c.id, client: c.client_id });
-      if (c.stage === 'revisao_ajuste' && !setting('reenviar_cliente_apos_ajuste')) return releaseAfterClientAdjust(c, actor, 'ajuste do cliente conferido');
+      if (c.stage === 'revisao_ajuste' && !setting('reenviar_cliente_apos_ajuste') && !roundNeedsReapproval(c.id)) return releaseAfterClientAdjust(c, actor, 'ajuste do cliente conferido');
       return enterStage(c, 'aprovacao_cliente', actor, { reason: 'aprovado internamente — enviado ao cliente' });
     }
     if (!adjustments.length && !note) throw new HttpError(422, 'Descreva o ajuste necessário.');
@@ -379,7 +385,7 @@ export function reviewDecision(contentId, actor, { decision, note, adjustments =
   });
 }
 
-function createAdjustment(c, actor, { description, origin, size = 'normal', track = 'visual', assignee_id = null, carousel_page = null, video_timestamp = null, region = null }) {
+function createAdjustment(c, actor, { description, origin, size = 'normal', track = 'visual', assignee_id = null, carousel_page = null, video_timestamp = null, region = null, reapproval = 0 }) {
   if (!description?.trim()) throw new HttpError(422, 'Explique o ajuste necessário.');
   const v = currentVersion(c.id);
   const fn = track === 'legenda' ? 'copy' : productionTracks(c.format)[0].fn;
@@ -388,7 +394,7 @@ function createAdjustment(c, actor, { description, origin, size = 'normal', trac
   const t = insert('tasks', { id: uid('t_'), title: `Ajuste ${origin === 'cliente' ? 'do cliente' : 'interno'} — ${c.title}`, description, client_id: c.client_id, content_id: c.id, stage: c.stage, function: fn,
     assignee_id: assignee, status: 'aberta', kind: 'ajuste', origin: 'engine', priority: origin === 'cliente' ? 'alta' : c.priority, due_at: due, created_by: actor.id, created_at: now() });
   const adj = insert('adjustments', { id: uid('aj_'), content_id: c.id, version_id: v?.id || null, origin, size, description, carousel_page, video_timestamp, region,
-    requested_by: actor.id, assigned_to: assignee, task_id: t.id, status: 'aberto', due_at: due, created_at: now() });
+    requested_by: actor.id, assigned_to: assignee, task_id: t.id, status: 'aberto', due_at: due, created_at: now(), reapproval: reapproval ? 1 : 0 });
   notify(assignee, { level: origin === 'cliente' ? 'atencao' : 'info', type: 'ajuste', title: `Ajuste ${origin === 'cliente' ? 'solicitado pelo cliente' : 'interno'}`, body: `#${c.number} ${c.title}: ${description.slice(0, 140)}`, link: `/conteudos/${c.id}`, client: c.client_id, content: c.id });
   log({ actor: actor.id, action: 'ajuste.criado', entity: 'adjustment', id: adj.id, client: c.client_id, content: c.id, summary: `Ajuste (${origin}${size === 'simples' ? ', simples' : ''}) atribuído a ${userName(assignee) || 'SEM RESPONSÁVEL'}: ${description.slice(0, 120)}`, visibility: origin === 'cliente' ? 'client' : 'internal' });
   return adj;
@@ -432,6 +438,7 @@ export function clientDecision(contentId, actor, { decision, note, carousel_page
     }
     const next = enterStage(c, 'ajuste_cliente', actor, { reason: 'cliente solicitou ajuste' });
     createAdjustment(next, actor, { description: note, origin: 'cliente', size: size === 'simples' ? 'simples' : 'normal', carousel_page, video_timestamp, region });
+    if (!onBehalf) notify(actor.id, { level: 'info', type: 'ajuste_recebido', title: 'Seu ajuste foi recebido pela equipe.', body: `${c.title} — você recebe a nova versão aqui.`, link: '/portal/conteudos', groupKey: `ajuste-rec:${c.client_id}`, client: c.client_id });
     automation('cliente.ajuste', { entity: 'content', id: c.id, client: c.client_id });
     return one('SELECT * FROM contents WHERE id=?', c.id);
   });
@@ -454,6 +461,7 @@ export function schedule(contentId, actor, { at, mode, external_note }) {
     log({ actor: actor.id, action: 'conteudo.agendado', entity: 'content', id: c.id, client: c.client_id, content: c.id, visibility: 'client',
       summary: mode === 'meta' ? `Agendado para publicação automática via Meta em ${new Date(at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}` : `Marcado como agendado externamente (${new Date(at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}) — publicação depende de ação externa${external_note ? `: ${external_note}` : ''}` });
     automation('conteudo.agendado', { entity: 'content', id: c.id, client: c.client_id });
+    notify(clientUsers(c.client_id), { level: 'info', type: 'agendado', title: 'Seu conteúdo foi aprovado e está pronto para a próxima etapa.', body: `${c.title} — agendado para ${new Date(at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' })}.`, link: '/portal/conteudos', groupKey: `agendado:${c.client_id}`, client: c.client_id });
     if (c.stage === 'agendado') return one('SELECT * FROM contents WHERE id=?', c.id);
     return enterStage(one('SELECT * FROM contents WHERE id=?', c.id), 'agendado', actor, { reason: mode === 'meta' ? 'agendado (Meta)' : 'agendado externamente' });
   });
@@ -478,7 +486,7 @@ export function blockContent(contentId, reason, waitingOn, actor, opt = {}) {
   log({ actor: actor?.id, action: 'conteudo.bloqueado', entity: 'content', id: c.id, client: c.client_id, content: c.id, summary: `Bloqueado: ${reason} (aguardando ${waitingOn || 'equipe'})` });
   if (waitingOn === 'cliente') {
     automation('material.pendente', { entity: 'content', id: c.id, client: c.client_id, detail: reason });
-    notify(clientUsers(c.client_id), { level: 'atencao', type: 'material', title: 'Precisamos de um material seu', body: `${c.title}: ${reason}`, link: '/portal/pendencias', groupKey: `material:${c.client_id}`, client: c.client_id });
+    notify(clientUsers(c.client_id), { level: 'atencao', type: 'material', title: 'Precisamos de um material seu', body: `${c.title}: ${reason}`, link: '/portal/projeto', groupKey: `material:${c.client_id}`, client: c.client_id });
   }
   if (!opt.silent) notify(ccUsers(), { level: 'atencao', type: 'bloqueio', title: `Conteúdo bloqueado`, body: `#${c.number} ${c.title}: ${reason}`, link: `/conteudos/${c.id}`, client: c.client_id, content: c.id, exclude: actor?.id });
 }
@@ -549,4 +557,62 @@ export function contentRisk(c) {
   if (c.revision_rounds + c.client_adjust_rounds >= 3) { score += 1; reasons.push(`Voltou para ajuste ${c.revision_rounds + c.client_adjust_rounds} vezes`); }
   const level = score >= 5 ? 'critico' : score >= 3 ? 'alto' : score >= 1 ? 'medio' : 'baixo';
   return { level, score, reasons };
+}
+
+
+// ═══════════ Ações do cliente além de aprovar/ajustar ═══════════
+const hours = (iso) => (Date.now() - new Date(iso).getTime()) / 3600e3;
+// Desfazer uma aprovação (like) — só enquanto nada irreversível aconteceu.
+export function undoClientApproval(contentId, actor) {
+  return tx(() => {
+    const c = getContent(contentId);
+    assertActor(actor, c, 'cliente');
+    const last = one("SELECT * FROM approvals WHERE content_id=? AND kind IN ('cliente','tema') ORDER BY created_at DESC LIMIT 1", c.id);
+    if (!last || last.decision !== 'aprovado' || last.user_id !== actor.id) throw new HttpError(409, 'Não há aprovação sua para desfazer neste conteúdo.');
+    if (hours(last.created_at) > 24) throw new HttpError(409, 'A aprovação já foi processada pela equipe. Para mudar algo, comente pedindo ajuste.');
+    if (last.kind === 'cliente') {
+      if (c.stage !== 'agendamento' || c.scheduled_at) throw new HttpError(409, 'Este conteúdo já seguiu para agendamento. Para mudar algo, comente pedindo ajuste.');
+      if (c.approved_version_id) update('content_versions', { id: c.approved_version_id }, { status: 'enviada_cliente', approved_by: null, approved_at: null });
+      update('contents', { id: c.id }, { approved_version_id: null });
+    } else {
+      const started = one("SELECT 1 FROM tasks WHERE content_id=? AND stage='producao' AND (status='concluida' OR started_at IS NOT NULL)", c.id) || c.current_version_id;
+      if (c.stage !== 'producao' || started) throw new HttpError(409, 'A produção deste tema já começou. Para mudar algo, comente pedindo ajuste.');
+    }
+    insert('approvals', { id: uid('ap_'), content_id: c.id, version_id: last.version_id, kind: last.kind, decision: 'desfeita', user_id: actor.id, note: 'Aprovação desfeita pelo cliente', created_at: now() });
+    log({ actor: actor.id, action: 'cliente.desfez_aprovacao', entity: 'content', id: c.id, client: c.client_id, content: c.id, visibility: 'client', summary: `${actor.name} desfez a aprovação` });
+    const team = all("SELECT DISTINCT user_id FROM client_members WHERE client_id=? AND function IN ('estrategia','atendimento','agendamento')", c.client_id).map((r) => r.user_id);
+    notify(team, { level: 'atencao', type: 'aprovacao_desfeita', title: 'Cliente desfez uma aprovação', body: `#${c.number} ${c.title}`, link: `/conteudos/${c.id}`, content: c.id, client: c.client_id });
+    return enterStage(c, last.kind === 'cliente' ? 'aprovacao_cliente' : 'aprovacao_tema', actor, { reason: 'aprovação desfeita pelo cliente' });
+  });
+}
+
+// Pedido de ajuste vindo do cliente em qualquer momento visível a ele:
+//  · aguardando aprovação → ajuste normal;  · já em ajuste → soma um item à rodada;
+//  · já aprovado (agendamento/agendado) → reabre: ajuste → nova versão → revisão → NOVA aprovação do cliente.
+export function clientAdjustmentRequest(contentId, actor, { note, carousel_page = null, video_timestamp = null }, req) {
+  return tx(() => {
+    const c = getContent(contentId);
+    assertActor(actor, c, 'cliente');
+    if (!note?.trim()) throw new HttpError(422, 'Explique o ajuste necessário.');
+    if (['aprovacao_tema', 'aprovacao_cliente'].includes(c.stage)) return { mode: 'ajuste', content: clientDecision(c.id, actor, { decision: 'ajuste', note, carousel_page, video_timestamp }, req) };
+    if (c.stage === 'ajuste_cliente' || c.stage === 'revisao_ajuste') {
+      const reap = roundNeedsReapproval(c.id) ? 1 : 0;
+      if (c.stage === 'revisao_ajuste') enterStage(c, 'ajuste_cliente', actor, { reason: 'novo pedido do cliente durante o ajuste' });
+      const adj = createAdjustment(one('SELECT * FROM contents WHERE id=?', c.id), actor, { description: note, origin: 'cliente', carousel_page, video_timestamp, reapproval: reap });
+      return { mode: 'ajuste_adicional', adjustment: adj, content: one('SELECT * FROM contents WHERE id=?', c.id) };
+    }
+    if (['agendamento', 'agendado'].includes(c.stage)) {
+      const v = currentVersion(c.id);
+      insert('approvals', { id: uid('ap_'), content_id: c.id, version_id: v?.id || null, kind: 'cliente', decision: 'ajuste', user_id: actor.id, note, ip: req?.ip, user_agent: req?.headers?.['user-agent']?.slice(0, 200), created_at: now() });
+      update('contents', { id: c.id }, { approved_version_id: null, scheduled_at: null, schedule_mode: null, client_adjust_rounds: c.client_adjust_rounds + 1, updated_at: now() });
+      log({ actor: actor.id, action: 'cliente.ajuste_pos_aprovacao', entity: 'content', id: c.id, client: c.client_id, content: c.id, visibility: 'client', summary: `Ajuste solicitado após a aprovação da V${v?.number} — nova versão volta para aprovação` });
+      const next = enterStage(c, 'ajuste_cliente', actor, { reason: 'ajuste pedido após aprovação' });
+      const adj = createAdjustment(next, actor, { description: note, origin: 'cliente', carousel_page, video_timestamp, reapproval: 1 });
+      const team = all("SELECT DISTINCT user_id FROM client_members WHERE client_id=? AND function IN ('estrategia','atendimento','agendamento')", c.client_id).map((r) => r.user_id);
+      notify(team, { level: 'urgente', type: 'ajuste_pos_aprovacao', title: 'Ajuste pedido em conteúdo já aprovado', body: `#${c.number} ${c.title}: ${note.slice(0, 120)}${c.stage === 'agendado' ? ' — o agendamento foi suspenso.' : ''}`, link: `/conteudos/${c.id}`, content: c.id, client: c.client_id });
+      notify(actor.id, { level: 'info', type: 'ajuste_recebido', title: 'Seu ajuste foi recebido pela equipe.', body: `${c.title} — a nova versão volta para você aprovar.`, link: '/portal/conteudos', client: c.client_id });
+      return { mode: 'reaberto', adjustment: adj, content: one('SELECT * FROM contents WHERE id=?', c.id) };
+    }
+    throw new HttpError(409, c.stage === 'publicado' ? 'Este conteúdo já foi publicado. Seu comentário foi enviado à equipe.' : 'Este conteúdo ainda está com a equipe.');
+  });
 }

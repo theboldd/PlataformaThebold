@@ -36,7 +36,7 @@ export function tick() {
     const marker = `${c.stage}:${c.stage_entered_at}`;
     if (waited >= h1 && isEnabled('cliente.sem_resposta_24h') && onceFor('cliente.sem_resposta_24h', c.id, marker)) {
       automation('cliente.sem_resposta_24h', { entity: 'content', id: c.id, client: c.client_id, detail: marker });
-      notify(clientUsers(c.client_id), { level: 'atencao', type: 'lembrete', title: 'Você tem conteúdos aguardando aprovação', body: 'Leva poucos minutos: abra o feed e aprove ou comente.', link: '/portal/feed', groupKey: `lembrete:${c.client_id}`, client: c.client_id });
+      notify(clientUsers(c.client_id), { level: 'atencao', type: 'lembrete', title: 'Você tem conteúdos aguardando aprovação', body: 'Leva poucos minutos: abra o feed e aprove ou comente.', link: '/portal/conteudos', groupKey: `lembrete:${c.client_id}`, client: c.client_id });
     }
     if (waited >= h2 && isEnabled('cliente.sem_resposta_48h') && onceFor('cliente.sem_resposta_48h', c.id, marker)) {
       automation('cliente.sem_resposta_48h', { entity: 'content', id: c.id, client: c.client_id, detail: marker });
@@ -55,6 +55,16 @@ export function tick() {
       notify(cc(), { level: 'urgente', type: 'escalada', title: `${c.cname}: 72h sem resposta do cliente`, body: 'Decidir: segue para a próxima semana ou para o próximo mês?', link: '/pendencias', groupKey: `esc:${c.client_id}`, client: c.client_id });
     }
   }
+  // Lembrete de reunião na véspera (cliente e participantes)
+  for (const m of all("SELECT * FROM meetings WHERE status='agendada' AND starts_at BETWEEN ? AND ?", new Date(t + 20 * H).toISOString(), new Date(t + 26 * H).toISOString())) {
+    if (onceFor('reuniao.lembrete', m.id, m.starts_at)) {
+      insert('automation_runs', { id: uid('ar_'), automation_key: 'reuniao.lembrete', status: 'ok', entity_type: 'meeting', entity_id: m.id, client_id: m.client_id, detail: m.starts_at, created_at: nowIso });
+      const hora = new Date(m.starts_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+      const people = all('SELECT a.user_id, u.role_key FROM meeting_attendees a JOIN users u ON u.id=a.user_id WHERE a.meeting_id=?', m.id);
+      notify(people.filter((p) => p.role_key === 'cliente').map((p) => p.user_id), { level: 'info', type: 'reuniao', title: 'Sua reunião está confirmada para amanhã.', body: `${hora} · ${m.title}`, link: '/portal/reunioes', client: m.client_id });
+      notify(people.filter((p) => p.role_key !== 'cliente').map((p) => p.user_id), { level: 'info', type: 'reuniao', title: 'Reunião amanhã', body: `${hora} · ${m.title}`, link: '/reunioes', groupKey: `reuniao-amanha:${m.starts_at.slice(0, 10)}`, client: m.client_id });
+    }
+  }
   // Processo parado (> 3 dias na mesma etapa interna)
   for (const c of all("SELECT c.*, cl.name cname FROM contents c JOIN clients cl ON cl.id=c.client_id WHERE c.blocked=0 AND c.stage IN ('cronograma','analise_cronograma','ajuste_cronograma','producao','analise_producao','ajuste_interno','ajuste_cliente','revisao_ajuste','agendamento') AND c.stage_entered_at < ?", new Date(t - 3 * 864e5).toISOString())) {
     if (isEnabled('processo.parado') && onceFor('processo.parado', c.id, c.stage_entered_at)) {
@@ -66,7 +76,7 @@ export function tick() {
   for (const o of all("SELECT oi.*, ob.client_id FROM onboarding_items oi JOIN onboarding ob ON ob.id=oi.onboarding_id WHERE oi.status='pendente' AND oi.due_at < ? AND ob.status<>'concluido'", nowIso)) {
     if (isEnabled('onboarding.item_atrasado') && onceFor('onboarding.item_atrasado', o.id, o.due_at)) {
       automation('onboarding.item_atrasado', { entity: 'onboarding_item', id: o.id, client: o.client_id, detail: o.due_at });
-      if (o.who === 'cliente') notify(clientUsers(o.client_id), { level: 'atencao', type: 'onboarding', title: 'Falta pouco para começarmos', body: `Ainda precisamos de: ${o.label}`, link: '/portal/pendencias', groupKey: `onb:${o.client_id}`, client: o.client_id });
+      if (o.who === 'cliente') notify(clientUsers(o.client_id), { level: 'atencao', type: 'onboarding', title: 'Falta pouco para começarmos', body: `Ainda precisamos de: ${o.label}`, link: '/portal/projeto', groupKey: `onb:${o.client_id}`, client: o.client_id });
       notify(resolveAssignee(o.client_id, 'atendimento'), { level: 'atencao', type: 'onboarding', title: 'Onboarding com item atrasado', body: o.label, link: `/clientes/${o.client_id}?tab=onboarding`, groupKey: `onb-int:${o.client_id}`, client: o.client_id });
     }
   }
