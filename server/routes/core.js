@@ -16,7 +16,9 @@ core.post('/auth/login', (req, res) => {
   const key = `${req.ip}:${email}`;
   checkRate(key);
   const u = one('SELECT * FROM users WHERE email=?', email);
-  if (!u || !verifyPassword(String(req.body?.password || ''), u.password_hash)) throw new HttpError(401, 'E-mail ou senha incorretos.');
+  const pw = String(req.body?.password || '');
+  // senha colada costuma vir com espaço ou quebra de linha nas pontas
+  if (!u || !(verifyPassword(pw, u.password_hash) || (pw !== pw.trim() && verifyPassword(pw.trim(), u.password_hash)))) throw new HttpError(401, 'E-mail ou senha incorretos.');
   if (!u.active) throw new HttpError(403, 'Acesso desativado. Fale com a administração.');
   clearRate(key);
   const s = createSession(u, req);
