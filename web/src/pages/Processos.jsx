@@ -22,6 +22,8 @@ export default function Processos() {
   const [howOpen, setHowOpen] = useState(false);
   const [actOpen, setActOpen] = useState(false);
   const [group, setGroup] = useState(params.get('group') || 'none');
+  // Visão "Equipe" = o quadro do Notion: uma coluna por pessoa e função (Design Felipe, Edição de vídeo Léo, Legenda Juliane…)
+  const view = params.get('visao') || 'equipe';
   const qs = new URLSearchParams();
   FILTER_KEYS.forEach((k) => params.get(k) && qs.set(k, params.get(k)));
   const { data, error, loading } = useApi(`/process/board?${qs}`, []);
@@ -52,11 +54,12 @@ export default function Processos() {
   // Raias horizontais (swimlanes): nenhuma | cliente | responsável
   const swimlanes = useMemo(() => {
     if (!data) return [];
-    if (group === 'none') return [{ key: 'all', label: null, lanes: data.lanes }];
+    const base = view === 'equipe' ? teamLanes(data) : data.lanes;
+    if (group === 'none') return [{ key: 'all', label: null, lanes: base }];
     const keyOf = (c) => (group === 'client' ? c.client : group === 'format' ? FORMATS[c.format] || c.format : c.owner || 'Sem tarefa aberta');
-    const keys = [...new Set(data.lanes.flatMap((l) => l.cards.map(keyOf)))].sort();
-    return keys.map((k) => ({ key: k, label: k, lanes: data.lanes.map((l) => ({ ...l, cards: l.cards.filter((c) => keyOf(c) === k) })) }));
-  }, [data, group]);
+    const keys = [...new Set(base.flatMap((l) => l.cards.map(keyOf)))].sort();
+    return keys.map((k) => ({ key: k, label: k, lanes: base.map((l) => ({ ...l, cards: l.cards.filter((c) => keyOf(c) === k) })) }));
+  }, [data, group, view]);
 
   return (
     <div className="jb">
@@ -71,6 +74,10 @@ export default function Processos() {
           </div>
         </div>
         <div className="jb-toolbar">
+          <div className="jb-view" role="group" aria-label="Visão do quadro">
+            <button className={view === 'equipe' ? 'on' : ''} aria-pressed={view === 'equipe'} onClick={() => setFilter('visao', '')} title="Uma coluna por pessoa, como no Notion">Equipe</button>
+            <button className={view === 'etapas' ? 'on' : ''} aria-pressed={view === 'etapas'} onClick={() => setFilter('visao', 'etapas')} title="Uma coluna por fase do processo">Etapas</button>
+          </div>
           <label className="jb-search"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Pesquisar no quadro" aria-label="Pesquisar" /><I.search size={16} /></label>
           <div className="jb-avatars" role="group" aria-label="Filtrar por responsável">
             {people.slice(0, 8).map((p) => (
@@ -136,19 +143,51 @@ export default function Processos() {
   );
 }
 
+// Visão Equipe: as colunas do quadro do Notion, em ordem de fluxo. A produção vira uma coluna por pessoa e função
+// (fixa para quem tem a função, mesmo vazia — como no Notion); bloqueados ficam em "Pendente por material".
+const TRACK_LABEL = { design: 'Design', edicao: 'Edição de vídeo', copy: 'Legenda' };
+function teamLanes(data) {
+  const all = data.lanes.flatMap((l) => l.cards);
+  const col = (key, label, stages, filter) => ({ key, label, stages: [], cards: all.filter((c) => !c.blocked && stages.includes(c.stage) && (!filter || filter(c))) });
+  const people = data.filters.people || [];
+  const prod = all.filter((c) => !c.blocked && c.stage === 'producao');
+  const personCols = [];
+  for (const fn of ['design', 'edicao', 'copy']) {
+    const holders = people.filter((p) => p.functions?.includes(fn) || prod.some((c) => c.tracks?.some((t) => t.fn === fn && t.assignee_id === p.id)));
+    for (const p of holders) personCols.push({ key: `p:${fn}:${p.id}`, label: TRACK_LABEL[fn], person: { id: p.id, name: p.name }, fn, stages: [], cards: prod.filter((c) => c.tracks?.some((t) => t.fn === fn && t.assignee_id === p.id)) });
+    const orphan = prod.filter((c) => c.tracks?.some((t) => t.fn === fn && !t.assignee_id));
+    if (orphan.length) personCols.push({ key: `p:${fn}:none`, label: TRACK_LABEL[fn], person: { id: null, name: 'Sem responsável' }, fn, stages: [], cards: orphan });
+  }
+  return [
+    col('cronograma', 'Cronograma', ['cronograma', 'ajuste_cronograma']),
+    col('analise_cronograma', 'Análise cronograma', ['analise_cronograma']),
+    col('aprovacao_tema', 'Temas com o cliente', ['aprovacao_tema']),
+    ...personCols,
+    col('analise_producao', 'Análise produção', ['analise_producao']),
+    col('ajustes', 'Ajustes', ['ajuste_interno', 'revisao_ajuste']),
+    { key: 'pendente', label: 'Pendente por material', stages: [], cards: all.filter((c) => c.blocked) },
+    col('aprovacao_cliente', 'Aprovação dos clientes', ['aprovacao_cliente', 'ajuste_cliente']),
+    col('agendamento', 'Para agendamento', ['agendamento']),
+    col('agendado', 'Agendado', ['agendado']),
+    { ...col('publicado', 'Publicado', ['publicado']), key: 'publicacao' },
+  ];
+}
+
 function Column({ lane, moved, showHead }) {
-  const counts = Object.fromEntries(lane.stages.map((s) => [s.key, lane.cards.filter((c) => c.stage === s.key).length]));
+  const counts = Object.fromEntries((lane.stages || []).map((s) => [s.key, lane.cards.filter((c) => c.stage === s.key).length]));
   return (
-    <section className="jb-col" aria-label={lane.label}>
+    <section className={`jb-col ${!lane.cards.length && !lane.person ? 'jb-col-min' : ''}`} aria-label={lane.label}>
       {showHead && (
         <div className="jb-col-head">
           <span className="jb-col-title">{lane.label}</span><span className="jb-col-count">{lane.cards.length}</span>
           {lane.key === 'publicacao' && <I.check size={14} className="jb-done" />}
-          {lane.stages.length > 1 && <div className="jb-col-sub">{lane.stages.map((s) => <span key={s.key}>{s.label} · {counts[s.key]}</span>)}</div>}
+          {lane.person && <div className="jb-col-who"><span className="jb-av sm" style={lane.person.id ? { background: toneOf(lane.person.id) } : undefined}>{lane.person.id ? initials(lane.person.name) : '?'}</span>{lane.person.name}</div>}
+          {(lane.stages || []).length > 1 && <div className="jb-col-sub">{lane.stages.map((s) => <span key={s.key}>{s.label} · {counts[s.key]}</span>)}</div>}
         </div>
       )}
       <div className="jb-col-body">
-        {lane.cards.map((c) => <Card key={c.id} c={c} moved={moved.has(c.id)} />)}
+        {lane.cards.map((c) => <Card key={c.id} c={c} moved={moved.has(c.id)} track={lane.fn ? c.tracks?.find((t) => t.fn === lane.fn && (t.assignee_id || null) === (lane.person?.id || null)) : null} />)}
+        {!lane.cards.length && lane.person && <div className="jb-col-empty">Nada com {lane.person.id ? lane.person.name.split(' ')[0] : 'ninguém'} agora</div>}
       </div>
     </section>
   );
@@ -162,9 +201,13 @@ function byFormat(lanes) {
   return Object.entries(m).map(([f, n]) => `${n} ${n === 1 ? (FORMATS[f] || f).toLowerCase() : PL[f] || f}`).join(' · ');
 }
 
-function Card({ c, moved }) {
-  const overdue = c.due_at && new Date(c.due_at) < new Date();
-  const none = c.owner === 'SEM RESPONSÁVEL';
+function Card({ c, moved, track }) {
+  // na coluna de uma pessoa, o card mostra o prazo e o responsável DAQUELA trilha
+  const due = track ? track.due_at : c.due_at;
+  const ownerName = track ? track.name : c.owner === 'SEM RESPONSÁVEL' ? null : c.owner;
+  const ownerId = track ? track.assignee_id : c.owner_id;
+  const overdue = due && new Date(due) < new Date();
+  const none = track ? !track.assignee_id : c.owner === 'SEM RESPONSÁVEL';
   const body = (
     <>
       <div className="jb-card-title">{c.title}</div>
@@ -179,9 +222,14 @@ function Card({ c, moved }) {
         <span className="jb-key">TB-{String(c.number).padStart(3, '0')}</span>
         {c.priority !== 'media' && <span className={`jb-prio p-${c.priority}`} title={`Prioridade ${c.priority}`}>{PRIO_ICON[c.priority]}</span>}
         {['critico', 'alto'].includes(c.risk) && <span className={`jb-risk r-${c.risk}`} title={c.risk_reasons?.join(' · ')}>!</span>}
-        {c.due_at && <span className={`jb-due ${overdue ? 'late' : ''}`} title="Prazo da etapa">{new Date(c.due_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', timeZone: 'America/Sao_Paulo' }).replace('.', '')}</span>}
+        {due && <span className={`jb-due ${overdue ? 'late' : ''}`} title="Prazo">{new Date(due).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', timeZone: 'America/Sao_Paulo' }).replace('.', '')}</span>}
         <span className="grow" />
-        {c.restricted ? <I.lock size={14} /> : <span className={`jb-av sm ${none ? 'jb-av-none' : ''}`} title={c.owner || 'Sem tarefa aberta'} style={none || !c.owner_id ? undefined : { background: toneOf(c.owner_id) }}>{none ? '?' : c.owner ? initials(c.owner) : '—'}</span>}
+        {c.restricted ? <I.lock size={14} /> : (
+          <span className="jb-owner" title={ownerName || (none ? 'Sem responsável' : 'Sem tarefa aberta')}>
+            <span className={`jb-av sm ${none ? 'jb-av-none' : ''}`} style={none || !ownerId ? undefined : { background: toneOf(ownerId) }}>{none ? '?' : ownerName ? initials(ownerName) : '—'}</span>
+            <span className="jb-owner-name">{none ? 'Sem responsável' : ownerName ? ownerName.split(' ')[0] : ''}</span>
+          </span>
+        )}
       </div>
       <div className="jb-card-meta">{c.stage_label} · {c.hours_in_stage < 24 ? `${c.hours_in_stage}h` : `${Math.floor(c.hours_in_stage / 24)}d`} nesta etapa</div>
     </>

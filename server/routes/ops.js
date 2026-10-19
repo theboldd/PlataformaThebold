@@ -329,17 +329,25 @@ ops.get('/process/board', requirePerm('processos', 'view'), (req, res) => {
   if (priority) { where.push('c.priority=?'); p.push(priority); }
   if (q) { where.push('(c.title LIKE ? OR cl.name LIKE ?)'); p.push(`%${q}%`, `%${q}%`); }
   let cards = all(`SELECT c.* FROM contents c JOIN clients cl ON cl.id=c.client_id WHERE ${where.join(' AND ')} ORDER BY c.planned_at`, ...p).map((c) => contentCard(c, req.user));
-  if (assignee_id) cards = cards.filter((c) => assignee_id === 'none' ? c.owner === 'SEM RESPONSÁVEL' : c.owner_id === assignee_id);
   if (risk) cards = cards.filter((c) => c.risk === risk);
   if (due === 'atrasado') cards = cards.filter((c) => c.due_at && c.due_at < now());
   if (due === 'hoje') { const e = new Date(); e.setHours(23, 59, 59); cards = cards.filter((c) => c.due_at && c.due_at <= e.toISOString()); }
   if (due === 'semana') { const e = new Date(Date.now() + 7 * 864e5).toISOString(); cards = cards.filter((c) => c.due_at && c.due_at <= e); }
   // Cards de clientes fora do vínculo: visíveis no quadro, sem miniatura e sem acesso ao detalhe
   cards = cards.map((c) => (c.restricted ? { ...c, thumb: null } : c));
+  // Trilhas abertas de cada card (quem está com ele agora, por função) — base da visão "Equipe", igual às colunas por pessoa do Notion
+  const ids = cards.map((c) => c.id);
+  const open = ids.length ? all(`SELECT t.content_id, t.function fn, t.assignee_id, u.name, t.due_at FROM tasks t LEFT JOIN users u ON u.id=t.assignee_id
+    WHERE t.status IN ('aberta','em_andamento') AND t.function<>'cliente' AND t.content_id IN (${ids.map(() => '?').join(',')}) ORDER BY t.due_at`, ...ids) : [];
+  const byContent = new Map();
+  for (const t of open) (byContent.get(t.content_id) || byContent.set(t.content_id, []).get(t.content_id)).push({ fn: t.fn, assignee_id: t.assignee_id, name: t.name, due_at: t.due_at });
+  cards = cards.map((c) => ({ ...c, tracks: byContent.get(c.id) || [] }));
+  // filtro por pessoa vale para qualquer trilha aberta do card (design, edição, legenda…), não só a primeira
+  if (assignee_id) cards = cards.filter((c) => c.tracks.some((t) => (assignee_id === 'none' ? !t.assignee_id : t.assignee_id === assignee_id)));
   const lanes = LANES.map((l) => ({ ...l, stages: Object.entries(STAGES).filter(([, s]) => s.lane === l.key).map(([k, s]) => ({ key: k, label: s.label, fn: s.fn, action: s.action, exit: s.exit })), cards: cards.filter((c) => c.lane === l.key) }));
   const recent = all("SELECT l.created_at, l.summary, l.content_id, c.client_id FROM activity_logs l JOIN contents c ON c.id=l.content_id WHERE l.action='etapa.alterada' ORDER BY l.created_at DESC LIMIT 25")
     .map((r) => (canAccessClient(req.user, r.client_id) ? r : { created_at: r.created_at, summary: r.summary.replace(/^#\d+/, '#—'), content_id: null }));
-  res.json({ lanes, total: cards.length, recent, filters: { months: all("SELECT DISTINCT COALESCE(cycle_month, substr(planned_at,1,7)) m FROM contents WHERE stage<>'cancelado' AND COALESCE(cycle_month, substr(planned_at,1,7)) IS NOT NULL ORDER BY m DESC").map((r) => r.m), formats: all("SELECT DISTINCT format FROM contents WHERE stage<>'cancelado'").map((r) => r.format), clients: all('SELECT id, name FROM clients ORDER BY name'), people: all("SELECT id, name FROM users WHERE active=1 AND role_key<>'cliente' ORDER BY name"), stages: STAGE_ORDER.map((k) => ({ key: k, label: STAGES[k].label })) } });
+  res.json({ lanes, total: cards.length, recent, filters: { months: all("SELECT DISTINCT COALESCE(cycle_month, substr(planned_at,1,7)) m FROM contents WHERE stage<>'cancelado' AND COALESCE(cycle_month, substr(planned_at,1,7)) IS NOT NULL ORDER BY m DESC").map((r) => r.m), formats: all("SELECT DISTINCT format FROM contents WHERE stage<>'cancelado'").map((r) => r.format), clients: all('SELECT id, name FROM clients ORDER BY name'), people: all("SELECT id, name, functions FROM users WHERE active=1 AND role_key<>'cliente' ORDER BY name").map((u) => ({ ...u, functions: parseJSON(u.functions, []) })), stages: STAGE_ORDER.map((k) => ({ key: k, label: STAGES[k].label })) } });
 });
 ops.get('/process/definition', requirePerm('processos', 'view'), (_req, res) => {
   res.json({ stages: STAGES, lanes: LANES, order: STAGE_ORDER, settings: Object.fromEntries(Object.keys(DEFAULT_SETTINGS).map((k) => [k, setting(k)])), example_cycle: buildMilestones(new Date(Date.now() + 40 * 864e5).toISOString().slice(0, 7)) });

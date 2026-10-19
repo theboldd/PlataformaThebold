@@ -81,3 +81,18 @@
 
 .jb-mat { font: inherit; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 4px; border: 1px solid var(--line-strong); background: transparent; color: var(--ink-2); cursor: pointer; }
 .jb-mat:hover { background: var(--bordo-soft); color: var(--ink); }
+
+/* Visão Equipe (colunas por pessoa, como o quadro do Notion) */
+.jb-view { display: inline-flex; padding: 3px; border-radius: 8px; background: rgba(11,11,11,.06); gap: 2px; }
+.jb-view button { height: 28px; padding: 0 12px; border: 0; border-radius: 6px; background: none; color: var(--jb-muted); font-size: 13px; font-weight: 600; cursor: pointer; }
+.jb-view button.on { background: var(--card); color: var(--jb-ink); box-shadow: 0 1px 2px rgba(11,11,11,.12); }
+.jb-col-who { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 14px; font-weight: 600; color: var(--jb-ink); text-transform: none; letter-spacing: 0; }
+.jb-col-who .jb-av { width: 24px; height: 24px; font-size: 10px; }
+.jb-col-empty { padding: 14px 8px; font-size: 12px; color: var(--jb-muted); text-align: center; border: 1px dashed var(--jb-line); border-radius: 6px; }
+.jb-owner { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.jb-owner-name { font-size: 12px; font-weight: 600; color: var(--jb-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90px; }
+.jb-av-none + .jb-owner-name { color: var(--bordo); }
+/* coluna de etapa vazia: estreita, para a equipe aparecer sem rolar */
+.jb-col.jb-col-min { width: 150px; min-width: 150px; flex-basis: 150px; }
+.jb-col.jb-col-min .jb-col-title { white-space: normal; }
+.jb-key, .jb-due { white-space: nowrap; }
