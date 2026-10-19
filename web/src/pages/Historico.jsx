@@ -5,13 +5,14 @@ import { useApi } from '../lib/hooks.js';
 import { useCrumbs } from '../components/Shell.jsx';
 import { Empty, ErrorBox, Loading, PageHead, Seg } from '../components/ui.jsx';
 import { fmtDateTime, cleanName } from '../lib/format.js';
+import { useUrlState } from '../lib/nav.jsx';
 
 const pretty = (v) => { if (v == null) return '—'; try { return JSON.stringify(JSON.parse(v), null, 2); } catch { return String(v); } };
 
 export default function Historico() {
   useCrumbs('Histórico');
-  const [f, setF] = useState({ client_id: '', actor_kind: '', action: '', q: '' });
-  const [q, setQ] = useState('');
+  const [f, setF] = useUrlState('', { client_id: '', actor_kind: '', action: '', q: '' });
+  const [q, setQ] = useState(f.q);
   const [open, setOpen] = useState(null);
   const [logins, setLogins] = useState(false);
   const [clients, setClients] = useState([]);

@@ -13,6 +13,7 @@ import { VersionChips, CompareVersions, versionStatusLabel } from './production/
 import { Comments } from './production/Comments.jsx';
 import { Dropzone } from './production/Dropzone.jsx';
 import '../styles/production.css';
+import { useUrlState } from '../lib/nav.jsx';
 
 const toLocalInput = (iso) => { if (!iso) return ''; const d = new Date(iso); const off = d.getTimezoneOffset(); return new Date(d.getTime() - off * 60e3).toISOString().slice(0, 16); };
 const REVIEW_STAGES = ['analise_cronograma', 'analise_producao', 'revisao_ajuste'];
@@ -25,7 +26,7 @@ export default function ConteudoDetalhe() {
   const toast = useToast();
   const nav = useNavigate();
   const [vid, setVid] = useState(null);
-  const [tab, setTab] = useState('comentarios');
+  const [tab, setTab] = useUrlState('aba', 'comentarios');
   const [compare, setCompare] = useState(false);
   const [modal, setModal] = useState(null);
   const [busy, setBusy] = useState(false);

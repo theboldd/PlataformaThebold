@@ -8,6 +8,7 @@ import { useCrumbs } from '../components/Shell.jsx';
 import { Button, Empty, ErrorBox, Field, Loading, Modal, PageHead, Section, Seg, Tag } from '../components/ui.jsx';
 import { I } from '../components/Icons.jsx';
 import { fmtDate, money, cleanName } from '../lib/format.js';
+import { useUrlState } from '../lib/nav.jsx';
 
 const INV = { aberta: ['Em aberto', 'info'], paga: ['Paga', 'ok'], atrasada: ['Atrasada', 'err'], cancelada: ['Cancelada', ''] };
 
@@ -16,8 +17,8 @@ export default function Financeiro() {
   const { data, error, loading, reload } = useApi('/finance');
   const auth = useAuth();
   const toast = useToast();
-  const [filter, setFilter] = useState('todas');
-  const [client, setClient] = useState('');
+  const [filter, setFilter] = useUrlState('status', 'todas');
+  const [client, setClient] = useUrlState('cliente', '');
   const [pay, setPay] = useState(null);
   const [newContract, setNewContract] = useState(false);
   if (loading && !data) return <div className="page"><Loading /></div>;

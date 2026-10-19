@@ -8,6 +8,7 @@ import { ago, fmtDate, fmtDateTime, cleanName, fmtTime } from '../../lib/format.
 import { FORMATS, SEVERITY } from '../../lib/status.js';
 import { Button, Empty, Tag, Drawer, Risk } from '../../components/ui.jsx';
 import { I } from '../../components/Icons.jsx';
+import { restoredOverlay } from '../../lib/nav.jsx';
 
 export const n2 = (v) => String(v ?? 0).padStart(2, '0');
 
@@ -108,7 +109,7 @@ export function PendRows({ items, empty = 'Nenhuma pendência crítica.' }) {
 
 // Clientes em risco com drill-down
 export function RiskList({ risks }) {
-  const [open, setOpen] = useState(null);
+  const [open, setOpen] = useState(() => restoredOverlay('cliente-risco'));
   if (!risks?.length) return <Empty title="Nenhum cliente em risco.">Todos os clientes estão dentro do esperado.</Empty>;
   return (
     <>
@@ -130,7 +131,7 @@ export function RiskDrawer({ r, onClose }) {
     : r.reasons.some((x) => x.includes('Bloqueado')) ? 'Cobrar o material com data-limite e desbloquear assim que chegar.'
     : 'Redistribuir a etapa atrasada ou renegociar o prazo com Operações.';
   return (
-    <Drawer open onClose={onClose} title={cleanName(r.name)} kicker="Cliente em risco">
+    <Drawer open onClose={onClose} restore={r} restoreKey="cliente-risco" title={cleanName(r.name)} kicker="Cliente em risco">
       <div className="row mb-5"><Risk level={r.level} />{r.strategist && <span className="sm muted">Estrategista: {r.strategist}</span>}</div>
       <div className="caps mb-2">Motivo do risco</div>
       <ul className="list mb-5">{r.reasons.map((x) => <li key={x} className="sm">{x}</li>)}</ul>

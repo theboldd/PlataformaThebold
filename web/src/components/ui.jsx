@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { STATUS, STATUS_GLYPH, RISK, FORMATS } from '../lib/status.js';
 import { initials, fmtDate, ago } from '../lib/format.js';
 import { I } from './Icons.jsx';
+import { useOverlayHistory } from '../lib/nav.jsx';
 
 // Botão com magnetismo sutil (usar só nas ações principais: APROVAR, SOLICITAR AJUSTE, CRIAR, AGENDAR)
 export function Button({ variant, size, magnetic, cursor, className = '', children, icon, arrow, ...p }) {
@@ -72,13 +73,16 @@ export function Modal({ open, onClose, title, children, wide, footer }) {
       </div>
     </div>, document.body);
 }
-export function Drawer({ open, onClose, title, kicker, children, wide }) {
-  useEffect(() => { if (!open) return; const h = (e) => e.key === 'Escape' && onClose?.(); window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }, [open, onClose]);
+export function Drawer({ open, onClose, title, kicker, children, wide, history = true, restore, restoreKey }) {
+  // abrir o painel entra no histórico: voltar (seta, navegador, gesto) fecha o painel em vez de sair da tela
+  const closeTracked = useOverlayHistory(history && open, onClose, restore, restoreKey);
+  const close = history ? closeTracked : onClose;
+  useEffect(() => { if (!open) return; const h = (e) => e.key === 'Escape' && close?.(); window.addEventListener('keydown', h); return () => window.removeEventListener('keydown', h); }, [open, close]);
   if (!open) return null;
   return createPortal(
-    <div className="overlay drawer-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()} role="dialog" aria-modal="true" aria-label={title}>
+    <div className="overlay drawer-overlay" onMouseDown={(e) => e.target === e.currentTarget && close?.()} role="dialog" aria-modal="true" aria-label={title}>
       <aside className={`drawer ${wide ? 'wide' : ''}`}>
-        <div className="row between mb-5"><div>{kicker && <div className="caps">{kicker}</div>}<h2 className="ed-lg">{title}</h2></div><Button variant="ghost" icon={<I.x />} onClick={onClose} aria-label="Fechar" /></div>
+        <div className="row between mb-5"><div>{kicker && <div className="caps">{kicker}</div>}<h2 className="ed-lg">{title}</h2></div><Button variant="ghost" icon={<I.x />} onClick={close} aria-label="Fechar" /></div>
         {children}
       </aside>
     </div>, document.body);

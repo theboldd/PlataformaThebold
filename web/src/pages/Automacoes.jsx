@@ -5,6 +5,7 @@ import { useApi, useAuth, useToast } from '../lib/hooks.js';
 import { useCrumbs } from '../components/Shell.jsx';
 import { Button, Empty, ErrorBox, Loading, PageHead, Section, Seg, Stat, Tabs, Tag } from '../components/ui.jsx';
 import { ago, fmtDateTime, cleanName } from '../lib/format.js';
+import { useUrlState } from '../lib/nav.jsx';
 
 const CLASS = { 1: 'Simples', 2: 'Regras', 3: 'Precisa de IA', 4: 'Aprovação humana' };
 const ENGINE = { regra: 'Regra', ia: 'IA', humano: 'Humano' };
@@ -13,7 +14,7 @@ const FN = { estrategia: 'Estrategista', revisao: 'Revisão', cliente: 'Cliente'
 
 export default function Automacoes() {
   useCrumbs('Automações');
-  const [tab, setTab] = useState('mapa');
+  const [tab, setTab] = useUrlState('aba', 'mapa');
   return (
     <div className="page">
       <PageHead kicker="Sistema" title="Automações" sub="O que o sistema faz sozinho: evento → condição → ação → responsável → notificação → prazo → motor → log. Regras determinísticas movem o processo; IA só interpreta." />
@@ -29,8 +30,8 @@ function Mapa() {
   const { data, error, loading, reload } = useApi('/automations');
   const auth = useAuth();
   const toast = useToast();
-  const [phase, setPhase] = useState('todas');
-  const [cls, setCls] = useState('todas');
+  const [phase, setPhase] = useUrlState('fase', 'todas');
+  const [cls, setCls] = useUrlState('classe', 'todas');
   if (loading && !data) return <Loading />;
   if (error) return <ErrorBox error={error} />;
   const list = data.automations.filter((a) => (phase === 'todas' || a.phase === phase) && (cls === 'todas' || String(a.class) === cls));
@@ -71,7 +72,7 @@ function Mapa() {
 
 function Runs() {
   const { data, error, loading } = useApi('/automations');
-  const [q, setQ] = useState('');
+  const [q, setQ] = useUrlState('q', '');
   if (loading && !data) return <Loading />;
   if (error) return <ErrorBox error={error} />;
   const runs = data.runs.filter((r) => !q || r.automation_key.includes(q) || (r.detail || '').toLowerCase().includes(q.toLowerCase()) || (r.client_name || '').toLowerCase().includes(q.toLowerCase()));

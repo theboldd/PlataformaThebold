@@ -13,6 +13,7 @@ import { CompareVersions, VersionChips } from './production/Versions.jsx';
 import { ClientTile } from './production/ClientTile.jsx';
 import '../styles/production.css';
 import '../styles/review.css';
+import { useUrlState } from '../lib/nav.jsx';
 
 export default function Revisao() {
   const { clientId } = useParams();
@@ -23,7 +24,7 @@ export default function Revisao() {
 function ClientPicker() {
   useCrumbs('Sala de Revisão');
   const { data, error, loading } = useApi('/review/clients');
-  const [q, setQ] = useState('');
+  const [q, setQ] = useUrlState('q', '');
   const list = (data || []).filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()));
   return (
     <div className="page">
@@ -110,7 +111,6 @@ function ClientRoom({ clientId }) {
   return (
     <div className="page rr" style={{ maxWidth: 1600 }}>
       <div className="rr-head">
-        <Link to="/revisao" className="btn btn-ghost btn-sm"><I.back size={14} /> Clientes</Link>
         <div className="grow">
           <div className="caps">Sala de Revisão</div>
           <h1 className="ed-xl">{cleanName(data.client.name)}</h1>

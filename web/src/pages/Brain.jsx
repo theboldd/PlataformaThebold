@@ -6,6 +6,7 @@ import { useCrumbs } from '../components/Shell.jsx';
 import { Section, Loading, Empty, Button, Tag } from '../components/ui.jsx';
 import { ago, cleanName } from '../lib/format.js';
 import '../styles/intel.css';
+import { useUrlState } from '../lib/nav.jsx';
 
 const SUGGESTED = ['Por que este cliente está atrasado?', 'Quais são os principais gargalos da produção?', 'Quais decisões foram tomadas na última reunião?', 'Qual é o tom de voz deste cliente?', 'Quais tarefas poderiam ser automatizadas?', 'Quais clientes estão aguardando aprovação?'];
 const LABELS = { cliente: 'Cliente', client_brain: 'Client Brain', conteudos: 'Conteúdos', historico_conteudo: 'Histórico do conteúdo', ajustes: 'Ajustes', comentarios: 'Comentários', metricas: 'Métricas da operação', pendencias: 'Pendências', insights: 'Insights', carga_equipe: 'Carga da equipe', reunioes: 'Reuniões', financeiro: 'Financeiro', pipeline: 'Pipeline comercial' };
@@ -16,7 +17,7 @@ export default function Brain() {
   const { data: meta, reload } = useApi('/brain/agents', [], { live: false });
   const { data: clients } = useApi('/clients', [], { live: false });
   const [q, setQ] = useState('');
-  const [agent, setAgent] = useState('brain');
+  const [agent, setAgent] = useUrlState('agente', 'brain');
   const [client, setClient] = useState('');
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState(null);

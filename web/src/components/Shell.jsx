@@ -6,12 +6,16 @@ import { useAuth, useLiveStream } from '../lib/hooks.js';
 import { api } from '../lib/api.js';
 import { ago } from '../lib/format.js';
 import { LEVEL } from '../lib/status.js';
+import { NavHistory, BackLink, useNavLabel } from '../lib/nav.jsx';
 
 const CrumbCtx = createContext(() => {});
 export function useCrumbs(...parts) {
   const set = useContext(CrumbCtx);
   const key = parts.join('/');
   useEffect(() => { set(parts.filter(Boolean)); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  // o último nível do breadcrumb é o nome desta tela no "← voltar" de quem vier depois
+  const last = parts.filter(Boolean).at(-1);
+  useNavLabel(last && last !== '…' ? last : null);
 }
 
 // Navegação: cada item exige uma permissão de módulo (vinda do servidor). O cliente nunca vê módulos internos.
@@ -49,6 +53,10 @@ const NAV = [
   ] },
 ];
 
+// Telas de primeiro nível (itens do menu): não mostram "voltar"
+const TOP = new Set(NAV.flatMap((g) => g.items.map((n) => n.to)));
+const TOP_LABEL = Object.fromEntries(NAV.flatMap((g) => g.items.map((n) => [n.to, n.label])));
+
 export function Shell({ children }) {
   const auth = useAuth();
   const [crumbs, setCrumbs] = useState([]);
@@ -73,6 +81,7 @@ export function Shell({ children }) {
   const allowed = (n) => (n.team ? auth.internal : auth.permissions[n.mod]?.includes('view')) && (n.special !== 'pendencias' || auth.pendencias);
   const groups = NAV.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length);
   return (
+    <NavHistory top={TOP} labels={TOP_LABEL}>
     <CrumbCtx.Provider value={setCrumbs}>
       <div className={`shell ${navOpen ? 'nav-open' : ''}`}>
         <aside className="sidebar" aria-label="Navegação principal">
@@ -104,11 +113,12 @@ export function Shell({ children }) {
               <Button variant="ghost" className="bell" icon={<I.bell />} onClick={() => setNotifOpen(true)} aria-label={`Notificações (${unread} não lidas)`}>{unread > 0 && <span className="dot">{unread > 99 ? '99+' : unread}</span>}</Button>
             </div>
           </header>
-          <main id="main">{children}</main>
+          <main id="main"><BackLink />{children}</main>
         </div>
         <Notifications open={notifOpen} onClose={() => { setNotifOpen(false); refreshCounts(); }} />
       </div>
     </CrumbCtx.Provider>
+    </NavHistory>
   );
 }
 
@@ -121,7 +131,7 @@ export function Notifications({ open, onClose }) {
   const items = (data?.items || []).filter((n) => filter === 'todas' || n.level === filter);
   const openItem = async (n) => { await api.post(`/notifications/${n.id}/read`); onClose(); if (n.link) nav(n.link); };
   return (
-    <Drawer open={open} onClose={onClose} title="Notificações" kicker={`${data?.unread ?? 0} não lidas`}>
+    <Drawer open={open} onClose={onClose} history={false} title="Notificações" kicker={`${data?.unread ?? 0} não lidas`}>
       <div className="row between mb-4 wrap">
         <div className="seg">{['todas', 'urgente', 'atencao', 'info'].map((f) => <button key={f} className={filter === f ? 'active' : ''} onClick={() => setFilter(f)}>{f === 'todas' ? 'Todas' : LEVEL[f]}</button>)}</div>
         <Button size="sm" variant="ghost" onClick={async () => { await api.post('/notifications/read-all'); setData(await api.get('/notifications')); }}>Marcar todas como lidas</Button>

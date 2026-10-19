@@ -17,11 +17,13 @@ export default function Reunioes() {
   useCrumbs('Reuniões');
   const auth = useAuth();
   const [params, setParams] = useSearchParams();
-  const [tab, setTab] = useState(params.get('m') ? 'inteligencia' : 'agenda');
+  // aba e reunião aberta ficam na URL: abrir uma reunião pela Agenda entra no histórico (voltar devolve a Agenda)
+  const tab = params.get('aba') || (params.get('m') ? 'inteligencia' : 'agenda');
+  const setTab = (t) => setParams((p) => { const n = new URLSearchParams(p); if (t === 'agenda') n.delete('aba'); else n.set('aba', t); if (t !== 'inteligencia') n.delete('m'); return n; }, { replace: true });
   const { data, error, loading, reload } = useApi('/meetings');
   const [creating, setCreating] = useState(false);
   const sel = params.get('m');
-  const setSel = (id) => { setParams(id ? { m: id } : {}); if (id) setTab('inteligencia'); };
+  const setSel = (id, { replace = false } = {}) => setParams(id ? { aba: 'inteligencia', m: id } : {}, { replace: replace || tab === 'inteligencia' });
   if (loading && !data) return <div className="page"><Loading rows={8} /></div>;
   if (error) return <div className="page"><ErrorBox error={error} /></div>;
   return (
@@ -87,7 +89,7 @@ function Agenda({ data, onOpen }) {
 function Intelligence({ data, sel, setSel, reload }) {
   const list = [...data.meetings].sort((a, b) => b.starts_at.localeCompare(a.starts_at));
   const m = data.meetings.find((x) => x.id === sel) || null;
-  useEffect(() => { if (!sel && list[0]) { const firstPast = list.find((x) => x.status === 'realizada') || list[0]; setSel(firstPast.id); } }, [sel]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!sel && list[0]) { const firstPast = list.find((x) => x.status === 'realizada') || list[0]; setSel(firstPast.id, { replace: true }); } }, [sel]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="cols" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.6fr)' }}>
       <div>{list.map((x) => <MeetingRow key={x.id} m={x} onOpen={setSel} selected={x.id === sel} />)}</div>

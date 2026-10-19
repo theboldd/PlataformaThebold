@@ -54,3 +54,19 @@
 .notif .lvl.urgente { background: var(--err); }
 .notif .lvl.info { background: var(--info); }
 .notif .count { font-size: 10px; background: var(--surface-2); padding: 1px 6px; border-radius: 999px; margin-left: 6px; color: var(--muted); }
+
+/* ← Voltar: padrão global das telas internas (lib/nav.jsx) */
+.backbar { max-width: 1480px; margin: 0 auto; padding: var(--sp-5) var(--sp-7) 0; }
+.backbar + .page, .backbar + * > .page:first-child { padding-top: var(--sp-3); }
+.back-link { display: inline-flex; align-items: center; gap: 10px; min-height: 32px; padding: 4px 10px 4px 0; margin-left: -2px; color: var(--muted); text-decoration: none; font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-weight: 600; max-width: 100%; }
+.back-arrow { font-size: 15px; line-height: 1; letter-spacing: 0; transition: transform var(--t-fast) var(--ease-out); }
+.back-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid transparent; transition: border-color var(--t-fast), color var(--t-fast); }
+.back-link:hover { color: var(--ink); }
+.back-link:hover .back-arrow { transform: translateX(-3px); }
+.back-link:hover .back-text { border-bottom-color: currentColor; }
+.back-link:focus-visible { outline: 2px solid var(--bordo); outline-offset: 3px; border-radius: 2px; }
+@media (max-width: 900px) {
+  .backbar { padding: var(--sp-4) var(--sp-4) 0; }
+  .back-link { min-height: 40px; }
+  .back-text { max-width: 60vw; }
+}

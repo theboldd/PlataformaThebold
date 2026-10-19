@@ -9,18 +9,19 @@ import { cleanName } from '../lib/format.js';
 import { FUNCTIONS } from '../lib/status.js';
 import '../styles/production.css';
 import { ClientTile } from './production/ClientTile.jsx';
+import { useUrlState } from '../lib/nav.jsx';
 
 const STATUS = { onboarding: 'Onboarding', ativo: 'Ativo', pausado: 'Pausado', encerrado: 'Encerrado', a_confirmar: 'A confirmar' };
 
 export default function Clientes() {
   useCrumbs('Clientes');
   const auth = useAuth();
-  const [q, setQ] = useState('');
+  const [q, setQ] = useUrlState('q', '');
   const [open, setOpen] = useState(false);
   const { data, error, loading, reload } = useApi('/clients');
   const ql = q.toLowerCase().replace(/^@/, '');
   const list = (data || []).filter((c) => !ql || c.name.toLowerCase().includes(ql) || (c.segment || '').toLowerCase().includes(ql) || (c.handle || '').toLowerCase().includes(ql));
-  const [sort, setSort] = useState('nome');
+  const [sort, setSort] = useUrlState('ordem', 'nome');
   const SORTS = {
     nome: (a, b) => cleanName(a.name).localeCompare(cleanName(b.name)),
     aprovacao: (a, b) => (b.counts.aprovacao || 0) - (a.counts.aprovacao || 0),

@@ -8,6 +8,7 @@ import { Avatar, Button, Drawer, Empty, ErrorBox, Field, Loading, Modal, PageHea
 import { I } from '../components/Icons.jsx';
 import { ago, cleanName } from '../lib/format.js';
 import { FUNCTIONS } from '../lib/status.js';
+import { useUrlState } from '../lib/nav.jsx';
 
 const ACT = { view: 'Ver', create: 'Criar', edit: 'Editar', approve: 'Aprovar', admin: 'Admin' };
 const OP_FUNCS = ['estrategia', 'design', 'edicao', 'copy', 'revisao', 'agendamento', 'atendimento'];
@@ -16,9 +17,9 @@ export default function Usuarios() {
   useCrumbs('Usuários');
   const { data, error, loading, reload } = useApi('/users');
   const [clients, setClients] = useState([]);
-  const [tab, setTab] = useState('pessoas');
-  const [q, setQ] = useState('');
-  const [kind, setKind] = useState('equipe');
+  const [tab, setTab] = useUrlState('aba', 'pessoas');
+  const [q, setQ] = useUrlState('q', '');
+  const [kind, setKind] = useUrlState('tipo', 'equipe');
   const [edit, setEdit] = useState(null);
   const [create, setCreate] = useState(false);
   const auth = useAuth();

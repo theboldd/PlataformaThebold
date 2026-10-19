@@ -12,6 +12,7 @@ import { money, fmtDateTime, fmtDate, cleanName, ago } from '../lib/format.js';
 import { FUNCTIONS, FORMATS } from '../lib/status.js';
 import { ContentRows, MeetingRows, n2 } from './intel/parts.jsx';
 import '../styles/tower.css';
+import { restoredOverlay } from '../lib/nav.jsx';
 
 const PERIODS = [{ value: 'hoje', label: 'Hoje' }, { value: '7d', label: '7 dias' }, { value: '30d', label: '30 dias' }, { value: 'custom', label: 'Personalizado' }];
 const FILTERS = ['client_id', 'assignee_id', 'stage', 'format', 'priority'];
@@ -32,7 +33,7 @@ export default function Torre() {
     return p.toString();
   }, [params]);
   const { data: d, error, loading } = useApi(`/torre${qs ? `?${qs}` : ''}`, [qs]);
-  const [drawer, setDrawer] = useState(null);
+  const [drawer, setDrawer] = useState(() => restoredOverlay('torre'));
   const set = (patch) => setParams((p) => { const n = new URLSearchParams(p); for (const [k, v] of Object.entries(patch)) { if (v) n.set(k, v); else n.delete(k); } n.delete('tab'); return n; }, { replace: true });
 
   // Links antigos (?tab=pessoas, ?tab=prazos…) continuam funcionando
@@ -439,7 +440,7 @@ function TowerDrawer({ drawer, d, params, onClose }) {
   if (!drawer) return null;
   const titles = { stage: drawer.label, person: drawer.label, prazos: 'Prazos', automacoes: 'Execuções de automação', reports: 'Relatórios', reunioes: 'Reuniões · próximos 7 dias' };
   return (
-    <Drawer open onClose={onClose} title={titles[drawer.kind]} kicker="Torre de Controle" wide>
+    <Drawer open onClose={onClose} restore={drawer} restoreKey="torre" title={titles[drawer.kind]} kicker="Torre de Controle" wide>
       {drawer.kind === 'stage' && <StageItems stage={drawer.stage} params={params} />}
       {drawer.kind === 'person' && <PersonTasks id={drawer.id} />}
       {drawer.kind === 'prazos' && (d.deadlines.length ? d.deadlines.map((t) => (

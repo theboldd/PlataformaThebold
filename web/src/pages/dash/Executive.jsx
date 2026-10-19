@@ -9,6 +9,7 @@ import { I } from '../../components/Icons.jsx';
 import { ContentRows } from '../intel/parts.jsx';
 import { cleanName, fmtDate, fmtWeekday, greeting, firstName, money } from '../../lib/format.js';
 import '../../styles/exec.css';
+import { restoredOverlay } from '../../lib/nav.jsx';
 
 const pad = (n) => String(n).padStart(2, '0');
 const pl = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -42,7 +43,7 @@ export default function Executive() {
   const [params, setParams] = useSearchParams();
   const qs = useMemo(() => { const p = new URLSearchParams(); for (const k of ['period', 'from', 'to']) if (params.get(k)) p.set(k, params.get(k)); return p.toString(); }, [params]);
   const { data, error, loading } = useApi(`/dashboard${qs ? `?${qs}` : ''}`, [qs]);
-  const [drawer, setDrawer] = useState(null);
+  const [drawer, setDrawer] = useState(() => restoredOverlay('visao-geral'));
   const set = (patch) => setParams((p) => { const n = new URLSearchParams(p); for (const [k, v] of Object.entries(patch)) { if (v) n.set(k, v); else n.delete(k); } return n; }, { replace: true });
   const period = params.get('period') || '7d';
   const today = new Date();
@@ -206,7 +207,7 @@ export default function Executive() {
 function ExecDrawer({ drawer, risks, onClose }) {
   if (!drawer) return null;
   return (
-    <Drawer open onClose={onClose} title={drawer.kind === 'risk' ? 'Clientes em risco' : drawer.title} kicker="Visão geral" wide={drawer.kind === 'stage'}>
+    <Drawer open onClose={onClose} restore={drawer} restoreKey="visao-geral" title={drawer.kind === 'risk' ? 'Clientes em risco' : drawer.title} kicker="Visão geral" wide={drawer.kind === 'stage'}>
       {drawer.kind === 'risk' && (!risks.length ? <Empty title="Nenhum cliente em risco." /> : (
         <ul className="ex-rec">{risks.map((r) => (
           <li key={r.id}><Link to={`/clientes/${r.id}`}><b>{cleanName(r.name)}</b><small>Risco {RISK[r.level]} · {r.reasons.slice(0, 3).join(' · ') || 'calculado pelos conteúdos do cliente'}</small><I.arrow size={13} /></Link></li>

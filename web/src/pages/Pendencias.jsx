@@ -10,6 +10,7 @@ import { I } from '../components/Icons.jsx';
 import { fmtDateTime, ago, cleanName } from '../lib/format.js';
 import { FUNCTIONS } from '../lib/status.js';
 import '../styles/pend.css';
+import { useDetailParam } from '../lib/nav.jsx';
 
 const SEV = [['critica', 'Críticas'], ['alta', 'Altas'], ['media', 'Médias'], ['baixa', 'Baixas']];
 const SEV1 = { critica: 'Crítica', alta: 'Alta', media: 'Média', baixa: 'Baixa' };
@@ -23,7 +24,7 @@ export default function Pendencias() {
   const [params, setParams] = useSearchParams();
   const f = Object.fromEntries(KEYS.map((k) => [k, params.get(k) || '']));
   const set = (k, v) => setParams((p) => { const n = new URLSearchParams(p); if (v && n.get(k) !== v) n.set(k, v); else n.delete(k); return n; }, { replace: true });
-  const open = params.get('p');
+  const [open, openDetail, closeDetail] = useDetailParam('p'); // detalhe no histórico: voltar fecha e devolve a lista
   const items = data?.items || [];
   const shown = useMemo(() => items.filter((i) => (!f.sev || i.severity === f.sev) && (!f.cause || i.cause === f.cause) && (!f.client || i.client_id === f.client) && (!f.who || i.who === f.who) && (!f.process || i.process === f.process)),
     [items, f.sev, f.cause, f.client, f.who, f.process]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -98,7 +99,7 @@ export default function Pendencias() {
                   {shown.map((p, i) => (
                     <li key={p.id}>
                       {(i === 0 || shown[i - 1].severity !== p.severity) && <div className={`pd-group s-${p.severity}`}>{SEV.find(([k]) => k === p.severity)[1]} · {shown.filter((x) => x.severity === p.severity).length}</div>}
-                      <button className={`pd-item s-${p.severity}`} onClick={() => set('p', p.id)} aria-label={`${SEV1[p.severity]}: ${p.problem || p.title}. Abrir detalhe`}>
+                      <button className={`pd-item s-${p.severity}`} onClick={() => openDetail(p.id)} aria-label={`${SEV1[p.severity]}: ${p.problem || p.title}. Abrir detalhe`}>
                         <span className="pd-rail" aria-hidden />
                         <span className="pd-i-top">
                           <span className={`pd-badge s-${p.severity}`}><i aria-hidden />{SEV1[p.severity]}</span>
@@ -129,7 +130,7 @@ export default function Pendencias() {
         </>
       )}
 
-      {open && <Detail id={open} onClose={() => set('p', '')} onChanged={reload} />}
+      {open && <Detail id={open} onClose={closeDetail} onChanged={reload} />}
     </div>
   );
 }
@@ -153,11 +154,11 @@ function Detail({ id, onClose, onChanged }) {
   const [taskTitle, setTaskTitle] = useState('');
   const [busy, setBusy] = useState(false);
   const run = async (fn, ok) => { setBusy(true); try { await fn(); toast(ok); reload(); onChanged(); } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); } };
-  if (error) return <Drawer open onClose={onClose} title="Pendência" kicker="Centro de Pendências"><ErrorBox error={error} /><p className="sm muted mt-4">Se ela foi resolvida, já saiu do radar.</p></Drawer>;
+  if (error) return <Drawer open history={false} onClose={onClose} title="Pendência" kicker="Centro de Pendências"><ErrorBox error={error} /><p className="sm muted mt-4">Se ela foi resolvida, já saiu do radar.</p></Drawer>;
   const d = data;
   const p = d?.item;
   return (
-    <Drawer open onClose={onClose} title={p ? (p.problem || p.title) : 'Pendência'} kicker={p ? `${SEV1[p.severity]} · ${p.cause_label}` : 'Centro de Pendências'} wide>
+    <Drawer open history={false} onClose={onClose} title={p ? (p.problem || p.title) : 'Pendência'} kicker={p ? `${SEV1[p.severity]} · ${p.cause_label}` : 'Centro de Pendências'} wide>
       {loading || !d ? <Loading rows={6} /> : (
         <div className="pd-detail">
           <dl className="pd-dl">

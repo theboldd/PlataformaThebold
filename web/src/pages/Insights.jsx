@@ -6,6 +6,7 @@ import { useCrumbs } from '../components/Shell.jsx';
 import { PageHead, Loading, Empty, Tabs, Button, ErrorBox, Tag } from '../components/ui.jsx';
 import { ago } from '../lib/format.js';
 import '../styles/intel.css';
+import { useUrlState } from '../lib/nav.jsx';
 
 const DET = { retrabalho: 'Retrabalho', gargalo: 'Gargalo', tempo_aprovacao: 'Tempo de aprovação', carga: 'Excesso de carga', material: 'Material ausente', dependencia: 'Dependência manual', sem_responsavel: 'Sem responsável' };
 const SEV = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
@@ -14,7 +15,7 @@ export default function Insights() {
   useCrumbs('Insights');
   const auth = useAuth();
   const toast = useToast();
-  const [status, setStatus] = useState('aberto');
+  const [status, setStatus] = useUrlState('status', 'aberto');
   const { data, error, loading, reload } = useApi(`/insights?status=${status}`, [status]);
   const [busy, setBusy] = useState(false);
   const canEdit = auth.can('insights', 'edit');

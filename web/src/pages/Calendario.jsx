@@ -7,6 +7,7 @@ import { I } from '../components/Icons.jsx';
 import { fmtTime, cleanName } from '../lib/format.js';
 import { STATUS, STATUS_GLYPH, FORMATS } from '../lib/status.js';
 import '../styles/intel.css';
+import { useUrlState } from '../lib/nav.jsx';
 
 const TZ = 'America/Sao_Paulo';
 const key = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: TZ });
@@ -20,10 +21,10 @@ export default function Calendario() {
   useCrumbs('Calendário');
   const nav = useNavigate();
   const today = key(new Date());
-  const [view, setView] = useState(() => (window.innerWidth < 720 ? 'agenda' : 'mes'));
-  const [anchor, setAnchor] = useState(today);
-  const [client, setClient] = useState('');
-  const [mine, setMine] = useState(false);
+  const [view, setView] = useUrlState('ver', window.innerWidth < 720 ? 'agenda' : 'mes');
+  const [anchor, setAnchor] = useUrlState('data', today);
+  const [client, setClient] = useUrlState('cliente', '');
+  const [mine, setMine] = useUrlState('meus', false);
   const [types, setTypes] = useState(TYPES.map((t) => t.value));
   const { data: clients } = useApi('/clients', [], { live: false });
 

@@ -37,9 +37,27 @@ const PortalApp = P(() => import('./portal/PortalApp.jsx'));
 export default function App() {
   const [auth, setAuth] = useState(undefined);
   const [toasts, setToasts] = useState([]);
-  const load = useCallback(async () => { try { setAuth(await api.get('/auth/me')); } catch { setAuth(null); } }, []);
-  useEffect(() => { load(); const h = () => setAuth(null); window.addEventListener('bold:unauthorized', h); return () => window.removeEventListener('bold:unauthorized', h); }, [load]);
+  const [down, setDown] = useState(false);
+  // Sessão: só um 401 de verdade leva ao login. Falha de rede/servidor (ex.: função reiniciando no Vercel)
+  // tenta de novo em vez de "deslogar" quem atualizou a página.
+  const load = useCallback(async () => {
+    for (let i = 0; i < 4; i++) {
+      try { setAuth(await api.get('/auth/me')); setDown(false); return; } catch (e) {
+        if (e.status === 401 || e.status === 403) { setAuth(null); setDown(false); return; }
+        await new Promise((r) => setTimeout(r, 600 * (i + 1)));
+      }
+    }
+    setDown(true);
+  }, []);
+  useEffect(() => {
+    load();
+    // um 401 isolado numa tela: confirma a sessão antes de mandar para o login
+    const h = () => { api.get('/auth/me').then(setAuth).catch((e) => { if (e.status === 401) setAuth(null); }); };
+    window.addEventListener('bold:unauthorized', h);
+    return () => window.removeEventListener('bold:unauthorized', h);
+  }, [load]);
   const toast = useCallback((msg, kind = 'ok') => { const id = Math.random(); setToasts((t) => [...t, { id, msg, kind }]); setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3800); }, []);
+  if (down && auth === undefined) return <div className="page"><div className="panel">Não foi possível falar com o servidor agora. <button className="btn btn-sm" onClick={() => { setDown(false); load(); }}>Tentar de novo</button></div></div>;
   if (auth === undefined) return <div className="page"><Loading /></div>;
   const logout = async () => { await api.post('/auth/logout'); setAuth(null); window.history.replaceState(null, '', '/'); };
   const can = (mod, act = 'view') => !!auth?.permissions?.[mod]?.includes(act);
