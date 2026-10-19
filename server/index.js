@@ -44,7 +44,7 @@ export function createApp() {
   app.use(express.json({ limit: '2mb' }));
   app.use(loadUser);
   app.use(csrf);
-  app.get('/api/health', (_req, res) => res.json({ ok: true, db: !!one('SELECT 1 ok') }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, db: !!one('SELECT 1 ok'), version: (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || null }));
   app.get('/api/integrations/:provider/callback', (req, res) => oauthCallback(req.params.provider, req, res));
   app.use('/api', core);
   app.use('/api/portal', portal);
