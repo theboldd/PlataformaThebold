@@ -14,8 +14,6 @@
 .dv-th { font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-weight: 700; color: var(--muted); padding: 8px 0; }
 .dv-who { display: flex; gap: 10px; align-items: center; }
 .dv-who b { display: block; } .dv-who small { color: var(--muted); }
-.dv-fn { display: inline-block; font-size: var(--fs-xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; background: var(--surface-2, #eee); }
-.dv-fn.f-estrategia { background: #f6eccb; } .dv-fn.f-design { background: #dde8f4; } .dv-fn.f-edicao { background: #f4dde6; } .dv-fn.f-copy { background: #e2efdf; } .dv-fn.f-atendimento { background: #ece6f4; }
 .dv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .dv-chip { display: inline-flex; gap: 6px; align-items: baseline; border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; background: var(--surface); }
 .dv-chip i, .dv-sec { font-style: normal; font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: .05em; }
@@ -34,4 +32,29 @@
   .dv-tr { grid-template-columns: 1fr; gap: 6px; }
   .dv-th { display: none; }
   .dv-q { width: 100%; }
+}
+
+/* Funções bem visíveis: etiqueta sólida com cor própria por função */
+.dv-fn { display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #fff; background: var(--ink-2); white-space: nowrap; }
+.dv-fn b { font-weight: 700; padding-left: 8px; border-left: 1px solid rgba(255,255,255,.35); font-variant-numeric: tabular-nums; }
+.dv-fn.f-estrategia { background: #8A5A1E; } .dv-fn.f-copy { background: #3E6A4E; } .dv-fn.f-design { background: #1F3A4D; }
+.dv-fn.f-edicao { background: #5B2A55; } .dv-fn.f-atendimento { background: #2F5F63; } .dv-fn.f-revisao { background: #7A3B2E; } .dv-fn.f-agendamento { background: #3B3734; }
+
+/* Por pessoa: um bloco por pessoa, uma linha por função */
+.dv-people { display: grid; gap: var(--sp-4); }
+.dv-person { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: var(--sp-4) var(--sp-5); }
+.dv-person-head { display: flex; align-items: center; gap: 12px; padding-bottom: var(--sp-3); margin-bottom: var(--sp-2); border-bottom: 1px solid var(--line); }
+.dv-person-head b { display: block; font-size: 17px; } .dv-person-head small { color: var(--muted); font-size: var(--fs-sm); }
+.dv-fnrow { display: grid; grid-template-columns: 190px 1fr; gap: var(--sp-4); align-items: start; padding: 10px 0; }
+.dv-fnrow + .dv-fnrow { border-top: 1px dashed var(--line); }
+.dv-x { border: 0; background: none; color: var(--muted); font-size: 16px; line-height: 1; padding: 0 2px; cursor: pointer; border-radius: 4px; }
+.dv-x:hover { color: var(--bordo); background: var(--bordo-soft); }
+.dv-add { border: 1px dashed var(--line-strong, rgba(11,11,11,.25)); background: none; color: var(--muted); border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+.dv-add:hover { color: var(--ink); border-color: var(--ink); }
+.dv-add.sm { padding: 0 8px; margin-top: 4px; }
+.dv-cellp { display: flex; align-items: center; gap: 4px; }
+.dv-grid thead th { vertical-align: middle; }
+@media (max-width: 720px) {
+  .dv-fnrow { grid-template-columns: 1fr; gap: 8px; }
+  .dv-person { padding: var(--sp-3) var(--sp-4); }
 }

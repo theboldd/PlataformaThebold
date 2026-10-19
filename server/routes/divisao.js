@@ -1,9 +1,12 @@
 // DIVISÃO DE CLIENTES — quem cuida de cada cliente (equivalente à DIVISÃO EQUIPE do Notion).
-// Leitura liberada a toda a equipe interna; a fonte é client_members (editado na aba Equipe de cada cliente).
+// Leitura liberada a toda a equipe interna; a fonte é client_members.
+// Vincular/desvincular: só quem tem divisao:edit (a CEO, ou quem ela liberar em Usuários).
 import { Router } from 'express';
-import { all } from '../db.js';
-import { requireInternal } from '../lib/auth.js';
-import { canAccessClient, can } from '../lib/permissions.js';
+import { all, one, run, update, tx } from '../db.js';
+import { requireInternal, requirePerm } from '../lib/auth.js';
+import { canAccessClient, can, HttpError } from '../lib/permissions.js';
+import { log, notify } from '../lib/core.js';
+import { resolveAssignee } from '../engine/process.js';
 
 export const divisao = Router();
 
@@ -38,6 +41,48 @@ divisao.get('/divisao', requireInternal, (req, res) => {
     clients: out,
     people: [...people.values()].map((p) => ({ ...p, clients: p.clients.size })).sort((a, b) => b.clients - a.clients || a.name.localeCompare(b.name)),
     functions: ORDER.filter((f) => used.has(f) || CORE.includes(f)),
-    can_edit: can(req.user, 'clientes', 'admin'),
+    can_edit: can(req.user, 'divisao', 'edit'),
+    team: can(req.user, 'divisao', 'edit') ? all("SELECT id, name, functions FROM users WHERE active=1 AND role_key<>'cliente' ORDER BY name").map((u) => ({ ...u, functions: JSON.parse(u.functions || '[]') })) : [],
   });
+});
+
+const FN_OK = new Set(ORDER);
+function input(req) {
+  const { client_id, user_id, function: fn } = req.body || {};
+  const c = one('SELECT id, name FROM clients WHERE id=?', client_id);
+  const u = one("SELECT id, name FROM users WHERE id=? AND active=1 AND role_key<>'cliente'", user_id);
+  if (!c || !u || !FN_OK.has(fn)) throw new HttpError(422, 'Informe cliente, pessoa da equipe e função.');
+  return { c, u, fn };
+}
+const fnLabel = (fn) => ({ estrategia: 'estratégia', copy: 'copy/legenda', design: 'design', edicao: 'edição de vídeo', revisao: 'revisão', agendamento: 'agendamento', atendimento: 'atendimento' }[fn] || fn);
+
+// Vincular: a pessoa passa a receber as tarefas daquela função no cliente (as que estavam sem dono já vão para ela)
+divisao.post('/divisao/vinculo', requirePerm('divisao', 'edit'), (req, res) => {
+  const { c, u, fn } = input(req);
+  let given = 0;
+  tx(() => {
+    run('INSERT OR IGNORE INTO client_members (client_id,user_id,function) VALUES (?,?,?)', c.id, u.id, fn);
+    run("INSERT OR IGNORE INTO channel_members (channel_id,user_id) SELECT id, ? FROM channels WHERE client_id=? AND kind='cliente'", u.id, c.id);
+    for (const t of all("SELECT * FROM tasks WHERE client_id=? AND function=? AND assignee_id IS NULL AND status IN ('aberta','em_andamento')", c.id, fn)) { update('tasks', { id: t.id }, { assignee_id: u.id }); given++; }
+  });
+  if (given) notify(u.id, { level: 'info', type: 'tarefa', title: `${c.name}: ${given} tarefa(s) de ${fnLabel(fn)}`, body: 'Você foi vinculado(a) a este cliente na Divisão.', link: '/processos', client: c.id });
+  log({ actor: req.user.id, action: 'divisao.vinculo', entity: 'client', id: c.id, client: c.id, summary: `${u.name} vinculado(a) a ${c.name} em ${fnLabel(fn)}${given ? ` · ${given} tarefa(s) sem dono atribuída(s)` : ''}` });
+  res.json({ ok: true, tasks: given });
+});
+
+// Desvincular: as tarefas abertas dessa pessoa naquela função passam para outra pessoa da função; sem ninguém, ficam sem dono (pendência)
+divisao.post('/divisao/desvinculo', requirePerm('divisao', 'edit'), (req, res) => {
+  const { c, u, fn } = input(req);
+  const moved = [];
+  tx(() => {
+    run('DELETE FROM client_members WHERE client_id=? AND user_id=? AND function=?', c.id, u.id, fn);
+    for (const t of all("SELECT * FROM tasks WHERE client_id=? AND function=? AND assignee_id=? AND status IN ('aberta','em_andamento')", c.id, fn, u.id)) {
+      const next = resolveAssignee(c.id, fn);
+      update('tasks', { id: t.id }, { assignee_id: next });
+      moved.push(next);
+    }
+  });
+  const orphan = moved.filter((x) => !x).length;
+  log({ actor: req.user.id, action: 'divisao.desvinculo', entity: 'client', id: c.id, client: c.id, summary: `${u.name} desvinculado(a) de ${c.name} em ${fnLabel(fn)}${moved.length ? ` · ${moved.length} tarefa(s) aberta(s) repassada(s)${orphan ? `, ${orphan} sem responsável` : ''}` : ''}` });
+  res.json({ ok: true, moved: moved.length, orphan });
 });

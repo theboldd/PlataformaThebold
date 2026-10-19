@@ -91,6 +91,10 @@ core.put('/users/:id/clients', requirePerm('usuarios', 'admin'), (req, res) => {
   const u = one('SELECT * FROM users WHERE id=?', req.params.id);
   if (!u) throw new HttpError(404, 'Usuário não encontrado.');
   const links = Array.isArray(req.body?.links) ? req.body.links : [];
+  // vínculo de pessoa da equipe com cliente = Divisão de clientes (mesma regra da tela Divisão)
+  const sig = (list) => JSON.stringify(list.map((l) => `${l.client_id}:${l.function}`).sort());
+  const changed = sig(links) !== sig(all('SELECT client_id, function FROM client_members WHERE user_id=?', u.id));
+  if (changed && u.role_key !== 'cliente' && !can(req.user, 'divisao', 'edit')) throw new HttpError(403, 'Vincular ou desvincular clientes da equipe é liberado pela CEO (Divisão de clientes).');
   tx(() => {
     run('DELETE FROM client_members WHERE user_id=?', u.id);
     for (const l of links) insert('client_members', { client_id: l.client_id, user_id: u.id, function: u.role_key === 'cliente' ? 'cliente' : l.function });
@@ -102,6 +106,9 @@ core.put('/users/:id/permissions', requirePerm('usuarios', 'admin'), (req, res) 
   const u = one('SELECT * FROM users WHERE id=?', req.params.id);
   if (!u) throw new HttpError(404, 'Usuário não encontrado.');
   const ov = (req.body?.overrides || []).filter((o) => MODULES[o.module] && ACTIONS.includes(o.action) && ['grant', 'deny'].includes(o.effect));
+  // liberar/retirar a Divisão de clientes é decisão da CEO (divisao:admin)
+  const div = (list) => JSON.stringify(list.filter((o) => o.module === 'divisao').map((o) => `${o.effect}:${o.action}`).sort());
+  if (div(ov) !== div(all('SELECT module, action, effect FROM user_permissions WHERE user_id=?', u.id)) && !can(req.user, 'divisao', 'admin')) throw new HttpError(403, 'Só a CEO (ou quem tem a Divisão de clientes como administração) pode liberar quem vincula e desvincula clientes.');
   tx(() => { run('DELETE FROM user_permissions WHERE user_id=?', u.id); ov.forEach((o) => insert('user_permissions', { user_id: u.id, ...o })); });
   log({ actor: req.user.id, action: 'usuario.permissoes', entity: 'user', id: u.id, summary: `Permissões específicas de ${u.name}: ${ov.map((o) => `${o.effect} ${o.module}:${o.action}`).join(', ') || 'nenhuma'}` });
   res.json({ ok: true });
@@ -110,6 +117,8 @@ core.put('/roles/:key/permissions', requirePerm('usuarios', 'admin'), (req, res)
   const role = one('SELECT * FROM roles WHERE key=?', req.params.key);
   if (!role) throw new HttpError(404, 'Role não encontrado.');
   const perms = (req.body?.permissions || []).filter((p) => MODULES[p.module] && ACTIONS.includes(p.action));
+  const divR = (list) => JSON.stringify(list.filter((p) => p.module === 'divisao').map((p) => p.action).sort());
+  if (divR(perms) !== divR(all('SELECT module, action FROM role_permissions WHERE role_key=?', role.key)) && !can(req.user, 'divisao', 'admin')) throw new HttpError(403, 'Só a CEO pode mudar quem vincula e desvincula clientes da equipe.');
   tx(() => { run('DELETE FROM role_permissions WHERE role_key=?', role.key); perms.forEach((p) => insert('role_permissions', { role_key: role.key, module: p.module, action: p.action })); });
   log({ actor: req.user.id, action: 'role.permissoes', entity: 'role', id: role.key, summary: `Permissões do perfil ${role.label} atualizadas (${perms.length})` });
   res.json({ ok: true });

@@ -113,7 +113,7 @@ ops.post('/clients/:id/memories', requirePerm('clientes', 'edit'), (req, res) =>
   res.json(m);
 });
 ops.get('/clients/:id/brain.md', requirePerm('brain', 'view'), (req, res) => { assertClient(req.user, req.params.id); res.type('text/markdown').send(exportClientBrainMarkdown(req.params.id)); });
-ops.put('/clients/:id/team', requirePerm('clientes', 'admin'), (req, res) => {
+ops.put('/clients/:id/team', requirePerm('divisao', 'edit'), (req, res) => {
   assertClient(req.user, req.params.id);
   const members = (req.body?.members || []).filter((m) => m.user_id && m.function && m.function !== 'cliente');
   tx(() => {

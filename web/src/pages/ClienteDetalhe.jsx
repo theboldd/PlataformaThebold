@@ -273,7 +273,7 @@ function ContentsTab({ data }) {
 function TeamTab({ data, reload }) {
   const auth = useAuth();
   const toast = useToast();
-  const admin = auth.can('clientes', 'admin');
+  const admin = auth.can('divisao', 'edit');
   const { data: people } = useApi(admin ? '/users/directory' : null, [admin], { live: false });
   const fns = ['estrategia', 'copy', 'design', 'edicao', 'revisao', 'atendimento', 'agendamento'];
   const [members, setMembers] = useState([]);
