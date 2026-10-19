@@ -155,7 +155,7 @@ portal.post('/contents/:id/caption', (req, res) => {
   log({ actor: req.user.id, action: 'legenda.editada_cliente', entity: 'content', id: c.id, client: c.client_id, content: c.id, visibility: 'client',
     summary: `${req.user.name} editou a legenda (V${cur?.number} → V${v.number})`, before: cur?.caption, after: caption });
   const team = all("SELECT DISTINCT user_id FROM client_members WHERE client_id=? AND function IN ('estrategia','copy','atendimento')", c.client_id).map((r) => r.user_id);
-  notify(team, { level: 'atencao', type: 'legenda_cliente', title: `${one('SELECT name FROM clients WHERE id=?', c.client_id).name.replace(' [DEMO]', '')} editou uma legenda`, body: `#${c.number} ${c.title} — nova versão V${v.number}`, link: `/conteudos/${c.id}`, content: c.id, client: c.client_id });
+  notify(team, { level: 'atencao', type: 'legenda_cliente', title: `${one('SELECT name FROM clients WHERE id=?', c.client_id).name} editou uma legenda`, body: `#${c.number} ${c.title} — nova versão V${v.number}`, link: `/conteudos/${c.id}`, content: c.id, client: c.client_id });
   res.json(feedItem(one('SELECT * FROM contents WHERE id=?', c.id), one('SELECT * FROM clients WHERE id=?', c.client_id)));
 });
 // LIKE = aprovação formal (registra usuário, data/hora, IP, versão; congela a versão; avança o processo)

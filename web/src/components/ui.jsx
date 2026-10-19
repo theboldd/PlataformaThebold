@@ -95,7 +95,7 @@ export const Field = ({ label, children, hint }) => <div className="field"><labe
 export function ContentCard({ c, compact }) {
   const inner = (
     <>
-      <div className="row between"><span className="client clip">{c.client?.replace(' [DEMO]', '')}</span>{c.priority === 'alta' || c.priority === 'critica' ? <span className="sev sev-alta">● {c.priority}</span> : null}</div>
+      <div className="row between"><span className="client clip">{c.client}</span>{c.priority === 'alta' || c.priority === 'critica' ? <span className="sev sev-alta">● {c.priority}</span> : null}</div>
       <div className="row-top" style={{ gap: 10 }}>
         <div className="grow"><div className="title">#{c.number} {c.title}</div></div>
         {c.thumb && !compact && <img className="thumb" src={c.thumb} alt="" loading="lazy" />}

@@ -317,7 +317,7 @@ function ClientDecisionModal({ open, onClose, c, onSave, busy }) {
       <p className="sm muted" style={{ marginTop: 0 }}>Use quando o cliente respondeu fora da plataforma (ex.: WhatsApp). O registro fica marcado como feito pela equipe, com a origem informada.</p>
       <div className="col gap-4">
         <div className="seg"><button className={decision === 'aprovar' ? 'active' : ''} onClick={() => setDecision('aprovar')}>Aprovou</button><button className={decision === 'ajuste' ? 'active' : ''} onClick={() => setDecision('ajuste')}>Pediu ajuste</button></div>
-        <Field label="Origem (obrigatório)"><input className="input" value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder="Ex.: aprovado no WhatsApp 19/10 14h" /></Field>
+        <Field label="Origem (obrigatório)"><input className="input" value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder="Onde e quando o cliente aprovou" /></Field>
         {decision === 'ajuste' && <Field label="O que o cliente pediu?"><textarea className="textarea" value={note} onChange={(e) => setNote(e.target.value)} /></Field>}
         {decision === 'ajuste' && c.stage === 'aprovacao_cliente' && <div className="seg"><button className={size === 'normal' ? 'active' : ''} onClick={() => setSize('normal')}>Ajuste normal</button><button className={size === 'simples' ? 'active' : ''} onClick={() => setSize('simples')}>Ajuste simples (volta direto ao cliente)</button></div>}
       </div>

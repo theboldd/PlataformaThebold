@@ -44,8 +44,7 @@ export function createApp() {
   app.use(express.json({ limit: '2mb' }));
   app.use(loadUser);
   app.use(csrf);
-  // demo=true só quando o banco é a base de demonstração (npm run seed); a base real nunca mostra perfis de teste
-  app.get('/api/health', (_req, res) => res.json({ ok: true, db: !!one('SELECT 1 ok'), demo: !!one('SELECT 1 FROM clients WHERE is_demo=1 LIMIT 1') }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, db: !!one('SELECT 1 ok') }));
   app.get('/api/integrations/:provider/callback', (req, res) => oauthCallback(req.params.provider, req, res));
   app.use('/api', core);
   app.use('/api/portal', portal);

@@ -7,25 +7,14 @@ O sistema operacional interno da The Bold: processos, produção, aprovações, 
 Requer Node ≥ 22.5 (usa `node:sqlite`) e ffmpeg (para vídeos).
 ```bash
 npm install
-npm run seed        # cria o banco de demonstração passando pelo Process Engine (dados fictícios [DEMO])
+npm run base:real   # cria o banco com a equipe e importa os clientes reais do Notion (storage/migration/notion, fora do git)
 npm run build       # compila o frontend
 npm start           # http://localhost:4000
 # desenvolvimento: npm run dev  (API :4000 + Vite :5173)
 npm test            # testes do engine, permissões, auditoria e mídia
 ```
-Logins de demonstração (senha `thebold2026`):
-
-| Perfil | E-mail |
-|---|---|
-| CEO | rebeca@thebold.demo |
-| Operações | vitoria@thebold.demo |
-| Gestão | vivian@thebold.demo |
-| Qualidade | raisa@thebold.demo |
-| Estratégia | juliane@thebold.demo, monique@thebold.demo |
-| Design | felipe@thebold.demo |
-| Edição | leo@thebold.demo, nicole@thebold.demo |
-| Comercial | matheus@thebold.demo |
-| Clientes | helena@cliente.demo, vertice@cliente.demo, moretti@cliente.demo, atelier@cliente.demo, aurora@cliente.demo, sena@cliente.demo |
+Não existe base de exemplo: nenhum cliente, conteúdo ou texto fictício. Sem o levantamento do Notion, `npm run seed` cria só a equipe.
+Acesso da equipe: e-mail `<primeiro-nome>@thebold.demo` (provisório). Senha inicial local `thebold2026`; na cópia publicada, a senha forte de `storage/.team-password`.
 
 ## Variáveis de ambiente
 | Variável | Para quê |
@@ -57,5 +46,5 @@ O repositório já vem pronto para o Vercel: `vercel.json` publica o site (`web/
   - A chave fica em `storage/.snapshot-key`, fora do git.
   - Para regerar depois de alterar a base: `node scripts/pack-real.mjs`.
   - A senha da equipe nessa cópia é forte e própria (`storage/.team-password`); a senha de testes não funciona nela.
-- **Sem a chave:** a prévia abre a base de **demonstração** (`demo-snapshot/`, fictícia, marcada como demonstração no login).
+- **Sem a chave:** a API responde 503 ("base real não configurada"). Não existe base de exemplo.
 - **Instâncias:** cada instância da função trabalha numa cópia em `/tmp`, então as alterações feitas na prévia são temporárias. A versão definitiva, com dados persistentes, é banco e arquivos no Supabase.

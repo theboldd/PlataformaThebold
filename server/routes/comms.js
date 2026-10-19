@@ -206,7 +206,7 @@ export async function createMeeting(actor, { client_id, title, kind = 'mensal', 
   const people = [...new Set([...attendees, ...team, ...clientUsersIds, ...(isInternal(actor) ? [actor.id] : [])])];
   await conflictCheck(people.filter((id) => !clientUsersIds.includes(id)), s, e);
   const m = tx(() => {
-    const m = insert('meetings', { id: uid('mt_'), client_id: client_id || null, title: title.trim(), kind, starts_at: s, ends_at: e, location: location || 'Sala The Bold [PLACEHOLDER: link da videochamada]', status: 'agendada', booked_by: actor.id, summary: summary || null, created_at: now() });
+    const m = insert('meetings', { id: uid('mt_'), client_id: client_id || null, title: title.trim(), kind, starts_at: s, ends_at: e, location: location || null, status: 'agendada', booked_by: actor.id, summary: summary || null, created_at: now() });
     people.forEach((id) => run('INSERT OR IGNORE INTO meeting_attendees (meeting_id,user_id) VALUES (?,?)', m.id, id));
     if (slot_id) {
       const r = run('UPDATE meeting_slots SET meeting_id=? WHERE id=? AND meeting_id IS NULL', m.id, slot_id);

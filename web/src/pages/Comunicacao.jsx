@@ -282,7 +282,7 @@ function NewChannel({ onClose, onDone }) {
   return (
     <Modal open title="Novo canal" onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" onClick={submit}>Criar canal</Button></>}>
       <div className="col gap-4">
-        <Field label="Nome"><input className="input" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="ex.: lancamentos-dezembro" autoFocus /></Field>
+        <Field label="Nome"><input className="input" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="nome-do-canal" autoFocus /></Field>
         <Field label="Propósito"><input className="input" value={f.topic} onChange={(e) => setF({ ...f, topic: e.target.value })} /></Field>
         <label className="check"><input type="checkbox" checked={f.is_private} onChange={(e) => setF({ ...f, is_private: e.target.checked })} /> Canal privado (só membros)</label>
       </div>

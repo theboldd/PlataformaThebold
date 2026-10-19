@@ -20,7 +20,7 @@ const startedAt = now();
 
 // ── Clientes reais (CLIENTES MKT / ADVS MKT) e apelidos usados no quadro ──
 const clients = all("SELECT id, name, aliases FROM clients WHERE notion_url IS NOT NULL");
-// Decisões humanas registradas (ex.: as duas Bárbaras são pessoas diferentes): título do card → nome exato do cliente
+// Decisões humanas registradas (ex.: dois nomes no Notion para a mesma cliente): título do card → nome exato do cliente
 const OVR_FILE = path.join(path.dirname(FILE), '_novembro_overrides.json');
 const OVERRIDES = fs.existsSync(OVR_FILE) ? JSON.parse(fs.readFileSync(OVR_FILE, 'utf8')) : {};
 function findClient(title) {

@@ -111,4 +111,4 @@ Arquitetura prevista (V2):
 - importação do CR EDITORIAL como conteúdos com tema, objetivo, referência e legenda;
 - Slack e WhatsApp entram como histórico/memória, não como estado.
 
-O seed de demonstração (`server/seed.js`) já usa esse padrão: tudo passa pelo engine.
+Os scripts de importação seguem esse padrão: o que cria conteúdo passa pelo engine.

@@ -6,7 +6,7 @@
 1. O levantamento fica em `storage/migration/notion/*.json`. São dados reais e ficam fora do git. Há um arquivo por cliente, mais `_onboarding_form.json`, `_onboarding_answers.json`, `_team_map.json` e `_issues.json`.
 2. `npm run base:real` cria o banco só com a equipe e importa os clientes reais.
    - `npm run migrar:notion` reimporta sem duplicar: identifica cada cliente pela `notion_url`, substitui só o que veio do Notion e preserva o que foi feito na plataforma.
-   - `npm run seed` volta para a base de demonstração.
+   - `npm run seed` cria só a equipe, sem clientes. Não existe base de exemplo.
 3. O relatório de validação, com as 10 checagens, é gerado em `storage/migration/relatorio-migracao.md`.
 
 ## Regras aplicadas

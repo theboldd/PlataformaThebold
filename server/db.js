@@ -13,7 +13,7 @@ export const db = new DatabaseSync(DB_PATH);
 db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
 
 export const uid = (p = '') => p + crypto.randomBytes(9).toString('base64url');
-// Relógio da aplicação. setClock só é usado pelo seed de demonstração para simular histórico.
+// Relógio da aplicação (setClock permite fixar o horário em scripts e testes).
 let clockOffset = 0;
 export const setClock = (iso) => { clockOffset = iso ? new Date(iso).getTime() - Date.now() : 0; };
 export const nowMs = () => Date.now() + clockOffset;

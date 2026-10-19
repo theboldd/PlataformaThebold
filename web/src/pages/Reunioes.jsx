@@ -193,7 +193,7 @@ function CreateMeeting({ open, onClose, onCreated }) {
   return (
     <Modal open={open} onClose={onClose} title="Nova reunião" wide>
       <form onSubmit={submit} className="col gap-4">
-        <Field label="Título"><input className="input" required value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="Cliente e Agência Bold — Reunião mensal" /></Field>
+        <Field label="Título"><input className="input" required value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="Título da reunião" /></Field>
         <div className="grid-3">
           <Field label="Cliente (opcional)"><select className="select" value={f.client_id} onChange={(e) => setF({ ...f, client_id: e.target.value })}><option value="">Reunião interna</option>{(clients || []).map((c) => <option key={c.id} value={c.id}>{cleanName(c.name)}</option>)}</select></Field>
           <Field label="Tipo"><select className="select" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>{Object.entries(KINDS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>

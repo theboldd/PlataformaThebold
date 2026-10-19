@@ -180,7 +180,7 @@ function BrainTab({ data, reload }) {
         {canEdit && (
           <div className="col gap-2 mb-5">
             <select className="select" value={mem.kind} onChange={(e) => setMem({ ...mem, kind: e.target.value })} aria-label="Tipo de memória">{Object.entries(MEM_KINDS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
-            <textarea className="textarea" placeholder="Ex.: Cliente prefere capas claras e não aprova fundo branco chapado." value={mem.body} onChange={(e) => setMem({ ...mem, body: e.target.value })} />
+            <textarea className="textarea" placeholder="Preferência, restrição ou combinado com o cliente" value={mem.body} onChange={(e) => setMem({ ...mem, body: e.target.value })} />
             <div className="row end"><Button size="sm" variant="ink" disabled={!mem.body.trim()} onClick={addMem}>Registrar</Button></div>
           </div>
         )}

@@ -67,7 +67,7 @@ export default function Inicio() {
         </section>
         <section>
           <div className="p-sec-h"><span className="caps">Próxima reunião</span><Link to="/portal/reunioes" className="p-link xs">reuniões</Link></div>
-          {me.next_meeting ? <p className="p-meet"><b>{fmtDateTime(me.next_meeting.starts_at)}</b><span>{me.next_meeting.title.replace(' [DEMO]', '')}</span></p> : <p className="sm muted">Nenhuma reunião marcada. <Link className="p-link" to="/portal/reunioes">Escolher horário</Link></p>}
+          {me.next_meeting ? <p className="p-meet"><b>{fmtDateTime(me.next_meeting.starts_at)}</b><span>{me.next_meeting.title}</span></p> : <p className="sm muted">Nenhuma reunião marcada. <Link className="p-link" to="/portal/reunioes">Escolher horário</Link></p>}
           {me.deadlines?.length > 0 && (<>
             <div className="p-sec-h mt-5"><span className="caps">Próximos prazos</span></div>
             <ul className="p-list">{me.deadlines.map((d) => <li key={d.label}><span className="p-list-date">{fmtDate(d.date)}</span><span className="grow">{d.label}</span></li>)}</ul>

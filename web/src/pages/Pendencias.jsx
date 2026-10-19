@@ -227,7 +227,7 @@ function Detail({ id, onClose, onChanged }) {
           <section>
             <h3 className="pd-h3">Criar tarefa a partir desta pendência</h3>
             <form className="pd-note" onSubmit={(e) => { e.preventDefault(); if (taskTitle.trim()) run(async () => { await api.post('/tasks', { title: taskTitle, client_id: p.client_id, content_id: p.content_id, source_type: 'pendencia', source_id: p.id }); setTaskTitle(''); }, 'Tarefa criada.'); }}>
-              <input className="input" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Ex.: Ligar para a cliente e combinar a data do material" aria-label="Título da tarefa" />
+              <input className="input" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Próximo passo combinado" aria-label="Título da tarefa" />
               <Button size="sm" variant="ghost" disabled={busy || !taskTitle.trim()}>Criar</Button>
             </form>
           </section>

@@ -61,7 +61,7 @@ export default function NovoConteudo() {
             <select className="select" value={f.format} onChange={set('format')}>{Object.entries(FORMATS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
           </Field>
         </div>
-        <Field label="Título"><input className="input" value={f.title} onChange={set('title')} required maxLength={140} placeholder="Ex.: Protetor solar no inverno" /></Field>
+        <Field label="Título"><input className="input" value={f.title} onChange={set('title')} required maxLength={140} placeholder="Título do conteúdo" /></Field>
         <div className="grid-2">
           <Field label="Tema"><input className="input" value={f.theme} onChange={set('theme')} /></Field>
           <Field label="Objetivo"><input className="input" value={f.objective} onChange={set('objective')} /></Field>
