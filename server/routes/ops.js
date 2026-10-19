@@ -166,7 +166,8 @@ export function contentCard(c, user = null) {
   return { id: c.id, number: c.number, title: c.title, format: c.format, client_id: c.client_id, client: cl?.name, client_color: cl?.color, stage: c.stage, stage_label: STAGES[c.stage].label, lane: STAGES[c.stage].lane,
     priority: c.priority, planned_at: c.planned_at, blocked: !!c.blocked, block_reason: c.block_reason, waiting_on: c.waiting_on, owner: owner?.name || (owner ? 'SEM RESPONSÁVEL' : null), owner_id: owner?.assignee_id,
     due_at: owner?.due_at, hours_in_stage: hoursSince(c.stage_entered_at), risk: risk.level, risk_reasons: risk.reasons, version: v?.number || null, thumb: thumb ? fileDTO(thumb).urls.thumb : null,
-    restricted: user ? !canAccessClient(user, c.client_id) : false, rounds: c.revision_rounds + c.client_adjust_rounds };
+    restricted: user ? !canAccessClient(user, c.client_id) : false, rounds: c.revision_rounds + c.client_adjust_rounds, month: c.cycle_month || c.planned_at?.slice(0, 7) || null,
+    material_url: user && !canAccessClient(user, c.client_id) ? null : c.material_url || null };
 }
 ops.get('/contents', requirePerm('conteudos', 'view'), (req, res) => {
   const sc = scopeSQL(req.user, 'client_id');
@@ -209,7 +210,8 @@ ops.get('/contents/:id', requirePerm('conteudos', 'view'), (req, res) => {
 ops.patch('/contents/:id', requirePerm('conteudos', 'edit'), (req, res) => {
   const c = getContentOr404(req.params.id);
   assertClient(req.user, c.client_id);
-  const allowed = ['title', 'theme', 'objective', 'reference', 'briefing', 'internal_notes', 'planned_at', 'priority', 'format', 'strategy_tags', 'material_status'];
+  const allowed = ['title', 'theme', 'objective', 'reference', 'briefing', 'internal_notes', 'planned_at', 'priority', 'format', 'strategy_tags', 'material_status', 'material_url'];
+  if (req.body?.material_url && !/^https?:\/\/\S+$/i.test(req.body.material_url)) throw new HttpError(422, 'Link do material inválido: use um endereço que comece com http(s)://');
   const patch = Object.fromEntries(Object.entries(req.body || {}).filter(([k]) => allowed.includes(k)));
   if (patch.strategy_tags) patch.strategy_tags = JSON.stringify(patch.strategy_tags);
   if (patch.planned_at) { patch.planned_at = new Date(patch.planned_at).toISOString(); const m = patch.planned_at.slice(0, 7); if (m !== c.cycle_month) { const cy = ensureCycle(c.client_id, m); patch.cycle_id = cy.id; patch.cycle_month = m; } }
@@ -316,9 +318,12 @@ export function addComment(c, user, { body, visibility, parent_id, anchor, file_
 
 // ═════════════ PROCESSOS (quadro operacional — compartilhado com toda a equipe interna) ═════════════
 ops.get('/process/board', requirePerm('processos', 'view'), (req, res) => {
-  const { client_id, assignee_id, stage, risk, priority, due, q } = req.query;
+  const { client_id, assignee_id, stage, risk, priority, due, q, month, format } = req.query;
   const where = ["c.stage NOT IN ('cancelado')"]; const p = [];
-  if (!req.query.include_published) where.push("NOT (c.stage='publicado' AND c.published_at < ?)"), p.push(new Date(Date.now() - 7 * 864e5).toISOString());
+  // Mês do ciclo (como os quadros mensais do Notion): com mês escolhido, o quadro mostra o mês inteiro, inclusive publicados
+  if (month) { where.push('COALESCE(c.cycle_month, substr(c.planned_at,1,7))=?'); p.push(month); }
+  else if (!req.query.include_published) where.push("NOT (c.stage='publicado' AND c.published_at < ?)"), p.push(new Date(Date.now() - 7 * 864e5).toISOString());
+  if (format) { where.push('c.format=?'); p.push(format); }
   if (client_id) { where.push('c.client_id=?'); p.push(client_id); }
   if (stage) { const st = String(stage).split(','); where.push(`c.stage IN (${st.map(() => '?').join(',')})`); p.push(...st); }
   if (priority) { where.push('c.priority=?'); p.push(priority); }
@@ -334,7 +339,7 @@ ops.get('/process/board', requirePerm('processos', 'view'), (req, res) => {
   const lanes = LANES.map((l) => ({ ...l, stages: Object.entries(STAGES).filter(([, s]) => s.lane === l.key).map(([k, s]) => ({ key: k, label: s.label, fn: s.fn, action: s.action, exit: s.exit })), cards: cards.filter((c) => c.lane === l.key) }));
   const recent = all("SELECT l.created_at, l.summary, l.content_id, c.client_id FROM activity_logs l JOIN contents c ON c.id=l.content_id WHERE l.action='etapa.alterada' ORDER BY l.created_at DESC LIMIT 25")
     .map((r) => (canAccessClient(req.user, r.client_id) ? r : { created_at: r.created_at, summary: r.summary.replace(/^#\d+/, '#—'), content_id: null }));
-  res.json({ lanes, total: cards.length, recent, filters: { clients: all('SELECT id, name FROM clients ORDER BY name'), people: all("SELECT id, name FROM users WHERE active=1 AND role_key<>'cliente' ORDER BY name"), stages: STAGE_ORDER.map((k) => ({ key: k, label: STAGES[k].label })) } });
+  res.json({ lanes, total: cards.length, recent, filters: { months: all("SELECT DISTINCT COALESCE(cycle_month, substr(planned_at,1,7)) m FROM contents WHERE stage<>'cancelado' AND COALESCE(cycle_month, substr(planned_at,1,7)) IS NOT NULL ORDER BY m DESC").map((r) => r.m), formats: all("SELECT DISTINCT format FROM contents WHERE stage<>'cancelado'").map((r) => r.format), clients: all('SELECT id, name FROM clients ORDER BY name'), people: all("SELECT id, name FROM users WHERE active=1 AND role_key<>'cliente' ORDER BY name"), stages: STAGE_ORDER.map((k) => ({ key: k, label: STAGES[k].label })) } });
 });
 ops.get('/process/definition', requirePerm('processos', 'view'), (_req, res) => {
   res.json({ stages: STAGES, lanes: LANES, order: STAGE_ORDER, settings: Object.fromEntries(Object.keys(DEFAULT_SETTINGS).map((k) => [k, setting(k)])), example_cycle: buildMilestones(new Date(Date.now() + 40 * 864e5).toISOString().slice(0, 7)) });

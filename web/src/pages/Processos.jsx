@@ -4,12 +4,12 @@ import { useApi } from '../lib/hooks.js';
 import { useCrumbs } from '../components/Shell.jsx';
 import { Drawer, ErrorBox, Loading } from '../components/ui.jsx';
 import { I } from '../components/Icons.jsx';
-import { ago, initials, cleanName } from '../lib/format.js';
+import { ago, initials, cleanName, fmtMonth } from '../lib/format.js';
 import { FUNCTIONS, FORMATS, RISK } from '../lib/status.js';
 import '../styles/production.css';
 import '../styles/board.css';
 
-const FILTER_KEYS = ['client_id', 'assignee_id', 'stage', 'risk', 'priority', 'due', 'q'];
+const FILTER_KEYS = ['month', 'client_id', 'assignee_id', 'stage', 'format', 'risk', 'priority', 'due', 'q'];
 // Cores de etiqueta por cliente — tons sóbrios derivados da paleta The Bold (como os labels do Jira)
 const LABEL_TONES = ['#4A1725', '#1F3A4D', '#3E6A4E', '#8A5A1E', '#5B2A55', '#2F5F63', '#7A3B2E', '#3B3734'];
 const toneOf = (id = '') => LABEL_TONES[[...id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % LABEL_TONES.length];
@@ -53,7 +53,7 @@ export default function Processos() {
   const swimlanes = useMemo(() => {
     if (!data) return [];
     if (group === 'none') return [{ key: 'all', label: null, lanes: data.lanes }];
-    const keyOf = (c) => (group === 'client' ? c.client : c.owner || 'Sem tarefa aberta');
+    const keyOf = (c) => (group === 'client' ? c.client : group === 'format' ? FORMATS[c.format] || c.format : c.owner || 'Sem tarefa aberta');
     const keys = [...new Set(data.lanes.flatMap((l) => l.cards.map(keyOf)))].sort();
     return keys.map((k) => ({ key: k, label: k, lanes: data.lanes.map((l) => ({ ...l, cards: l.cards.filter((c) => keyOf(c) === k) })) }));
   }, [data, group]);
@@ -79,9 +79,19 @@ export default function Processos() {
             ))}
             {unassigned && <button className={`jb-av jb-av-none ${params.get('assignee_id') === 'none' ? 'on' : ''}`} title="Sem responsável" onClick={() => setFilter('assignee_id', params.get('assignee_id') === 'none' ? '' : 'none')}>?</button>}
           </div>
+          {data?.filters.months?.length > 0 && (
+            <select className="jb-select" value={params.get('month') || ''} onChange={(e) => setFilter('month', e.target.value)} aria-label="Mês do ciclo">
+              <option value="">Todos os meses</option>{data.filters.months.map((m) => <option key={m} value={m}>{fmtMonth(m)}</option>)}
+            </select>
+          )}
           <select className="jb-select" value={params.get('client_id') || ''} onChange={(e) => setFilter('client_id', e.target.value)} aria-label="Cliente">
             <option value="">Cliente</option>{data?.filters.clients.map((c) => <option key={c.id} value={c.id}>{cleanName(c.name)}</option>)}
           </select>
+          {data?.filters.formats?.length > 1 && (
+            <select className="jb-select" value={params.get('format') || ''} onChange={(e) => setFilter('format', e.target.value)} aria-label="Tipo de entrega">
+              <option value="">Tipo</option>{data.filters.formats.map((f) => <option key={f} value={f}>{FORMATS[f] || f}</option>)}
+            </select>
+          )}
           <select className="jb-select" value={params.get('due') || ''} onChange={(e) => setFilter('due', e.target.value)} aria-label="Prazo">
             <option value="">Prazo</option><option value="atrasado">Atrasados</option><option value="hoje">Vencem hoje</option><option value="semana">Próximos 7 dias</option>
           </select>
@@ -95,7 +105,7 @@ export default function Processos() {
           <div className="jb-group">
             <span>Agrupar por</span>
             <select className="jb-select" value={group} onChange={(e) => { setGroup(e.target.value); setFilter('group', e.target.value === 'none' ? '' : e.target.value); }} aria-label="Agrupar por">
-              <option value="none">Nenhum</option><option value="client">Cliente</option><option value="owner">Responsável</option>
+              <option value="none">Nenhum</option><option value="client">Cliente</option><option value="format">Tipo de entrega</option><option value="owner">Responsável</option>
             </select>
           </div>
         </div>
@@ -107,7 +117,7 @@ export default function Processos() {
         <div className="jb-scroll">
           {swimlanes.map((sw) => (
             <div key={sw.key} className="jb-swim">
-              {sw.label && <div className="jb-swim-head"><span className="jb-label" style={{ background: toneOf(sw.label) }}>{cleanName(sw.label)}</span><span className="jb-swim-count">{sw.lanes.reduce((n, l) => n + l.cards.length, 0)} itens</span></div>}
+              {sw.label && <div className="jb-swim-head"><span className="jb-label" style={{ background: toneOf(sw.label) }}>{cleanName(sw.label)}</span><span className="jb-swim-count">{sw.lanes.reduce((n, l) => n + l.cards.length, 0)} itens{group === 'client' ? ` · ${byFormat(sw.lanes)}` : ''}</span></div>}
               <div className="jb-board">
                 {sw.lanes.map((lane) => <Column key={lane.key} lane={lane} moved={moved} showHead={sw === swimlanes[0] || !!sw.label} />)}
               </div>
@@ -144,6 +154,14 @@ function Column({ lane, moved, showHead }) {
   );
 }
 
+// Quantidade por tipo de entrega (o "☐ 4 reels ☐ 4 carrosséis" dos cards do Notion, agora contado de verdade)
+function byFormat(lanes) {
+  const m = {};
+  for (const l of lanes) for (const c of l.cards) m[c.format] = (m[c.format] || 0) + 1;
+  const PL = { carrossel: 'carrosséis', reel: 'reels', estatico: 'estáticos', foto: 'fotos', video: 'vídeos', stories: 'stories' };
+  return Object.entries(m).map(([f, n]) => `${n} ${n === 1 ? (FORMATS[f] || f).toLowerCase() : PL[f] || f}`).join(' · ');
+}
+
 function Card({ c, moved }) {
   const overdue = c.due_at && new Date(c.due_at) < new Date();
   const none = c.owner === 'SEM RESPONSÁVEL';
@@ -153,6 +171,7 @@ function Card({ c, moved }) {
       <div className="jb-card-labels">
         <span className="jb-label" style={{ background: toneOf(c.client_id) }}>{cleanName(c.client || '')}</span>
         {c.blocked && <span className="jb-flag" title={c.block_reason}>■ Bloqueado</span>}
+        {c.material_url && <button type="button" className="jb-mat" title={c.material_url} onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(c.material_url, '_blank', 'noopener'); }}>Material ↗</button>}
       </div>
       {c.blocked && <div className="jb-block">{c.block_reason}</div>}
       <div className="jb-card-foot">

@@ -144,6 +144,7 @@ export default function ConteudoDetalhe() {
                 <dt>Objetivo</dt><dd>{c.objective || '—'}</dd>
                 <dt>Estratégia</dt><dd className="row wrap gap-1">{c.strategy_tags.length ? c.strategy_tags.map((t) => <span key={t} className="tag">{t}</span>) : '—'}</dd>
                 <dt>Referência</dt><dd>{c.reference || '—'}</dd>
+                <dt>Material</dt><dd>{c.material_url ? <a className="link" href={c.material_url} target="_blank" rel="noreferrer">Abrir material ↗</a> : '—'}</dd>
                 <dt>Briefing</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{c.briefing || '—'}</dd>
                 <dt>Interno</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{c.internal_notes || '—'}</dd>
                 <dt>Ciclo</dt><dd>{c.cycle_month || '—'}{data.cycle ? ` · ${data.cycle.status.replace('_', ' ')}` : ''}</dd>
@@ -283,7 +284,7 @@ function TasksList({ tasks, me, onComplete }) {
 
 function EditModal({ open, onClose, c, onSave, busy }) {
   const [f, setF] = useState({});
-  useEffect(() => { if (open) setF({ title: c.title, theme: c.theme || '', objective: c.objective || '', reference: c.reference || '', briefing: c.briefing || '', internal_notes: c.internal_notes || '', planned_at: toLocalInput(c.planned_at), priority: c.priority, material_status: c.material_status }); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (open) setF({ title: c.title, theme: c.theme || '', objective: c.objective || '', reference: c.reference || '', material_url: c.material_url || '', briefing: c.briefing || '', internal_notes: c.internal_notes || '', planned_at: toLocalInput(c.planned_at), priority: c.priority, material_status: c.material_status }); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const s = (k) => (e) => setF({ ...f, [k]: e.target.value });
   return (
     <Modal open={open} onClose={onClose} title="Editar conteúdo" wide footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" disabled={busy} onClick={() => onSave({ ...f, planned_at: f.planned_at ? new Date(f.planned_at).toISOString() : undefined })}>Salvar</Button></>}>
@@ -296,6 +297,7 @@ function EditModal({ open, onClose, c, onSave, busy }) {
         </div>
         <div className="grid-2">
           <Field label="Referência"><input className="input" value={f.reference || ''} onChange={s('reference')} /></Field>
+          <Field label="Link do material (Drive, Canva…)" hint="Pasta ou arquivo com o material da produção."><input className="input" type="url" placeholder="https://" value={f.material_url || ''} onChange={s('material_url')} /></Field>
           <Field label="Material do cliente"><select className="select" value={f.material_status} onChange={s('material_status')}><option value="nao_necessario">Não necessário</option><option value="aguardando">Aguardando cliente</option><option value="recebido">Recebido</option></select></Field>
         </div>
         <Field label="Briefing"><textarea className="textarea" value={f.briefing || ''} onChange={s('briefing')} /></Field>
