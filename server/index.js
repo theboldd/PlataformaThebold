@@ -25,7 +25,7 @@ export function bootstrap() {
     if (fresh) for (const [m, acts] of Object.entries(r.perms)) for (const a of acts) run('INSERT OR IGNORE INTO role_permissions (role_key,module,action) VALUES (?,?,?)', r.key, m, a);
   }
   // Módulos criados depois da primeira instalação: semeia uma vez as permissões padrão dos roles existentes
-  for (const mod of ['divisao']) {
+  for (const mod of ['divisao', 'carteira']) {
     const flag = `perm_seed:${mod}`;
     if (one('SELECT 1 FROM settings WHERE key=?', flag)) continue;
     for (const r of ROLE_DEFS) for (const a of r.perms[mod] || []) run('INSERT OR IGNORE INTO role_permissions (role_key,module,action) VALUES (?,?,?)', r.key, mod, a);

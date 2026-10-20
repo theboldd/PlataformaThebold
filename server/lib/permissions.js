@@ -9,17 +9,21 @@ export const MODULES = {
   insights: 'Insights', brain: 'The Bold Brain', automacoes: 'Automações', integracoes: 'Integrações',
   usuarios: 'Usuários e permissões', historico: 'Histórico', portal: 'Área do cliente',
   divisao: 'Divisão de clientes (vincular e desvincular clientes da equipe)',
+  carteira: 'Carteira de clientes (criar cliente e mudar status: ativar, pausar, encerrar)',
 };
 export const ACTIONS = ['view', 'create', 'edit', 'approve', 'admin'];
 
 const ALL = Object.keys(MODULES).filter((m) => m !== 'portal');
+// Módulos que só a CEO decide: Divisão (vincular/desvincular clientes da equipe) e Carteira (criar cliente, mudar status).
+// Por padrão só o perfil CEO tem; liberar para alguém (em Usuários) ou para um perfil exige <módulo>:admin — só a CEO.
+export const CEO_GRANT = ['divisao', 'carteira'];
 const full = (mods) => Object.fromEntries(mods.map((m) => [m, [...ACTIONS]]));
 const prod = { dashboard: ['view'], processos: ['view'], clientes: ['view'], conteudos: ['view', 'edit'], calendario: ['view'], reunioes: ['view'], chat: ['view', 'create'], brain: ['view'] };
 
 // Roles iniciais (reconstruídos a partir do Notion/Slack/Calendar — ver docs/01-processo-real.md)
 export const ROLE_DEFS = [
   { key: 'ceo', label: 'CEO', dashboard: 'ceo', all_clients: 1, perms: full(ALL) },
-  { key: 'operacoes', label: 'Operações, Processos e Automações', dashboard: 'operacoes', all_clients: 1, perms: full(ALL.filter((m) => m !== 'divisao')) },
+  { key: 'operacoes', label: 'Operações, Processos e Automações', dashboard: 'operacoes', all_clients: 1, perms: full(ALL.filter((m) => !CEO_GRANT.includes(m))) },
   { key: 'gestao', label: 'Gestão de Processos e Atendimento', dashboard: 'operacoes', all_clients: 1,
     perms: { ...full(['processos', 'clientes', 'conteudos', 'calendario', 'reunioes', 'chat']), dashboard: ['view'], torre: ['view'], revisao: ['view'], insights: ['view'], brain: ['view'], historico: ['view'] } },
   { key: 'qualidade', label: 'Qualidade e Revisão', dashboard: 'revisao', all_clients: 1,
@@ -36,9 +40,6 @@ export const ROLE_DEFS = [
   { key: 'cliente', label: 'Cliente', dashboard: 'portal', all_clients: 0, internal: 0, perms: { portal: ['view', 'approve', 'create'] } },
 ];
 
-// Divisão de clientes (quem cuida de cada cliente): ver é livre para a equipe; vincular/desvincular só a CEO
-// ou quem ela liberar em Usuários (permissão específica). Conceder essa permissão exige divisao:admin (só a CEO).
-export const DIVISAO_ROLES = ['ceo'];
 
 // Centro de Pendências global: por padrão só CEO e Operações (permissões dos roles). Pode ser liberado a outra pessoa em Usuários → permissões específicas.
 export const PENDENCIAS_ROLES = ['ceo', 'operacoes'];

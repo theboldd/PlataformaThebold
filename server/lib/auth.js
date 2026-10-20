@@ -38,6 +38,29 @@ function readSigned(token) {
   return userId;
 }
 
+// Link de redefinição de senha: assinado (vale em qualquer instância), expira em 1 hora e só funciona uma vez —
+// a assinatura inclui o hash da senha atual, então deixa de valer assim que a senha muda.
+const RESET_TTL = 60 * 60e3;
+function resetSecret() {
+  if (process.env.BOLD_SESSION_SECRET) return process.env.BOLD_SESSION_SECRET;
+  let s = one("SELECT value FROM settings WHERE key='reset_secret'")?.value;
+  if (!s) { s = JSON.stringify(crypto.randomBytes(32).toString('base64url')); run('INSERT INTO settings (key,value,updated_at) VALUES (?,?,?)', 'reset_secret', s, now()); }
+  return JSON.parse(s);
+}
+const resetSig = (userId, exp, hash) => crypto.createHmac('sha256', resetSecret()).update(`r1.${userId}.${exp}.${hash}`).digest('base64url');
+export function createResetToken(user) {
+  const exp = Date.now() + RESET_TTL;
+  return `r1.${user.id}.${exp}.${resetSig(user.id, exp, user.password_hash)}`;
+}
+export function readResetToken(token) {
+  const [v, userId, exp, mac] = String(token || '').split('.');
+  if (v !== 'r1' || !userId || !exp || !mac || Number(exp) < Date.now()) return null;
+  const u = one('SELECT * FROM users WHERE id=? AND active=1', userId);
+  if (!u) return null;
+  const ref = Buffer.from(resetSig(u.id, exp, u.password_hash)), got = Buffer.from(mac);
+  return ref.length === got.length && crypto.timingSafeEqual(ref, got) ? u : null;
+}
+
 export function createSession(user, req) {
   const expires = new Date(Date.now() + SESSION_DAYS * 864e5).toISOString();
   const token = STATELESS ? `v1.${user.id}.${Date.parse(expires)}.${sign(`v1.${user.id}.${Date.parse(expires)}`)}` : crypto.randomBytes(32).toString('base64url');

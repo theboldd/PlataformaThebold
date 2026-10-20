@@ -29,7 +29,7 @@ ops.get('/clients', requirePerm('clientes', 'view'), (req, res) => {
   const rows = all(`SELECT * FROM clients WHERE ${sc.sql} ${q ? 'AND name LIKE ?' : ''} ORDER BY status='encerrado', name`, ...sc.params, ...(q ? [q] : []));
   res.json(rows.map(clientSummary));
 });
-ops.post('/clients', requirePerm('clientes', 'admin'), (req, res) => {
+ops.post('/clients', requirePerm('carteira', 'create'), (req, res) => {
   const { name, handle, segment, services = [], monthly_posts = 12, requires_theme_approval = true, team = [] } = req.body || {};
   if (!name?.trim()) throw new HttpError(422, 'Informe o nome do cliente.');
   const client = tx(() => startClient({ name: name.trim(), handle, segment, services, monthly_posts, requires_theme_approval, team }, req.user));
@@ -90,10 +90,55 @@ ops.patch('/clients/:id', requirePerm('clientes', 'edit'), (req, res) => {
   const c = one('SELECT * FROM clients WHERE id=?', req.params.id);
   const allowed = ['name', 'handle', 'segment', 'status', 'monthly_posts', 'requires_theme_approval', 'services'];
   const patch = Object.fromEntries(Object.entries(req.body || {}).filter(([k]) => allowed.includes(k)));
+  // status do cliente (ativar, pausar, encerrar) = carteira de clientes: só a CEO ou quem ela liberar
+  if (patch.status !== undefined && patch.status !== c.status) {
+    if (!can(req.user, 'carteira', 'edit')) throw new HttpError(403, 'Mudar o status do cliente (ativar, pausar, encerrar) é liberado pela CEO.');
+    if (!['onboarding', 'ativo', 'pausado', 'encerrado', 'a_confirmar'].includes(patch.status)) throw new HttpError(422, 'Status inválido.');
+  } else delete patch.status;
   if (patch.services) patch.services = JSON.stringify(patch.services);
+  if (!Object.keys(patch).length) return res.json({ ok: true });
   update('clients', { id: c.id }, patch);
-  log({ actor: req.user.id, action: 'cliente.alterado', entity: 'client', id: c.id, client: c.id, summary: `Ficha alterada: ${Object.keys(patch).join(', ')}`, before: JSON.stringify(Object.fromEntries(Object.keys(patch).map((k) => [k, c[k]]))), after: JSON.stringify(patch) });
+  const ST = { onboarding: 'onboarding', ativo: 'ativo', pausado: 'pausado', encerrado: 'encerrado', a_confirmar: 'a confirmar' };
+  if (patch.status) {
+    // status decidido: o ponto de revisão "status a confirmar" da migração fica resolvido
+    if (patch.status !== 'a_confirmar') run("UPDATE migration_issues SET status='resolvido' WHERE client_id=? AND kind='status' AND status='aberto'", c.id);
+    log({ actor: req.user.id, action: 'cliente.status', entity: 'client', id: c.id, client: c.id, summary: `${c.name}: status ${ST[c.status] || c.status} → ${ST[patch.status]}`, before: c.status, after: patch.status });
+  }
+  if (Object.keys(patch).some((k) => k !== 'status')) log({ actor: req.user.id, action: 'cliente.alterado', entity: 'client', id: c.id, client: c.id, summary: `Ficha alterada: ${Object.keys(patch).join(', ')}`, before: JSON.stringify(Object.fromEntries(Object.keys(patch).map((k) => [k, c[k]]))), after: JSON.stringify(patch) });
   res.json({ ok: true });
+});
+// EXCLUIR CLIENTE (definitivo): só a CEO ou quem ela liberar (Carteira de clientes · administrar). Exige digitar o nome.
+// Apaga ficha, conteúdos, tarefas, ciclos, reuniões, conversas, arquivos e os acessos de cliente dele. O registro de auditoria
+// (activity_logs) não se apaga — fica a linha "cliente excluído" com quem fez e quando.
+ops.post('/clients/:id/excluir', requirePerm('carteira', 'admin'), async (req, res) => {
+  const c = one('SELECT * FROM clients WHERE id=?', req.params.id);
+  if (!c) throw new HttpError(404, 'Cliente não encontrado.');
+  if (String(req.body?.confirm || '').trim() !== c.name.trim()) throw new HttpError(422, 'Para excluir, digite o nome do cliente exatamente como aparece.');
+  const files = all('SELECT id, storage_key FROM files WHERE client_id=?', c.id);
+  const clientUsers = all("SELECT u.id FROM users u JOIN client_members cm ON cm.user_id=u.id WHERE cm.client_id=? AND u.role_key='cliente'", c.id).map((r) => r.id);
+  const counts = { conteudos: one('SELECT COUNT(*) n FROM contents WHERE client_id=?', c.id).n, tarefas: one('SELECT COUNT(*) n FROM tasks WHERE client_id=?', c.id).n };
+  let usersRemoved = 0, usersDisabled = 0;
+  try {
+    tx(() => {
+      run('DELETE FROM clients WHERE id=?', c.id);
+      for (const f of files) run('DELETE FROM files WHERE id=? AND NOT EXISTS (SELECT 1 FROM version_media WHERE file_id=?) AND NOT EXISTS (SELECT 1 FROM messages WHERE file_id=?)', f.id, f.id, f.id);
+      for (const uid_ of clientUsers) {
+        if (one('SELECT 1 FROM client_members WHERE user_id=?', uid_)) continue; // ainda é contato de outro cliente
+        try { run('DELETE FROM sessions WHERE user_id=?', uid_); run('DELETE FROM users WHERE id=?', uid_); usersRemoved++; } catch { run('UPDATE users SET active=0 WHERE id=?', uid_); usersDisabled++; }
+      }
+    });
+  } catch (e) { throw new HttpError(409, `Não foi possível excluir: ${e.message}`); }
+  // arquivos físicos (original + variações)
+  const { storage } = await import('../services/media.js');
+  for (const f of files) {
+    await storage.remove(f.storage_key);
+    const dir = storage.path(`derived/${f.id.slice(2, 4)}/x`).replace(/x$/, '');
+    let names = [];
+    try { names = (await import('node:fs')).readdirSync(dir).filter((n) => n.startsWith(f.id)); } catch { /* sem variações */ }
+    for (const n of names) await storage.remove(`derived/${f.id.slice(2, 4)}/${n}`);
+  }
+  log({ actor: req.user.id, action: 'cliente.excluido', entity: 'client', id: c.id, summary: `Cliente excluído: ${c.name} (${counts.conteudos} conteúdos, ${counts.tarefas} tarefas, ${files.length} arquivos${usersRemoved ? `, ${usersRemoved} acesso(s) de cliente removido(s)` : ''}${usersDisabled ? `, ${usersDisabled} desativado(s)` : ''})`, before: JSON.stringify({ name: c.name, status: c.status, notion_url: c.notion_url }) });
+  res.json({ ok: true, ...counts, files: files.length, users_removed: usersRemoved, users_disabled: usersDisabled });
 });
 ops.put('/clients/:id/brain/:section', requirePerm('clientes', 'edit'), (req, res) => {
   assertClient(req.user, req.params.id);

@@ -65,7 +65,7 @@ export default function App() {
     <ToastContext.Provider value={toast}>
       <BrowserRouter>
         <Cursor />
-        {!auth ? <Login onLogin={load} /> : (
+        {!auth || window.location.pathname === '/redefinir-senha' ? <Login onLogin={async () => { window.history.replaceState(null, '', '/'); await load(); }} /> : (
           <AuthContext.Provider value={{ ...auth, logout, reload: load, can }}>
             {auth.internal ? (
               <Shell>

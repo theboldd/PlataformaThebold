@@ -22,6 +22,25 @@ export default function Login({ onLogin }) {
   const [password, setPassword] = useState('');
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
+  // entrar | esqueci (pedir link) | enviado | redefinir (veio do link do e-mail) | pronto
+  const resetToken = window.location.pathname === '/redefinir-senha' ? new URLSearchParams(window.location.search).get('t') : null;
+  const [mode, setMode] = useState(resetToken ? 'redefinir' : 'entrar');
+  const [who, setWho] = useState(null);
+  const [next, setNext] = useState({ a: '', b: '' });
+  useEffect(() => {
+    if (!resetToken) return;
+    api.get(`/auth/reset?t=${encodeURIComponent(resetToken)}`).then(setWho).catch((x) => setErr(x.message));
+  }, [resetToken]);
+  const forgot = async (e) => {
+    e.preventDefault(); setBusy(true); setErr(null);
+    try { await api.post('/auth/forgot', { email }); setMode('enviado'); } catch (x) { setErr(x.message); } finally { setBusy(false); }
+  };
+  const reset = async (e) => {
+    e.preventDefault(); setErr(null);
+    if (next.a !== next.b) { setErr('As duas senhas não são iguais.'); return; }
+    setBusy(true);
+    try { await api.post('/auth/reset', { token: resetToken, password: next.a }); setMode('pronto'); setEmail(who?.email || ''); window.history.replaceState(null, '', '/'); } catch (x) { setErr(x.message); } finally { setBusy(false); }
+  };
   const [phrase, setPhrase] = useState(0);
   const root = useRef(null);
   const clock = useClock();
@@ -66,14 +85,49 @@ export default function Login({ onLogin }) {
           </div>
         </section>
 
-        <form className="lg-form" onSubmit={submit}>
-          <div className="lg-form-head"><span className="lg-meta">Acesso</span><span className="lg-meta">01 / 01</span></div>
-          <h2 className="lg-enter">Entrar<span>.</span></h2>
-          <label className="lg-field"><span>E-mail</span><input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="voce@thebold.com.br" /></label>
-          <label className="lg-field"><span>Senha</span><input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••••" /></label>
-          {err && <div className="lg-err" role="alert">{err}</div>}
-          <Button variant="ink" size="lg" magnetic arrow disabled={busy} type="submit" className="lg-cta" cursor="ENTRAR">{busy ? 'Entrando…' : 'Viver o efeito Bold'}</Button>
-        </form>
+        {mode === 'esqueci' || mode === 'enviado' ? (
+          <form className="lg-form" onSubmit={forgot}>
+            <div className="lg-form-head"><span className="lg-meta">Acesso</span><span className="lg-meta">Nova senha</span></div>
+            <h2 className="lg-enter">Esqueci<span>.</span></h2>
+            {mode === 'enviado' ? (
+              <p className="lg-note" role="status">Se <b>{email}</b> tiver acesso à The Bold, um link para criar uma nova senha chega nesse e-mail em instantes. Ele vale por 1 hora. Não chegou? Veja a caixa de spam ou fale com a The Bold.</p>
+            ) : (
+              <>
+                <p className="lg-note">Digite o e-mail do seu acesso. Enviamos um link para você criar uma nova senha.</p>
+                <label className="lg-field"><span>E-mail</span><input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="voce@email.com" /></label>
+                {err && <div className="lg-err" role="alert">{err}</div>}
+                <Button variant="ink" size="lg" magnetic arrow disabled={busy} type="submit" className="lg-cta">{busy ? 'Enviando…' : 'Enviar link'}</Button>
+              </>
+            )}
+            <button type="button" className="lg-link" onClick={() => { setMode('entrar'); setErr(null); }}>← Voltar para entrar</button>
+          </form>
+        ) : mode === 'redefinir' ? (
+          <form className="lg-form" onSubmit={reset}>
+            <div className="lg-form-head"><span className="lg-meta">Acesso</span><span className="lg-meta">Nova senha</span></div>
+            <h2 className="lg-enter">Nova senha<span>.</span></h2>
+            {who && <p className="lg-note">Olá, {who.name}. Escolha uma senha nova com pelo menos 10 caracteres.</p>}
+            {who && (
+              <>
+                <label className="lg-field"><span>Nova senha</span><input type="password" autoComplete="new-password" value={next.a} onChange={(e) => setNext({ ...next, a: e.target.value })} required minLength={10} /></label>
+                <label className="lg-field"><span>Repita a nova senha</span><input type="password" autoComplete="new-password" value={next.b} onChange={(e) => setNext({ ...next, b: e.target.value })} required minLength={10} /></label>
+              </>
+            )}
+            {err && <div className="lg-err" role="alert">{err}</div>}
+            {who && <Button variant="ink" size="lg" magnetic arrow disabled={busy} type="submit" className="lg-cta">{busy ? 'Salvando…' : 'Salvar nova senha'}</Button>}
+            <button type="button" className="lg-link" onClick={() => { window.history.replaceState(null, '', '/'); setMode(err ? 'esqueci' : 'entrar'); setErr(null); }}>{err ? 'Pedir um novo link' : '← Voltar para entrar'}</button>
+          </form>
+        ) : (
+          <form className="lg-form" onSubmit={submit}>
+            <div className="lg-form-head"><span className="lg-meta">Acesso</span><span className="lg-meta">01 / 01</span></div>
+            <h2 className="lg-enter">Entrar<span>.</span></h2>
+            {mode === 'pronto' && <p className="lg-note" role="status">Senha nova salva. Entre com ela.</p>}
+            <label className="lg-field"><span>E-mail</span><input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="voce@thebold.com.br" /></label>
+            <label className="lg-field"><span>Senha</span><input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••••" /></label>
+            {err && <div className="lg-err" role="alert">{err}</div>}
+            <Button variant="ink" size="lg" magnetic arrow disabled={busy} type="submit" className="lg-cta" cursor="ENTRAR">{busy ? 'Entrando…' : 'Viver o efeito Bold'}</Button>
+            <button type="button" className="lg-link" onClick={() => { setMode('esqueci'); setErr(null); }}>Esqueci minha senha</button>
+          </form>
+        )}
       </main>
 
       <div className="lg-marquee" aria-hidden>

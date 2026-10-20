@@ -100,6 +100,7 @@ function CreateUser({ roles, clients, onClose, onSaved }) {
         {!isClient && <Field label="Cargo / título"><input className="input" value={f.title} onChange={set('title')} /></Field>}
         {!isClient && <Field label="Capacidade (tarefas/semana)"><input className="input" type="number" value={f.capacity} onChange={set('capacity')} /></Field>}
       </div>
+      <PasswordBox user={user} />
       {!isClient && <FuncPicker value={f.functions} onChange={(v) => setF({ ...f, functions: v })} />}
       <div className="mt-5"><div className="label mb-2">{isClient ? 'Projeto do cliente' : 'Clientes vinculados (define o acesso e a atribuição automática por função)'}</div><LinksEditor links={links} setLinks={setLinks} clients={clients} isClient={isClient} /></div>
     </Modal>
@@ -187,6 +188,34 @@ function Roles({ data, admin, reload }) {
           ))}</tbody>
         </table></div>
       </div>
+    </div>
+  );
+}
+
+// Senha: o que aconteceu (quando a pessoa redefiniu, quando a equipe definiu uma provisória) e o link de redefinição.
+// A senha escolhida pela pessoa nunca aparece para ninguém — só o hash fica guardado.
+function PasswordBox({ user }) {
+  const toast = useToast();
+  const [res, setRes] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const fmt = (v) => new Date(v).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const gen = async () => {
+    setBusy(true);
+    try { const r = await api.post(`/users/${user.id}/reset-link`); setRes(r); toast(r.sent ? `Link enviado para ${user.email}.` : 'Link gerado — e-mail não enviado (veja abaixo).'); } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
+  };
+  return (
+    <div className="mt-5 pw-box">
+      <div className="row between wrap gap-2"><div className="label">Senha</div><Button size="sm" disabled={busy} onClick={gen}>Enviar link para redefinir senha</Button></div>
+      {user.password_events?.length ? (
+        <ul className="pw-events">{user.password_events.map((e, i) => <li key={i}><span className="xs faint">{fmt(e.created_at)}</span> <span className="sm">{e.summary}</span></li>)}</ul>
+      ) : <p className="xs muted">Nenhuma troca de senha registrada.</p>}
+      {res && (
+        <div className="pw-link">
+          <div className="xs">{res.sent ? `E-mail enviado para ${user.email}. ` : `E-mail não enviado: ${res.reason} `}Se preferir, mande este link pelo WhatsApp (vale 1 hora, uma vez):</div>
+          <div className="row gap-2 mt-2"><input className="input" readOnly value={res.link} onFocus={(e) => e.target.select()} /><Button size="sm" onClick={() => { navigator.clipboard?.writeText(res.link); toast('Link copiado.'); }}>Copiar</Button></div>
+        </div>
+      )}
+      <p className="xs muted" style={{ marginBottom: 0 }}>A senha que a pessoa escolhe não aparece para ninguém, por segurança. Para entrar no lugar dela ou destravar o acesso, defina uma senha provisória acima.</p>
     </div>
   );
 }

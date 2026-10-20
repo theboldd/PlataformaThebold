@@ -28,6 +28,7 @@ Acesso da equipe: e-mail `<primeiro-nome>@thebold.demo` (provisório). Senha ini
 | `ANTHROPIC_API_KEY` / `BOLD_AI_MODEL` | Claude (padrão `claude-opus-5-5`) |
 | `OBSIDIAN_VAULT_PATH` / `BOLD_KNOWLEDGE_PROVIDER` | Teste de memória com Obsidian |
 | `BOLD_STORAGE_DIR` / `BOLD_DB_PATH` | Local do banco e das mídias |
+| `RESEND_API_KEY` / `BOLD_MAIL_FROM` | E-mail de redefinição de senha (Resend; remetente de domínio verificado, ex.: `The Bold <acesso@seudominio.com.br>`) |
 
 Sem essas credenciais, as integrações aparecem **desconectadas**. Nada é simulado.
 

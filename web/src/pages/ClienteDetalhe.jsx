@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { useApi, useAuth, useToast } from '../lib/hooks.js';
 import { useCrumbs } from '../components/Shell.jsx';
-import { Avatar, Button, ContentCard, Empty, ErrorBox, Field, Loading, Risk, Stat, Status, Tabs, Timeline } from '../components/ui.jsx';
+import { Avatar, Button, ContentCard, Empty, ErrorBox, Field, Loading, Modal, Risk, Stat, Status, Tabs, Timeline } from '../components/ui.jsx';
 import { I } from '../components/Icons.jsx';
 import { ago, bytes, cleanName, fmtDate, fmtDateTime, fmtMonth, money } from '../lib/format.js';
 import { FUNCTIONS } from '../lib/status.js';
@@ -41,7 +41,8 @@ export default function ClienteDetalhe() {
           <div className="caps">Dossiê · {c.segment || 'Cliente'}{c.handle ? ` · ${c.handle}` : ''}</div>
           <h1 className="ed-xxl mt-2">{cleanName(c.name)}</h1>
           <div className="row wrap gap-4 mt-4">
-            <span className={`tag ${c.status === 'onboarding' ? 'tag-bordo' : c.status === 'ativo' ? 'tag-ok' : ''}`}>{c.status === 'a_confirmar' ? 'status a confirmar' : c.status}</span>
+            {auth.can('carteira', 'edit') ? <StatusControl c={c} reload={reload} />
+              : <span className={`tag ${c.status === 'onboarding' ? 'tag-bordo' : c.status === 'ativo' ? 'tag-ok' : ''}`}>{c.status === 'a_confirmar' ? 'status a confirmar' : c.status}</span>}
             <Risk level={c.risk.level} />{['baixo', 'nenhum'].includes(c.risk.level) && <span className="xs muted">sem riscos identificados</span>}
             <span className="sm muted">{c.services.join(' · ')}</span>
           </div>
@@ -49,6 +50,7 @@ export default function ClienteDetalhe() {
         <div className="row wrap gap-2">
           {data.channel_id && <Link to={`/comunicacao/${data.channel_id}`} className="btn" data-cursor="ABRIR"><I.chat size={14} /> Conversa com o cliente</Link>}
           {auth.can('conteudos', 'create') && <Link to={`/conteudos/novo?client_id=${c.id}`} className="btn btn-primary"><I.plus size={14} /> Conteúdo</Link>}
+          {auth.can('carteira', 'admin') && <DeleteClient c={c} />}
         </div>
       </header>
       <Tabs tabs={tabs} value={tab} onChange={setTab} />
@@ -318,5 +320,50 @@ function FinanceTab({ finance }) {
         {finance.invoices.map((i) => <tr key={i.id}><td>{i.description}</td><td>{fmtDate(i.due_at)}</td><td>{money(i.amount)}</td><td><span className={`tag ${i.status === 'paga' ? 'tag-ok' : i.status === 'atrasada' ? 'tag-err' : ''}`}>{i.status}</span></td></tr>)}
       </tbody></table></div>
     </div>
+  );
+}
+
+// Status do cliente (carteira): só a CEO ou quem ela liberar
+const CLIENT_STATUS = { onboarding: 'Onboarding', ativo: 'Ativo', pausado: 'Pausado', encerrado: 'Encerrado', a_confirmar: 'Status a confirmar' };
+function StatusControl({ c, reload }) {
+  const toast = useToast();
+  const change = async (status) => {
+    if (status === 'encerrado' && !window.confirm(`Encerrar ${cleanName(c.name)}? O cliente sai da operação (painéis, pendências e quadro do mês), mas a ficha e o histórico ficam guardados.`)) return;
+    try { await api.patch(`/clients/${c.id}`, { status }); toast(`Status: ${CLIENT_STATUS[status]}.`); reload(); } catch (e) { toast(e.message, 'err'); }
+  };
+  return (
+    <select className={`select status-select s-${c.status}`} value={c.status} onChange={(e) => change(e.target.value)} aria-label="Status do cliente">
+      {Object.entries(CLIENT_STATUS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+    </select>
+  );
+}
+
+// Excluir cliente (definitivo): só a CEO ou quem ela liberar; confirma digitando o nome
+function DeleteClient({ c }) {
+  const toast = useToast();
+  const nav = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setBusy(true);
+    try {
+      const r = await api.post(`/clients/${c.id}/excluir`, { confirm: typed });
+      toast(`${cleanName(c.name)} excluído (${r.conteudos} conteúdos, ${r.tarefas} tarefas).`);
+      nav('/clientes', { replace: true });
+    } catch (e) { toast(e.message, 'err'); setBusy(false); }
+  };
+  return (
+    <>
+      <Button variant="ghost" className="btn-danger" onClick={() => { setTyped(''); setOpen(true); }}>Excluir cliente</Button>
+      <Modal open={open} onClose={() => setOpen(false)} title="Excluir cliente"
+        footer={<><Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button><Button className="btn-danger" disabled={busy || typed.trim() !== c.name.trim()} onClick={go}>Excluir definitivamente</Button></>}>
+        <div className="col gap-4">
+          <p className="sm" style={{ margin: 0 }}>Isso apaga de vez a ficha, os conteúdos, as tarefas, os ciclos, as reuniões, a conversa, os arquivos e os acessos de cliente de <b>{cleanName(c.name)}</b>. Não dá para desfazer. Fica só a linha de auditoria “cliente excluído”, com quem fez e quando.</p>
+          <p className="sm muted" style={{ margin: 0 }}>Se a ideia é só tirar da operação, use o status <b>Encerrado</b>: tudo fica guardado.</p>
+          <Field label={`Para confirmar, digite: ${c.name}`}><input className="input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" /></Field>
+        </div>
+      </Modal>
+    </>
   );
 }

@@ -146,3 +146,6 @@
   :root:not([data-theme="light"]) .msg .replies { color: #F6F3F0; }
   :root:not([data-theme="light"]) .prob span, :root:not([data-theme="light"]) .switch.on { background: var(--bordo-vivo); }
 }
+.pw-box { border: 1px solid var(--line); border-radius: 10px; padding: var(--sp-4); }
+.pw-events { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 6px; }
+.pw-link { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }

@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { one, all, insert, update, run, uid, now, parseJSON, tx } from '../db.js';
-import { hashPassword, verifyPassword, validatePassword, createSession, destroySession, destroyUserSessions, checkRate, clearRate, COOKIE, requireAuth, requireInternal, requirePerm } from '../lib/auth.js';
-import { MODULES, ACTIONS, permissionMap, roleOf, can, canAccessClient, isInternal, scopeSQL, HttpError, PENDENCIAS_ROLES } from '../lib/permissions.js';
+import { hashPassword, verifyPassword, validatePassword, createSession, destroySession, destroyUserSessions, checkRate, clearRate, COOKIE, requireAuth, requireInternal, requirePerm, createResetToken, readResetToken } from '../lib/auth.js';
+import { sendMail, mailConfigured } from '../services/mail.js';
+import { MODULES, ACTIONS, permissionMap, roleOf, can, canAccessClient, isInternal, scopeSQL, HttpError, PENDENCIAS_ROLES, CEO_GRANT } from '../lib/permissions.js';
 import { bus, log } from '../lib/core.js';
 import { storage, fileDTO } from '../services/media.js';
 import { verifyAssetSig } from '../integrations/meta.js';
@@ -43,6 +44,56 @@ core.post('/auth/password', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// ── ESQUECI MINHA SENHA ──
+// A pessoa recebe um link no próprio e-mail e escolhe a senha nova. A senha nunca é guardada em texto nem mostrada
+// a ninguém (só o hash); a administração vê QUANDO a senha foi redefinida e pode definir uma senha provisória.
+const baseUrl = (req) => process.env.PUBLIC_BASE_URL || `${req.headers['x-forwarded-proto'] || req.protocol}://${req.headers['x-forwarded-host'] || req.headers.host}`;
+async function sendResetLink(u, req) {
+  const link = `${baseUrl(req)}/redefinir-senha?t=${encodeURIComponent(createResetToken(u))}`;
+  const first = u.name.split(' ')[0];
+  const mail = await sendMail({
+    to: u.email,
+    subject: 'Redefinir sua senha — The Bold',
+    text: `Olá, ${first}.\n\nPara criar uma nova senha de acesso à The Bold, abra o link abaixo (vale por 1 hora e funciona uma vez):\n${link}\n\nSe você não pediu, ignore este e-mail — sua senha continua a mesma.`,
+    html: `<div style="font-family:Arial,sans-serif;font-size:15px;color:#0B0B0B;line-height:1.5"><p>Olá, ${first.replace(/</g, '&lt;')}.</p><p>Para criar uma nova senha de acesso à <b>The Bold</b>, clique no botão abaixo. O link vale por 1 hora e funciona uma vez.</p><p><a href="${link}" style="display:inline-block;background:#4A1725;color:#fff;padding:12px 20px;border-radius:999px;text-decoration:none">Criar nova senha</a></p><p style="color:#736C66;font-size:13px">Se você não pediu, ignore este e-mail — sua senha continua a mesma.</p></div>`,
+  });
+  return { link, mail };
+}
+core.post('/auth/forgot', async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  checkRate(`forgot:${req.ip}`);
+  const u = email && one('SELECT * FROM users WHERE email=? AND active=1', email);
+  if (u) {
+    const { mail } = await sendResetLink(u, req);
+    log({ actor: u.id, action: 'auth.senha_pedido', entity: 'user', id: u.id, summary: `${u.name} pediu para redefinir a senha${mail.sent ? ' — link enviado por e-mail' : ` — e-mail NÃO enviado (${mail.reason})`}`, ip: req.ip });
+  }
+  // mesma resposta exista ou não a conta (não revela quem tem acesso)
+  res.json({ ok: true, mail_configured: mailConfigured() });
+});
+core.get('/auth/reset', (req, res) => {
+  const u = readResetToken(req.query.t);
+  if (!u) throw new HttpError(410, 'Este link expirou ou já foi usado. Peça um novo em “Esqueci minha senha”.');
+  res.json({ name: u.name.split(' ')[0], email: u.email });
+});
+core.post('/auth/reset', (req, res) => {
+  const u = readResetToken(req.body?.token);
+  if (!u) throw new HttpError(410, 'Este link expirou ou já foi usado. Peça um novo em “Esqueci minha senha”.');
+  const next = String(req.body?.password || '');
+  validatePassword(next);
+  update('users', { id: u.id }, { password_hash: hashPassword(next) });
+  destroyUserSessions(u.id);
+  log({ actor: u.id, action: 'auth.senha_redefinida', entity: 'user', id: u.id, summary: `${u.name} redefiniu a própria senha pelo link do e-mail`, ip: req.ip });
+  res.json({ ok: true });
+});
+// Administração: gera o link de redefinição (envia por e-mail quando configurado; o link também volta para mandar por WhatsApp)
+core.post('/users/:id/reset-link', requirePerm('usuarios', 'admin'), async (req, res) => {
+  const u = one('SELECT * FROM users WHERE id=? AND active=1', req.params.id);
+  if (!u) throw new HttpError(404, 'Usuário não encontrado ou desativado.');
+  const { link, mail } = await sendResetLink(u, req);
+  log({ actor: req.user.id, action: 'auth.senha_link', entity: 'user', id: u.id, summary: `Link de redefinição de senha gerado para ${u.name}${mail.sent ? ' e enviado por e-mail' : ''}` });
+  res.json({ link, sent: mail.sent, reason: mail.reason || null });
+});
+
 // ── USUÁRIOS E PERMISSÕES (admin) ──
 core.get('/users/directory', requireInternal, (_req, res) => {
   res.json(all("SELECT id, name, role_key, title, functions, avatar_color FROM users WHERE active=1 AND role_key<>'cliente' ORDER BY name").map((u) => ({ ...u, functions: parseJSON(u.functions, []) })));
@@ -52,6 +103,7 @@ core.get('/users', requirePerm('usuarios', 'view'), (_req, res) => {
     ...userDTO(u),
     clients: all('SELECT cm.client_id, cm.function, c.name FROM client_members cm JOIN clients c ON c.id=cm.client_id WHERE cm.user_id=?', u.id),
     overrides: all('SELECT module, action, effect FROM user_permissions WHERE user_id=?', u.id),
+    password_events: all("SELECT action, summary, created_at FROM activity_logs WHERE entity_type='user' AND entity_id=? AND action IN ('auth.senha','auth.senha_redefinida','auth.senha_pedido','auth.senha_link','usuario.senha') ORDER BY created_at DESC LIMIT 5", u.id),
   }));
   res.json({ users, roles: all('SELECT * FROM roles'), role_permissions: all('SELECT * FROM role_permissions'), modules: MODULES, actions: ACTIONS });
 });
@@ -84,6 +136,7 @@ core.patch('/users/:id', requirePerm('usuarios', 'admin'), (req, res) => {
   if (password) { validatePassword(password); patch.password_hash = hashPassword(password); }
   update('users', { id: u.id }, patch);
   if (active === false || password) destroyUserSessions(u.id);
+  if (password) log({ actor: req.user.id, action: 'usuario.senha', entity: 'user', id: u.id, summary: `Senha provisória definida por ${req.user.name} para ${u.name}` });
   log({ actor: req.user.id, action: 'usuario.alterado', entity: 'user', id: u.id, summary: `Usuário ${u.name} alterado: ${Object.keys(patch).filter((k) => k !== 'password_hash').join(', ')}${password ? ', senha' : ''}`, before: JSON.stringify({ role_key: u.role_key, active: u.active }), after: JSON.stringify({ role_key: patch.role_key ?? u.role_key, active: patch.active ?? u.active }) });
   res.json(userDTO(one('SELECT * FROM users WHERE id=?', u.id)));
 });
@@ -106,9 +159,12 @@ core.put('/users/:id/permissions', requirePerm('usuarios', 'admin'), (req, res) 
   const u = one('SELECT * FROM users WHERE id=?', req.params.id);
   if (!u) throw new HttpError(404, 'Usuário não encontrado.');
   const ov = (req.body?.overrides || []).filter((o) => MODULES[o.module] && ACTIONS.includes(o.action) && ['grant', 'deny'].includes(o.effect));
-  // liberar/retirar a Divisão de clientes é decisão da CEO (divisao:admin)
-  const div = (list) => JSON.stringify(list.filter((o) => o.module === 'divisao').map((o) => `${o.effect}:${o.action}`).sort());
-  if (div(ov) !== div(all('SELECT module, action, effect FROM user_permissions WHERE user_id=?', u.id)) && !can(req.user, 'divisao', 'admin')) throw new HttpError(403, 'Só a CEO (ou quem tem a Divisão de clientes como administração) pode liberar quem vincula e desvincula clientes.');
+  // liberar/retirar Divisão e Carteira de clientes é decisão da CEO (<módulo>:admin)
+  const prevOv = all('SELECT module, action, effect FROM user_permissions WHERE user_id=?', u.id);
+  for (const mod of CEO_GRANT) {
+    const sig = (list) => JSON.stringify(list.filter((o) => o.module === mod).map((o) => `${o.effect}:${o.action}`).sort());
+    if (sig(ov) !== sig(prevOv) && !can(req.user, mod, 'admin')) throw new HttpError(403, `Só a CEO pode liberar ou retirar “${MODULES[mod]}”.`);
+  }
   tx(() => { run('DELETE FROM user_permissions WHERE user_id=?', u.id); ov.forEach((o) => insert('user_permissions', { user_id: u.id, ...o })); });
   log({ actor: req.user.id, action: 'usuario.permissoes', entity: 'user', id: u.id, summary: `Permissões específicas de ${u.name}: ${ov.map((o) => `${o.effect} ${o.module}:${o.action}`).join(', ') || 'nenhuma'}` });
   res.json({ ok: true });
@@ -117,8 +173,11 @@ core.put('/roles/:key/permissions', requirePerm('usuarios', 'admin'), (req, res)
   const role = one('SELECT * FROM roles WHERE key=?', req.params.key);
   if (!role) throw new HttpError(404, 'Role não encontrado.');
   const perms = (req.body?.permissions || []).filter((p) => MODULES[p.module] && ACTIONS.includes(p.action));
-  const divR = (list) => JSON.stringify(list.filter((p) => p.module === 'divisao').map((p) => p.action).sort());
-  if (divR(perms) !== divR(all('SELECT module, action FROM role_permissions WHERE role_key=?', role.key)) && !can(req.user, 'divisao', 'admin')) throw new HttpError(403, 'Só a CEO pode mudar quem vincula e desvincula clientes da equipe.');
+  const prevRp = all('SELECT module, action FROM role_permissions WHERE role_key=?', role.key);
+  for (const mod of CEO_GRANT) {
+    const sig = (list) => JSON.stringify(list.filter((p) => p.module === mod).map((p) => p.action).sort());
+    if (sig(perms) !== sig(prevRp) && !can(req.user, mod, 'admin')) throw new HttpError(403, `Só a CEO pode mudar quem tem “${MODULES[mod]}”.`);
+  }
   tx(() => { run('DELETE FROM role_permissions WHERE role_key=?', role.key); perms.forEach((p) => insert('role_permissions', { role_key: role.key, module: p.module, action: p.action })); });
   log({ actor: req.user.id, action: 'role.permissoes', entity: 'role', id: role.key, summary: `Permissões do perfil ${role.label} atualizadas (${perms.length})` });
   res.json({ ok: true });

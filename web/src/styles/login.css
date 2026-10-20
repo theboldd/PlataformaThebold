@@ -75,3 +75,6 @@
   .lg-form { border-radius: 22px; }
 }
 @media (prefers-reduced-motion: reduce) { .lg-grain, .lg-runner, .lg-marquee-in { animation: none; } }
+.lg-note { margin: 0; font-size: 14px; line-height: 1.5; color: #3B3734; }
+.lg-link { align-self: center; border: 0; background: none; color: #736C66; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; padding: 6px; }
+.lg-link:hover { color: #0B0B0B; }

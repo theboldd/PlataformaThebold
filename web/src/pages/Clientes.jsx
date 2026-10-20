@@ -32,7 +32,7 @@ export default function Clientes() {
   return (
     <div className="page">
       <PageHead kicker={auth.role.all_clients ? 'Todos os clientes' : 'Seus clientes vinculados'} title="Clientes" sub="Gerencie seus clientes e conteúdos.">
-        {auth.can('clientes', 'admin') && <Button variant="ink" size="lg" magnetic icon={<I.plus size={16} />} onClick={() => setOpen(true)} data-cursor="CRIAR">Novo cliente</Button>}
+        {auth.can('carteira', 'create') && <Button variant="ink" size="lg" magnetic icon={<I.plus size={16} />} onClick={() => setOpen(true)} data-cursor="CRIAR">Novo cliente</Button>}
       </PageHead>
       <div className="ct-toolbar">
         <label className="ct-search"><I.search size={16} /><input placeholder="Buscar por nome, @usuário ou segmento…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Buscar cliente" /></label>
