@@ -105,7 +105,11 @@ const C = one('SELECT * FROM clients WHERE id=?', chosenId);
 if (!C) { console.error('Nenhum cliente ativo disponível.'); process.exit(2); }
 R.client = { id: C.id, name: C.name, criteria: candidates.find((x) => x.id === C.id), alternatives: candidates.slice(0, 6) };
 console.log(`Cliente de teste: ${C.name} (${C.id})`, R.client.criteria);
-const OTHER = one("SELECT * FROM clients WHERE id<>? AND status='ativo' AND COALESCE(kind,'externo')<>'interno' ORDER BY name LIMIT 1", C.id); // regra 16: THE BOLD (interno) fora
+// Isolamento entre clientes: um cliente ativo real; senão, qualquer outro cliente externo real (o isolamento vale para todo status);
+// só sem nenhum, um cliente de controle marcado com a tag (removido na limpeza). Regra 16: THE BOLD (interno) fica fora.
+const OTHER = one("SELECT * FROM clients WHERE id<>? AND COALESCE(kind,'externo')<>'interno' ORDER BY status='ativo' DESC, name LIMIT 1", C.id)
+  || insert('clients', { id: uid('cl_'), name: `Controle ${TAG}`, status: 'onboarding', services: '[]', started_at: now().slice(0, 10), requires_theme_approval: 0, monthly_posts: 0, created_at: now(), is_demo: 0 });
+if (OTHER.status !== 'ativo') R.notes.push(`Isolamento testado contra cliente com status “${OTHER.status}” (não há outro cliente ativo).`);
 const otherContent = OTHER ? one('SELECT id FROM contents WHERE client_id=? LIMIT 1', OTHER.id) : null;
 
 // ── Servidor e sessões ──

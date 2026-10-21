@@ -99,7 +99,8 @@ export function leakCheck(meeting, clientContent) {
     const probe = String(item).trim().toLowerCase();
     if (probe.length >= 16 && text.toLowerCase().includes(probe.slice(0, Math.min(40, probe.length)))) flags.push(`Trecho do resumo interno: “${String(item).slice(0, 80)}”`);
   }
-  for (const o of all('SELECT name FROM clients WHERE id<>? AND length(name)>=4', meeting.client_id || '')) {
+  // A própria agência (cliente interno, regra 16) não é "outro cliente": citar a The Bold num resumo é normal.
+  for (const o of all("SELECT name FROM clients WHERE id<>? AND length(name)>=4 AND COALESCE(kind,'externo')<>'interno'", meeting.client_id || '')) {
     const n = o.name.replace(/\s*\[DEMO\]/, '').trim();
     if (n.length >= 4 && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(text)) flags.push(`Nome de outro cliente: “${n}”`);
   }
