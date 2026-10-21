@@ -49,7 +49,7 @@ export function tick() {
       if (isEnabled('prazo.vencido') && onceFor('prazo.vencido', k.id, k.due_at)) {
         automation('prazo.vencido', { entity: 'task', id: k.id, client: k.client_id, detail: k.due_at });
         notify(k.assignee_id, { level: 'urgente', type: 'atraso', title: `Prazo vencido: ${k.title}`, body: 'Conclua ou avise Operações sobre o novo prazo.', link: k.content_id ? `/conteudos/${k.content_id}` : '/', groupKey: `atraso:${k.assignee_id}`, client: k.client_id, content: k.content_id });
-        notify(cc(), { level: 'atencao', type: 'atraso', title: 'Tarefas atrasadas', body: `${k.title}`, link: '/pendencias', groupKey: 'atraso:cc' });
+        notify(cc(), { level: 'atencao', type: 'atraso', title: 'Tarefas atrasadas', body: `${k.title}`, link: '/pendencias?escopo=equipe', groupKey: 'atraso:cc' });
         log({ kind: 'sistema', action: 'risco.prazo_vencido', entity: 'task', id: k.id, client: k.client_id, content: k.content_id, summary: `Prazo vencido: ${k.title}` });
       }
     } else if (due - t < 24 * H && isEnabled('prazo.proximo') && onceFor('prazo.proximo', k.id, k.due_at)) {
@@ -80,7 +80,7 @@ export function tick() {
     }
     if (waited >= h3 && isEnabled('cliente.sem_resposta_72h') && onceFor('cliente.sem_resposta_72h', c.id, marker)) {
       automation('cliente.sem_resposta_72h', { entity: 'content', id: c.id, client: c.client_id, detail: marker });
-      notify(cc(), { level: 'urgente', type: 'escalada', title: `${c.cname}: 72h sem resposta do cliente`, body: 'Decidir: segue para a próxima semana ou para o próximo mês?', link: '/pendencias', groupKey: `esc:${c.client_id}`, client: c.client_id });
+      notify(cc(), { level: 'urgente', type: 'escalada', title: `${c.cname}: 72h sem resposta do cliente`, body: 'Decidir: segue para a próxima semana ou para o próximo mês?', link: '/pendencias?escopo=equipe', groupKey: `esc:${c.client_id}`, client: c.client_id });
     }
   }
   // Lembrete de reunião na véspera (cliente e participantes)

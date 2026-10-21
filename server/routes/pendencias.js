@@ -3,28 +3,64 @@
 import { Router } from 'express';
 import { one, all, update, now } from '../db.js';
 import { requireInternal } from '../lib/auth.js';
-import { can, assertClient, HttpError } from '../lib/permissions.js';
+import { can, canAccessClient, assertClient, HttpError } from '../lib/permissions.js';
 import { log } from '../lib/core.js';
 import { computePendencies } from '../engine/intelligence.js';
-import { completeTask, unblockContent } from '../engine/process.js';
+import { completeTask, unblockContent, setting } from '../engine/process.js';
 import { addComment, checkOnboardingComplete } from './ops.js';
 
 export const pendencias = Router();
-const guard = [requireInternal, (req, _res, next) => (can(req.user, 'pendencias') ? next() : next(new HttpError(403, 'Centro de Pendências: acesso restrito (liberado pela administração em Usuários).')))];
+// MINHAS (toda a equipe): só o que exige ação da própria pessoa. EQUIPE: a operação inteira — exige a permissão
+// "pendencias" (CEO e Operações por padrão; a CEO libera para outras pessoas em Usuários). Checado aqui, no servidor.
+const guard = [requireInternal];
+const canTeam = (u) => can(u, 'pendencias');
+
+// Quem precisa agir em cada pendência (regra determinística — ver docs/07-regras-oficiais.md)
+const members = (clientId, fns) => (clientId ? all(`SELECT DISTINCT user_id FROM client_members WHERE client_id=? AND function IN (${fns.map(() => '?').join(',')})`, clientId, ...fns).map((r) => r.user_id) : []);
+const roleUsers = (roles) => all(`SELECT id FROM users WHERE active=1 AND role_key IN (${roles.map(() => '?').join(',')})`, ...roles).map((r) => r.id);
+const financeUsers = () => all("SELECT DISTINCT u.id FROM users u JOIN role_permissions rp ON rp.role_key=u.role_key WHERE u.active=1 AND rp.module='financeiro' AND rp.action='edit'").map((r) => r.id);
+export function ownersOf(i) {
+  const src = i.source || {};
+  if (src.type === 'task') {
+    if (i.who_id) return [i.who_id];
+    const t = one('SELECT function FROM tasks WHERE id=?', src.id);
+    if (t?.function === 'cliente') return members(i.client_id, ['atendimento']).length ? members(i.client_id, ['atendimento']) : roleUsers(setting('agendamento_roles'));
+    return roleUsers(setting('cc_roles')); // sem responsável → Operações define
+  }
+  if (src.type === 'content') {
+    const c = one('SELECT waiting_on FROM contents WHERE id=?', src.id);
+    if (c?.waiting_on === 'cliente') return members(i.client_id, ['atendimento', 'estrategia']);
+    const live = all("SELECT DISTINCT assignee_id FROM tasks WHERE content_id=? AND status IN ('aberta','em_andamento','agendada') AND assignee_id IS NOT NULL", src.id).map((r) => r.assignee_id);
+    return live.length ? live : roleUsers(setting('cc_roles'));
+  }
+  if (src.type === 'onboarding_item') return members(i.client_id, ['atendimento', 'estrategia']);
+  if (src.type === 'invoice') return financeUsers();
+  return [];
+}
+export function myPendencies(user) {
+  return computePendencies().filter((i) => (can(user, 'financeiro') || !i.financial) && (!i.client_id || canAccessClient(user, i.client_id)) && ownersOf(i).includes(user.id));
+}
 
 export const CAUSES = {
   cliente: 'Cliente', prazo: 'Prazo da equipe', responsavel: 'Responsável', material: 'Material', equipe: 'Equipe',
   informacao: 'Informação', onboarding: 'Onboarding', financeiro: 'Financeiro',
 };
-const visible = (user) => computePendencies().filter((i) => can(user, 'financeiro') || !i.financial);
+const teamVisible = (user) => computePendencies().filter((i) => can(user, 'financeiro') || !i.financial);
+// O que esta pessoa pode ver: Equipe (com permissão) ou só as Minhas
+const visible = (user) => (canTeam(user) ? teamVisible(user) : myPendencies(user));
 
 pendencias.get('/pendencias', ...guard, (req, res) => {
-  const items = visible(req.user);
+  const team = canTeam(req.user);
+  const scope = req.query.escopo === 'equipe' ? 'equipe' : 'minhas';
+  if (scope === 'equipe' && !team) throw new HttpError(403, 'A visão da equipe no Centro de Pendências é liberada pela CEO (Usuários → permissões).');
+  const mine = myPendencies(req.user);
+  const items = scope === 'equipe' ? teamVisible(req.user) : mine;
   const count = (f) => items.filter(f).length;
   const causes = Object.entries(CAUSES).map(([k, label]) => ({ key: k, label, n: count((i) => i.cause === k), critical: count((i) => i.cause === k && i.severity === 'critica') })).filter((c) => c.n);
   const who = [...new Set(items.map((i) => i.who).filter(Boolean))].sort();
   res.json({
     items: items.map((i) => ({ ...i, cause_label: CAUSES[i.cause] || i.cause })),
+    scope, can_team: team, tab_counts: { minhas: mine.length, equipe: team ? teamVisible(req.user).length : null },
     counts: { total: items.length, critica: count((i) => i.severity === 'critica'), alta: count((i) => i.severity === 'alta'), media: count((i) => i.severity === 'media'), baixa: count((i) => i.severity === 'baixa') },
     causes,
     filters: {

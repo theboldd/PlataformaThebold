@@ -20,8 +20,10 @@ const pl = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 export default function Pendencias() {
   useCrumbs('Centro de Pendências');
-  const { data, error, loading, reload } = useApi('/pendencias');
   const [params, setParams] = useSearchParams();
+  // MINHAS (o que exige ação minha) × EQUIPE (operação inteira — só com permissão)
+  const scope = params.get('escopo') === 'equipe' ? 'equipe' : 'minhas';
+  const { data, error, loading, reload } = useApi(`/pendencias?escopo=${scope}`, [scope]);
   const f = Object.fromEntries(KEYS.map((k) => [k, params.get(k) || '']));
   const set = (k, v) => setParams((p) => { const n = new URLSearchParams(p); if (v && n.get(k) !== v) n.set(k, v); else n.delete(k); return n; }, { replace: true });
   const [open, openDetail, closeDetail] = useDetailParam('p'); // detalhe no histórico: voltar fecha e devolve a lista
@@ -29,7 +31,7 @@ export default function Pendencias() {
   const shown = useMemo(() => items.filter((i) => (!f.sev || i.severity === f.sev) && (!f.cause || i.cause === f.cause) && (!f.client || i.client_id === f.client) && (!f.who || i.who === f.who) && (!f.process || i.process === f.process)),
     [items, f.sev, f.cause, f.client, f.who, f.process]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (error?.status === 403) return <div className="page"><div className="pd-head"><h1 className="pd-h1">Centro de Pendências</h1></div><Empty title="Área exclusiva.">{error.message}</Empty></div>;
+  if (error?.status === 403) return <div className="page"><div className="pd-head"><h1 className="pd-h1">Centro de Pendências</h1></div><Empty title="Visão restrita.">{error.message} <a className="link" href="/pendencias">Ver as minhas</a></Empty></div>;
   if (error) return <div className="page"><ErrorBox error={error} /></div>;
   if (loading && !data) return <div className="page"><Loading rows={8} /></div>;
   const C = data.counts;
@@ -41,13 +43,17 @@ export default function Pendencias() {
     <div className="page pd">
       <header className="pd-head">
         <div>
-          <h1 className="pd-h1">O que está travando a operação?</h1>
-          <p className="pd-sub">Pendências derivadas do estado real da operação · {pl(C.total, 'pendência', 'pendências')}</p>
+          <h1 className="pd-h1">{scope === 'minhas' ? 'O que depende de você?' : 'O que está travando a operação?'}</h1>
+          <p className="pd-sub">{scope === 'minhas' ? 'Só o que exige ação sua' : 'Pendências de toda a operação'} · derivadas do estado real · {pl(C.total, 'pendência', 'pendências')}</p>
+        </div>
+        <div className="pd-scope" role="tablist" aria-label="Escopo">
+          <button role="tab" aria-selected={scope === 'minhas'} className={scope === 'minhas' ? 'on' : ''} onClick={() => setParams({}, { replace: true })}>Minhas <b>{data.tab_counts.minhas}</b></button>
+          {data.can_team && <button role="tab" aria-selected={scope === 'equipe'} className={scope === 'equipe' ? 'on' : ''} onClick={() => setParams({ escopo: 'equipe' }, { replace: true })}>Equipe <b>{data.tab_counts.equipe}</b></button>}
         </div>
       </header>
 
       {!C.total ? (
-        <div className="pd-clear"><span className="pd-big">00</span><p>Nada travando a operação agora. Tarefas atrasadas, bloqueios, onboarding parado e pagamentos vencidos aparecem aqui sozinhos.</p></div>
+        <div className="pd-clear"><span className="pd-big">00</span><p>{scope === 'minhas' ? 'Nada depende de você agora. Quando uma tarefa sua atrasar, um conteúdo seu travar ou um cliente seu esperar resposta, aparece aqui.' : 'Nada travando a operação agora. Tarefas atrasadas, bloqueios, onboarding parado e pagamentos vencidos aparecem aqui sozinhos.'}</p></div>
       ) : (
         <>
           {/* RADAR DE PRIORIDADE */}
@@ -87,7 +93,7 @@ export default function Pendencias() {
               <Sel label="Quem age" value={f.who} onChange={(v) => set('who', v)} options={data.filters.who.map((w) => [w, w])} />
               <Sel label="Tipo" value={f.cause} onChange={(v) => set('cause', v)} options={data.causes.map((c) => [c.key, c.label])} />
               <Sel label="Processo" value={f.process} onChange={(v) => set('process', v)} options={data.filters.processes.map((p) => [p, p])} />
-              {active && <button className="pd-clear-btn" onClick={() => setParams({}, { replace: true })}>Limpar</button>}
+              {active && <button className="pd-clear-btn" onClick={() => setParams(scope === 'equipe' ? { escopo: 'equipe' } : {}, { replace: true })}>Limpar</button>}
             </div>
           </div>
 

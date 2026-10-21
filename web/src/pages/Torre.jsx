@@ -111,7 +111,7 @@ export default function Torre() {
                 <span className="tw-go">Ver contexto <I.arrow size={13} /></span>
               </Link>
             ))}
-            {d.risks.length > 3 && <Link className="tw-more" to="/pendencias">Ver todos · {d.risks.length} <I.arrow size={13} /></Link>}
+            {d.risks.length > 3 && <Link className="tw-more" to="/pendencias?escopo=equipe">Ver todos · {d.risks.length} <I.arrow size={13} /></Link>}
           </div>
           <div>
             <h3 className="tw-h3">Gargalos <span>{n2(d.bottlenecks.length)}</span></h3>
@@ -137,7 +137,7 @@ export default function Torre() {
                 <span className="tw-go">Resolver <I.arrow size={13} /></span>
               </Link>
             ))}
-            {d.blocks.length > 3 && <Link className="tw-more" to="/pendencias">Ver todos · {d.blocks.length} <I.arrow size={13} /></Link>}
+            {d.blocks.length > 3 && <Link className="tw-more" to="/pendencias?escopo=equipe">Ver todos · {d.blocks.length} <I.arrow size={13} /></Link>}
           </div>
         </div>
       </section>

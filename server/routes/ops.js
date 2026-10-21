@@ -14,6 +14,7 @@ import { ingest, fileDTO, TMP_DIR } from '../services/media.js';
 import { BRAIN_SECTIONS, exportClientBrainMarkdown } from '../ai/memory.js';
 import { integrationStatus } from '../integrations/vault.js';
 import { activeForm, formStatus } from '../services/onboarding.js';
+import { myPendencies } from './pendencias.js';
 
 export const ops = Router();
 ops.use(requireInternal);
@@ -500,7 +501,7 @@ ops.get('/review/queue', requirePerm('revisao', 'view'), (req, res) => {
   res.json({ items, team: all("SELECT id, name, role_key FROM users WHERE active=1 AND role_key IN ('design','edicao','copy','producao','estrategia') ORDER BY name") });
 });
 
-// ═════════════ CENTRO DE PENDÊNCIAS (exclusivo CEO + Operações) ═════════════
+// ═════════════ CENTRO DE PENDÊNCIAS (Minhas: toda a equipe · Equipe: permissão pendencias) ═════════════
 // Centro de Pendências: ver routes/pendencias.js
 
 // ═════════════ TORRE DE CONTROLE / DASHBOARDS ═════════════
@@ -549,12 +550,43 @@ function executiveBrief(m, risks, pend, insights) {
 ops.get('/torre', requirePerm('torre', 'view'), (req, res) => res.json(tower(req.user, req.query)));
 ops.get('/torre/automations', requirePerm('torre', 'view'), (req, res) => res.json(automationRuns(req.query)));
 ops.get('/torre/people/:id/tasks', requirePerm('torre', 'view'), (req, res) => res.json(personTasks(req.params.id)));
+// "O que eu preciso fazer hoje?" — igual para toda a equipe, só com dados da própria pessoa e dos clientes dela
+const FLOW_VIEW = ['cronograma', 'analise_cronograma', 'aprovacao_tema', 'producao', 'analise_producao', 'aprovacao_cliente', 'agendamento', 'agendado', 'publicado'];
+function todayFor(u, mine) {
+  const nowIso = now();
+  const end = new Date(); end.setHours(23, 59, 59, 999); const endIso = end.toISOString();
+  const week = new Date(Date.now() + 7 * 864e5).toISOString();
+  const overdue = mine.filter((t) => t.due_at && t.due_at < nowIso);
+  const today = mine.filter((t) => t.due_at && t.due_at >= nowIso && t.due_at <= endIso);
+  const next = mine.filter((t) => t.due_at && t.due_at > endIso && t.due_at <= week);
+  const scheduled = one("SELECT COUNT(*) n, MIN(available_at) first FROM tasks WHERE assignee_id=? AND status='agendada'", u.id);
+  const pend = myPendencies(u);
+  const clients = all("SELECT c.id, c.name, GROUP_CONCAT(DISTINCT cm.function) fns FROM client_members cm JOIN clients c ON c.id=cm.client_id WHERE cm.user_id=? AND cm.function<>'cliente' AND c.status<>'encerrado' GROUP BY c.id ORDER BY c.name", u.id)
+    .map((c) => ({ id: c.id, name: c.name, functions: c.fns.split(','), open: mine.filter((t) => t.client_id === c.id).length }));
+  const unread = all("SELECT id, type, title, body, link, count, updated_at FROM notifications WHERE user_id=? AND read_at IS NULL ORDER BY updated_at DESC LIMIT 5", u.id);
+  const unreadTotal = one('SELECT COUNT(*) n FROM notifications WHERE user_id=? AND read_at IS NULL', u.id).n;
+  // Você está aqui: a tarefa mais urgente com conteúdo → cliente → processo → etapa → próxima ação
+  const focusTask = [...overdue, ...today, ...next, ...mine].find((t) => t.content_id);
+  let here = null;
+  if (focusTask) {
+    const c = one('SELECT * FROM contents WHERE id=?', focusTask.content_id);
+    if (c && canAccessClient(u, c.client_id)) {
+      const na = nextAction(c);
+      here = { task: focusTask.title, task_due: focusTask.due_at, client_id: c.client_id, client: one('SELECT name FROM clients WHERE id=?', c.client_id)?.name, content_id: c.id, content: `#${c.number} ${c.title}`,
+        steps: FLOW_VIEW.map((k) => ({ key: k, label: STAGES[k].label })), current: c.stage, current_label: STAGES[c.stage].label, next: na.text, next_who: na.who };
+    }
+  }
+  return { overdue: overdue.length, today: today.length, next7: next.length, no_due: mine.filter((t) => !t.due_at).length, scheduled: scheduled.n, scheduled_first: scheduled.first,
+    pendencies: pend.length, pendencies_top: pend.slice(0, 4), clients, unread: unreadTotal, unread_items: unread, here,
+    focus: [...overdue, ...today, ...next].slice(0, 6) };
+}
+
 ops.get('/dashboard', (req, res) => {
   const u = req.user;
   const kind = roleOf(u).dashboard;
   const m = opsMetrics(u);
   const mine = all("SELECT * FROM tasks WHERE assignee_id=? AND status IN ('aberta','em_andamento') ORDER BY due_at IS NULL, due_at", u.id).map(taskRow);
-  const base = { kind, metrics: m, my_tasks: mine, meetings: upcomingMeetings(u, 3) };
+  const base = { kind, metrics: m, my_tasks: mine, meetings: upcomingMeetings(u, 3), today: kind === 'ceo' ? null : todayFor(u, mine) };
   const sc = scopeSQL(u, 'client_id');
   if (kind === 'ceo') {
     // Visão executiva: resumo → prioridade → contexto; o detalhe completo continua na Torre de Controle

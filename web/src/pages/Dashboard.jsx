@@ -6,6 +6,7 @@ import { Stat, Section, Loading, ErrorBox, Empty, Drawer, Status, ContentCard } 
 import { greeting, firstName, fmtDate, fmtDateTime, money, cleanName, ago, fmtWeekday } from '../lib/format.js';
 import { FORMATS } from '../lib/status.js';
 import Executive from './dash/Executive.jsx';
+import { Today } from './dash/Today.jsx';
 import { Meter, MyTasks, ContentRows, PendRows, RiskList, MeetingRows, InsightMini, CopyText, n2 } from './intel/parts.jsx';
 
 const DEAL_STAGE = { lead: 'Lead', contato: 'Contato', qualificacao: 'Qualificação', reuniao: 'Reunião', proposta: 'Proposta', negociacao: 'Negociação', fechado: 'Fechado', onboarding: 'Onboarding', perdido: 'Perdido' };
@@ -29,6 +30,7 @@ export default function Dashboard() {
         <p className="question">{QUESTION[d?.kind] || QUESTION[auth.role.dashboard] || 'O que você precisa saber e fazer agora?'}</p>
       </header>
       <ErrorBox error={error} />
+      {d && <Today t={d.today} />}
       {loading && !d ? <Loading rows={6} /> : d && (
         d.kind === 'operacoes' ? <Ops d={d} reload={reload} /> : d.kind === 'revisao' ? <Review d={d} reload={reload} />
           : d.kind === 'estrategia' ? <Strategy d={d} reload={reload} /> : d.kind === 'comercial' ? <Commercial d={d} reload={reload} /> : <Production d={d} reload={reload} />
@@ -42,7 +44,7 @@ function Ops({ d, reload }) {
   return (
     <>
       <div className="hero-stats">
-        <Stat value={d.critical_count} label="Pendências críticas" alert={d.critical_count > 0} to={d.attention.length ? '/pendencias' : undefined} />
+        <Stat value={d.critical_count} label="Pendências críticas" alert={d.critical_count > 0} to={d.attention.length ? '/pendencias?escopo=equipe' : undefined} />
         <Stat value={d.waiting_client.length} label="Clientes aguardando resposta" hint="conteúdos com o cliente" />
         <Stat value={m.prazos_hoje} label="Prazos hoje" />
         <Stat value={d.unassigned.length} label="Tarefas sem responsável" alert={d.unassigned.length > 0} />
@@ -50,8 +52,8 @@ function Ops({ d, reload }) {
       </div>
       <div className="cols mt-6">
         <div>
-          <Section title="Atenção" kicker="Prioridade de hoje" action={d.attention.length ? <Link className="btn btn-sm btn-ghost" to="/pendencias">Todas →</Link> : null}>
-            {d.attention.length ? <PendRows items={d.attention} /> : <Empty title="Sem pendências globais visíveis.">O Centro de Pendências é exclusivo de Rebeca e Vitória.</Empty>}
+          <Section title="Atenção" kicker="Prioridade de hoje" action={d.attention.length ? <Link className="btn btn-sm btn-ghost" to="/pendencias?escopo=equipe">Todas →</Link> : null}>
+            {d.attention.length ? <PendRows items={d.attention} /> : <Empty title="Nenhuma pendência da equipe agora." />}
           </Section>
           {d.unassigned.length > 0 && <Section title="Sem responsável" kicker="O fluxo parou aqui"><MyTasks tasks={d.unassigned} reload={reload} /></Section>}
           <Section title="Clientes aguardando" kicker="Aprovações com o cliente"><ContentRows items={d.waiting_client} /></Section>
