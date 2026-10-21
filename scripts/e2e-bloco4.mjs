@@ -48,11 +48,12 @@ globalThis.fetch = (input, init) => {
   return Promise.reject(new Error(`Rede externa bloqueada durante o ${TAG}: ${url.replace(/\?.*/, '')}`));
 };
 
-const { db, one, all, insert, uid, now, run } = await import('../server/db.js');
+const { db, one, all, insert, uid, now, run, setClock } = await import('../server/db.js');
 const rawCounts = Object.fromEntries(all("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").map((t) => [t.name, one(`SELECT COUNT(*) n FROM "${t.name}"`).n]));
 const { createApp, bootstrap } = await import('../server/index.js');
 bootstrap(); // ajustes únicos de inicialização acontecem ANTES da fotografia "antes" (não são dados de teste)
 const P = await import('../server/engine/process.js');
+const { activateScheduledTasks } = await import('../server/engine/scheduler.js');
 const { hashPassword, createSession, COOKIE } = await import('../server/lib/auth.js');
 const { waitForProcessing } = await import('../server/services/media.js');
 const sharp = (await import('sharp')).default;
@@ -145,6 +146,34 @@ function video(color) {
 }
 const fdFiles = (list) => { const fd = new FormData(); for (const [buf, name, mime] of list) fd.append('files', new Blob([buf], { type: mime }), name); return fd; };
 
+// PRONTO ≠ DISPONÍVEL: antes da data a ação é recusada (API e tela); na data do marco a tarefa abre, o responsável é avisado e então age.
+// O relógio da aplicação é avançado SÓ neste processo e só para as tarefas do teste (nenhuma tarefa real é aberta).
+const windows = [];
+async function actWhenAvailable(contentId, actorId, label, act) { // act(cliente HTTP do responsável)
+  const c = one('SELECT * FROM contents WHERE id=?', contentId);
+  const t = one("SELECT * FROM tasks WHERE content_id=? AND stage=? AND status='agendada'", contentId, c.stage);
+  if (!t || t.available_at <= now()) return act(as(actorId));
+  const early = await as(actorId).post(`/contents/${contentId}/review`, { decision: 'aprovar' });
+  must(early.status === 409 && /Etapa agendada/.test(early.data.error || ''), `ação antecipada não foi bloqueada (HTTP ${early.status})`);
+  const detail = (await as(actorId).get(`/contents/${contentId}`)).data;
+  must(detail.available_at === t.available_at, 'tela não informa quando a etapa abre');
+  const queue = (await as(actorId).get('/review/queue')).data;
+  const qi = JSON.stringify(queue).includes(contentId) ? [].concat(...Object.values(queue).filter(Array.isArray)).find((x) => x?.id === contentId) : null;
+  setClock(new Date(new Date(t.available_at).getTime() + 60e3).toISOString());
+  try {
+    activateScheduledTasks([t.id]);
+    must(one('SELECT status FROM tasks WHERE id=?', t.id).status === 'aberta', 'não abriu na data do marco');
+    must(!t.assignee_id || one("SELECT 1 FROM notifications WHERE user_id=? AND title LIKE 'Disponível hoje%'", t.assignee_id), 'responsável não avisado na abertura');
+    // sessão nova no relógio avançado (as anteriores, de 14 dias, já teriam vencido nessa data)
+    const fresh = client(`${COOKIE}=${createSession(one('SELECT * FROM users WHERE id=?', actorId), fakeReq).token}`);
+    // a validade da sessão é calculada pelo relógio real; esta sessão de teste passa a valer no relógio avançado
+    run("UPDATE sessions SET expires_at=? WHERE id=(SELECT id FROM sessions WHERE user_agent=? ORDER BY rowid DESC LIMIT 1)", new Date(new Date(t.available_at).getTime() + 864e5).toISOString(), TAG);
+    const r = await act(fresh);
+    windows.push(`${label}: bloqueada até ${t.available_at.slice(0, 10)} (409), tela mostra a data${qi ? ', Sala de Revisão sem botão' : ''}; aberta na data → executada`);
+    return r;
+  } finally { setClock(null); }
+}
+
 // Produção REAL pela API, com as pessoas que o engine atribuir: cronograma → análise → tema (cliente) → produção → revisão → cliente
 async function produce(title, format, media, days) {
   const est = P.resolveAssignee(C.id, 'estrategia');
@@ -157,7 +186,7 @@ async function produce(title, format, media, days) {
   const t1 = openTasks(id)[0]; flow.push(`cronograma → ${nameOf(t1.assignee_id)}`);
   must((await as(t1.assignee_id).post(`/tasks/${t1.id}/complete`)).status === 200, 'concluir cronograma');
   let c = one('SELECT * FROM contents WHERE id=?', id);
-  if (c.stage === 'analise_cronograma') { const t = openTasks(id)[0]; flow.push(`análise do cronograma → ${nameOf(t.assignee_id)}`); const x = await as(t.assignee_id).post(`/contents/${id}/review`, { decision: 'aprovar' }); must(x.status === 200, `análise cronograma ${x.status} ${JSON.stringify(x.data)}`); }
+  if (c.stage === 'analise_cronograma') { const t = openTasks(id)[0]; flow.push(`análise do cronograma → ${nameOf(t.assignee_id)}`); const x = await actWhenAvailable(id, t.assignee_id, 'análise do cronograma', (h) => h.post(`/contents/${id}/review`, { decision: 'aprovar' })); must(x.status === 200, `análise cronograma ${x.status} ${JSON.stringify(x.data)}`); }
   c = one('SELECT * FROM contents WHERE id=?', id);
   if (c.stage === 'aprovacao_tema') { const x = await cu.post(`/portal/contents/${id}/approve`, { confirm: true }); must(x.status === 200, `cliente aprova tema ${x.status} ${JSON.stringify(x.data)}`); flow.push('tema aprovado pelo cliente de teste no portal'); }
   c = one('SELECT * FROM contents WHERE id=?', id);
@@ -176,7 +205,7 @@ async function produce(title, format, media, days) {
   must(c.stage === 'analise_producao', `esperava revisão interna, está em ${c.stage}`);
   const rv = openTasks(id)[0]; flow.push(`revisão interna → ${nameOf(rv?.assignee_id)}${rv?.status === 'agendada' ? ` (etapa agendada: abre em ${rv.available_at?.slice(0, 10)})` : ''}`);
   const reviewer = rv?.assignee_id || P.reviewersFor(C.id)[0];
-  const ok = await as(reviewer).post(`/contents/${id}/review`, { decision: 'aprovar' });
+  const ok = await actWhenAvailable(id, reviewer, 'revisão interna', (h) => h.post(`/contents/${id}/review`, { decision: 'aprovar' }));
   must(ok.status === 200, `revisão ${ok.status} ${JSON.stringify(ok.data).slice(0, 160)}`);
   must(one('SELECT stage FROM contents WHERE id=?', id).stage === 'aprovacao_cliente', 'não chegou ao cliente');
   return { id, flow };
@@ -219,7 +248,7 @@ await step('onboarding: migrado do Notion, só o que falta, nada inventado', asy
 });
 await step('onboarding: conclusão respeita as obrigatórias configuradas', async () => {
   const required = JSON.parse(one('SELECT required_keys FROM onboarding_forms WHERE active=1 ORDER BY created_at DESC LIMIT 1')?.required_keys || '[]');
-  if (!required.length) { R.notes.push('Onboarding: nenhuma pergunta está marcada como obrigatória (igual ao formulário do Notion). O envio não é bloqueado por obrigatórias — decisão pendente da The Bold.'); return 'sem obrigatórias configuradas — envio não testado para não alterar o status real do cliente'; }
+  if (!required.length) { R.notes.push('NENHUMA PERGUNTA OBRIGATÓRIA CONFIGURADA (required_keys vazio). Comportamento real mantido; definição é decisão de produto posterior.'); return 'NENHUMA PERGUNTA OBRIGATÓRIA CONFIGURADA — regra não alterada no teste'; }
   const missingReq = required.filter((k) => !one("SELECT 1 FROM onboarding_answers WHERE client_id=? AND question_key=? AND trim(answer)<>''", C.id, k));
   if (!missingReq.length) return 'todas as obrigatórias já respondidas';
   const r = await cu.post('/portal/onboarding/submit');
@@ -267,9 +296,13 @@ await step('converter comentário em ajuste (uma vez) e bloquear a segunda conve
   const r1 = await cu.post(`/portal/contents/${A.id}/comments/${comment}/convert`);
   must(r1.status === 200, `1ª conversão HTTP ${r1.status} ${JSON.stringify(r1.data).slice(0, 160)}`);
   const r2 = await cu.post(`/portal/contents/${A.id}/comments/${comment}/convert`);
-  must(r2.status === 409, `2ª conversão deveria ser 409 (veio ${r2.status})`);
-  must(one("SELECT COUNT(*) n FROM adjustments WHERE comment_id=?", comment).n === 1, 'ajuste duplicado');
-  return 'convertido 1x · 2ª tentativa: 409';
+  must(r2.status === 200 && r2.data.already === true && r2.data.adjustment_id === r1.data.adjustment_id, `2ª conversão deveria devolver o ajuste existente (HTTP ${r2.status})`);
+  must(one('SELECT COUNT(*) n FROM adjustments WHERE comment_id=?', comment).n === 1, 'ajuste duplicado');
+  const adj = one('SELECT * FROM adjustments WHERE id=?', r1.data.adjustment_id);
+  const cm = one('SELECT * FROM comments WHERE id=?', comment);
+  must(cm.body.includes(TAG) && cm.adjustment_id === adj.id && adj.comment_id === cm.id, 'vínculo comentário ↔ ajuste');
+  must(adj.requested_by === CU.id && adj.created_at && adj.version_id === cm.version_id, 'usuário/data/versão do ajuste');
+  return 'convertido 1x · 2ª tentativa devolve o mesmo ajuste · comentário original preservado e vinculado';
 });
 await step('pedido de ajuste com timestamp do vídeo (reel)', async () => {
   const fd = new FormData(); fd.append('note', `${TAG}: esse trecho poderia ser mais rápido`); fd.append('aspect', 'video'); fd.append('video_timestamp', '3'); fd.append('version', '1');
@@ -361,7 +394,9 @@ await step('aprovação: sem confirmação → 428; versão errada → 409; V2 c
   return `aprovação ${ap[0].id} → V2 · próxima etapa: agendamento (${nameOf(next?.assignee_id)})`;
 });
 await step('histórico registra a sequência completa', async () => {
-  const h = (await cu.get('/portal/history?limit=200')).data.filter((x) => x.link?.includes(A.id)).reverse().map((x) => x.text);
+  // ordem real de gravação (rowid): no teste, as etapas abertas "na data do marco" ganham data futura pelo relógio avançado
+  const order = Object.fromEntries(all('SELECT id, rowid r FROM activity_logs WHERE content_id=?', A.id).map((x) => [x.id, x.r]));
+  const h = (await cu.get('/portal/history?limit=200')).data.filter((x) => x.link?.includes(A.id)).sort((a, b) => order[a.id] - order[b.id]).map((x) => x.text);
   const seq = ['tema enviado', 'v1 — enviado para sua aprovação', 'ajuste solicitado em v1', 'v2 — enviado para sua aprovação', 'v2 congelada'];
   let i = 0; for (const line of h) if (i < seq.length && line.toLowerCase().includes(seq[i])) i++;
   must(i === seq.length, `sequência incompleta (${i}/${seq.length}): ${h.join(' | ')}`);
@@ -558,6 +593,8 @@ await step('notificações geradas pelo teste: todas ligadas a registros de test
   return byRole;
 });
 R.blocked_external = blocked;
+R.windows = windows;
+R.rules = { reenviar_cliente_apos_ajuste: P.setting('reenviar_cliente_apos_ajuste'), janela_etapas: P.setting('janela_etapas'), required_keys: JSON.parse(one('SELECT required_keys FROM onboarding_forms WHERE active=1 ORDER BY created_at DESC LIMIT 1')?.required_keys || '[]') };
 
 // ════════════════ LIMPEZA ════════════════
 server.close();

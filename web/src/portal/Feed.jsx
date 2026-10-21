@@ -398,7 +398,7 @@ function Comments({ it, team, onUpdate, inputRef, mode, setMode, onAdjust }) {
   const suggestions = q != null ? team.filter((x) => x.name.toLowerCase().startsWith(q.toLowerCase())).filter((x, i, a) => a.findIndex((y) => y.id === x.id) === i).slice(0, 5) : [];
   const convert = async (c) => {
     if (!window.confirm('Transformar este comentário em pedido de ajuste? A equipe passa a tratá-lo como ajuste.')) return;
-    try { const r = await api.post(`/portal/contents/${it.id}/comments/${c.id}/convert`); onUpdate(r.item); toast('Comentário transformado em pedido de ajuste.'); } catch (x) { toast(x.message, 'err'); }
+    try { const r = await api.post(`/portal/contents/${it.id}/comments/${c.id}/convert`); onUpdate(r.item); toast(r.already ? 'Este comentário já é um pedido de ajuste.' : 'Comentário transformado em pedido de ajuste.'); } catch (x) { toast(x.message, 'err'); }
   };
   const send = async (e) => {
     e.preventDefault();

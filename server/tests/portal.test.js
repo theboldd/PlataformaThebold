@@ -41,6 +41,17 @@ const user = (u) => one('SELECT * FROM users WHERE id=?', u.id);
 const fresh = (c) => one('SELECT * FROM contents WHERE id=?', c.id);
 const req = { ip: '10.0.0.9', headers: { 'user-agent': 'test' } };
 
+// PRONTO ≠ DISPONÍVEL: antes da data a revisão é recusada; na data do marco (relógio da aplicação avançado só neste teste) a tarefa abre e a ação é aceita
+const { setClock } = await import('../db.js');
+const { activateScheduledTasks } = await import('../engine/scheduler.js');
+function review(contentId, actor, body, rq) {
+  const opens = P.stageAvailability(one('SELECT * FROM contents WHERE id=?', contentId));
+  if (!opens) return P.reviewDecision(contentId, actor, body, rq);
+  assert.throws(() => P.reviewDecision(contentId, actor, body, rq), /Etapa agendada/, 'revisão antes da janela é recusada');
+  setClock(new Date(new Date(opens).getTime() + 60e3).toISOString());
+  try { activateScheduledTasks(); return P.reviewDecision(contentId, actor, body, rq); } finally { setClock(null); }
+}
+
 // ── cliente HTTP com sessão ──
 async function login(u) {
   const r = await fetch(`${BASE}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-bold-request': '1' }, body: JSON.stringify({ email: u.email, password: PW }) });
@@ -69,7 +80,7 @@ async function toClientApproval(client, title, days = 12) {
   insert('version_media', { version_id: v.id, file_id: f.id, position: 0 });
   run('UPDATE content_versions SET caption=? WHERE id=?', `Legenda de ${title}`, v.id);
   for (const t of all("SELECT * FROM tasks WHERE content_id=? AND status='aberta' AND kind='etapa'", c.id)) P.completeTask(t.id, user(t.function === 'design' ? U.des : U.copy));
-  P.reviewDecision(c.id, user(U.rev), { decision: 'aprovar' }, req);
+  review(c.id, user(U.rev), { decision: 'aprovar' }, req);
   assert.equal(fresh(c).stage, 'aprovacao_cliente');
   return fresh(c);
 }
@@ -136,7 +147,7 @@ test('✎ ajuste estruturado após aprovação: registra tipo, local e região n
   assert.equal(one('SELECT status FROM content_versions WHERE content_id=? AND number=1', c.id).status, 'substituida');
   assert.match(one('SELECT notes FROM content_versions WHERE id=?', v2.id).notes, /Ajustes solicitados em/);
   P.completeTask(adj.task_id, user(U.copy));
-  P.reviewDecision(c.id, user(U.est), { decision: 'aprovar' }, req);
+  review(c.id, user(U.est), { decision: 'aprovar' }, req);
   assert.equal(fresh(c).stage, 'aprovacao_cliente', 'reaprovação: V2 volta para o cliente');
   const item = (await s.get(`/portal/contents/${c.id}`)).data;
   assert.equal(item.version.number, 2);

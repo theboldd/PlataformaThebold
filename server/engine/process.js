@@ -105,6 +105,17 @@ export function stageOpensAt(content, stage) {
   return at > now() ? at : null;
 }
 
+// PRONTO ≠ DISPONÍVEL (regra oficial): enquanto a tarefa da etapa atual estiver AGENDADA, nenhuma ação operacional a executa.
+export function stageAvailability(content) {
+  const t = one("SELECT available_at FROM tasks WHERE content_id=? AND stage=? AND status='agendada' ORDER BY available_at LIMIT 1", content.id, content.stage);
+  return t?.available_at && t.available_at > now() ? t.available_at : null;
+}
+const fmtDiaBR = (iso) => new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' });
+function assertAvailable(content) {
+  const opens = stageAvailability(content);
+  if (opens) throw new HttpError(409, `Etapa agendada: “${STAGES[content.stage].label}” só fica disponível em ${fmtDiaBR(opens)}. Pronto não é disponível — a ação abre na data do marco.`);
+}
+
 // Prazo da etapa: marco do ciclo (se ainda no futuro) → senão SLA em dias úteis. Nunca depois da data de publicação.
 export function dueFor(content, stage) {
   const def = STAGES[stage];
@@ -314,6 +325,7 @@ export function completeTask(taskId, actor, meta = {}) {
     const t = one('SELECT * FROM tasks WHERE id=?', taskId);
     if (!t) throw new HttpError(404, 'Tarefa não encontrada.');
     if (['concluida', 'cancelada'].includes(t.status)) throw new HttpError(409, 'Tarefa já encerrada.');
+    if (t.status === 'agendada' && t.available_at > now()) throw new HttpError(409, `Tarefa agendada: fica disponível em ${fmtDiaBR(t.available_at)}. Pronto não é disponível.`);
     if (t.client_id && !canAccessClient(actor, t.client_id)) throw new HttpError(403, 'Sem acesso.');
     if (t.assignee_id !== actor.id && !can(actor, 'conteudos', 'approve') && !(t.client_id && isMember(actor, t.client_id, t.function))) throw new HttpError(403, 'Esta tarefa não está atribuída a você.');
     const c = t.content_id ? getContent(t.content_id) : null;
@@ -397,6 +409,7 @@ export function reviewDecision(contentId, actor, { decision, note, adjustments =
     const c = getContent(contentId);
     expectStage(c, 'analise_cronograma', 'analise_producao', 'revisao_ajuste');
     assertActor(actor, c, c.stage === 'revisao_ajuste' ? 'estrategia_ou_revisor' : 'revisor');
+    assertAvailable(c);
     const v = currentVersion(c.id);
     const review = one("SELECT * FROM reviews WHERE content_id=? AND status='pendente' ORDER BY created_at DESC LIMIT 1", c.id);
     if (review) update('reviews', { id: review.id }, { status: decision === 'aprovar' ? 'aprovada' : 'ajuste', reviewer_id: actor.id, note, decided_at: now() });

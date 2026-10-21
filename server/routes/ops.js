@@ -4,7 +4,7 @@ import { one, all, insert, update, run, uid, now, parseJSON, tx } from '../db.js
 import { requireInternal, requirePerm } from '../lib/auth.js';
 import { can, canAccessClient, assertClient, assertCan, scopeSQL, clientScope, HttpError, PENDENCIAS_ROLES, roleOf } from '../lib/permissions.js';
 import { log, notify, parseMentions, recordMentions, userName, businessDaysFrom } from '../lib/core.js';
-import { STAGES, LANES, STAGE_ORDER, publicStatus, productionTracks, createContent, completeTask, reviewDecision, clientDecision, schedule, confirmPublished,
+import { STAGES, LANES, STAGE_ORDER, stageAvailability, publicStatus, productionTracks, createContent, completeTask, reviewDecision, clientDecision, schedule, confirmPublished,
   blockContent, unblockContent, cancelContent, returnToStage, movePreview, moveContent, MOVE_KINDS, nextAction, contentRisk, editableVersion, currentVersion, versionMedia, resolveAssignee, ensureCycle, setting, DEFAULT_SETTINGS, buildMilestones } from '../engine/process.js';
 import { automation, automationStats } from '../engine/automations.js';
 import { computePendencies, clientSummary, clientRisk, runDetectors, opsMetrics, stageDistribution, teamLoad, OPERATING } from '../engine/intelligence.js';
@@ -244,7 +244,7 @@ ops.get('/contents/:id', requirePerm('conteudos', 'view'), (req, res) => {
     .map((v) => ({ ...v, locked: !!v.locked, media: versionMedia(v.id).map(fileDTO) }));
   res.json({
     content: { ...c, strategy_tags: parseJSON(c.strategy_tags, []), status: publicStatus(c) },
-    card: contentCard(c, req.user), stage: { key: c.stage, ...STAGES[c.stage] }, next_action: nextAction(c), risk: contentRisk(c),
+    card: contentCard(c, req.user), stage: { key: c.stage, ...STAGES[c.stage] }, next_action: nextAction(c), risk: contentRisk(c), available_at: stageAvailability(c),
     client: one('SELECT id, name, handle, requires_theme_approval FROM clients WHERE id=?', c.client_id),
     cycle: c.cycle_id ? (({ milestones, ...cy }) => ({ ...cy, milestones: parseJSON(milestones, {}) }))(one('SELECT * FROM cycles WHERE id=?', c.cycle_id)) : null,
     versions,

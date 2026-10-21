@@ -31,8 +31,9 @@ const H = 3600e3;
 const cc = () => all("SELECT id FROM users WHERE active=1 AND role_key IN ('operacoes','ceo')").map((r) => r.id);
 
 // Etapas que abriram hoje: tarefa agendada vira tarefa de verdade (com aviso a quem executa)
-export function activateScheduledTasks() {
-  const due = all("SELECT t.*, c.number, c.title ctitle, cl.name client FROM tasks t LEFT JOIN contents c ON c.id=t.content_id LEFT JOIN clients cl ON cl.id=t.client_id WHERE t.status='agendada' AND t.available_at <= ?", now());
+// onlyIds: restringe a abertura a tarefas específicas (usado pela validação em cópia da base, para não abrir tarefas reais)
+export function activateScheduledTasks(onlyIds = null) {
+  const due = all(`SELECT t.*, c.number, c.title ctitle, cl.name client FROM tasks t LEFT JOIN contents c ON c.id=t.content_id LEFT JOIN clients cl ON cl.id=t.client_id WHERE t.status='agendada' AND t.available_at <= ? ${onlyIds ? `AND t.id IN (${onlyIds.map(() => '?').join(',') || "''"})` : ''}`, now(), ...(onlyIds || []));
   for (const k of due) {
     update('tasks', { id: k.id }, { status: 'aberta' });
     automation('etapa.disponivel', { entity: 'task', id: k.id, client: k.client_id, detail: `${k.title} — disponível desde ${k.available_at.slice(0, 10)}` });

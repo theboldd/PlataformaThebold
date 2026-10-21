@@ -28,6 +28,17 @@ const client = startClient({ name: 'Cliente Teste', services: [], monthly_posts:
 const cu = mkUser('cliente', 'cliente'); insert('client_members', { client_id: client.id, user_id: cu.id, function: 'cliente' });
 const other = startClient({ name: 'Outro Cliente', services: [], monthly_posts: 4, requires_theme_approval: true, team: [] }, U.ceo);
 const req = { ip: '10.0.0.1', headers: { 'user-agent': 'test' } };
+
+// PRONTO ≠ DISPONÍVEL: antes da data a revisão é recusada; na data do marco (relógio da aplicação avançado só neste teste) a tarefa abre e a ação é aceita
+const { setClock } = await import('../db.js');
+const { activateScheduledTasks } = await import('../engine/scheduler.js');
+function review(contentId, actor, body, rq) {
+  const opens = P.stageAvailability(one('SELECT * FROM contents WHERE id=?', contentId));
+  if (!opens) return P.reviewDecision(contentId, actor, body, rq);
+  assert.throws(() => P.reviewDecision(contentId, actor, body, rq), /Etapa agendada/, 'revisão antes da janela é recusada');
+  setClock(new Date(new Date(opens).getTime() + 60e3).toISOString());
+  try { activateScheduledTasks(); return P.reviewDecision(contentId, actor, body, rq); } finally { setClock(null); }
+}
 const user = (u) => one('SELECT * FROM users WHERE id=?', u.id);
 const fresh = (c) => one('SELECT * FROM contents WHERE id=?', c.id);
 const open = (c, f = () => true) => all("SELECT * FROM tasks WHERE content_id=? AND status IN ('aberta','em_andamento') AND kind IN ('etapa','ajuste')", c.id).filter(f);
@@ -50,7 +61,7 @@ test('ciclo completo do conteúdo: o engine move tudo sozinho e preserva versõe
   assert.ok(t1.due_at, 'define prazo');
   P.completeTask(t1.id, user(U.est));
   assert.equal(fresh(c).stage, 'analise_cronograma');
-  P.reviewDecision(c.id, user(U.rev), { decision: 'aprovar' }, req);
+  review(c.id, user(U.rev), { decision: 'aprovar' }, req);
   assert.equal(fresh(c).stage, 'aprovacao_tema');
   assert.ok(one("SELECT 1 FROM notifications WHERE user_id=? AND type='aprovacao'", cu.id), 'cliente notificado');
   P.clientDecision(c.id, user(cu), { decision: 'aprovar' }, req);
@@ -70,7 +81,7 @@ test('ciclo completo do conteúdo: o engine move tudo sozinho e preserva versõe
   assert.equal(fresh(c).stage, 'analise_producao');
   assert.equal(one('SELECT locked FROM content_versions WHERE id=?', v1.id).locked, 1, 'versão enviada à revisão é travada');
   // Revisão pede ajuste → precisa de nova versão
-  P.reviewDecision(c.id, user(U.ceo), { decision: 'ajuste', adjustments: [{ description: 'Aumentar contraste', track: 'visual' }] }, req);
+  review(c.id, user(U.ceo), { decision: 'ajuste', adjustments: [{ description: 'Aumentar contraste', track: 'visual' }] }, req);
   assert.equal(fresh(c).stage, 'ajuste_interno');
   const adj = open(c)[0];
   assert.equal(adj.assignee_id, U.des.id, 'ajuste volta para quem produziu');
@@ -78,7 +89,7 @@ test('ciclo completo do conteúdo: o engine move tudo sozinho e preserva versõe
   await addImage(c, user(U.des), '#222222');
   P.completeTask(adj.id, user(U.des));
   assert.equal(fresh(c).stage, 'analise_producao', 'ajuste concluído volta para revisão');
-  P.reviewDecision(c.id, user(U.rev), { decision: 'aprovar' }, req);
+  review(c.id, user(U.rev), { decision: 'aprovar' }, req);
   assert.equal(fresh(c).stage, 'aprovacao_cliente');
   // Cliente pede ajuste → nova versão → conferência → cliente aprova V3
   P.clientDecision(c.id, user(cu), { decision: 'ajuste', note: 'Trocar frase da página 2', carousel_page: 2 }, req);
@@ -87,7 +98,7 @@ test('ciclo completo do conteúdo: o engine move tudo sozinho e preserva versõe
   await addImage(c, user(U.des), '#F6F3F0');
   P.completeTask(open(c)[0].id, user(U.des));
   assert.equal(fresh(c).stage, 'revisao_ajuste');
-  P.reviewDecision(c.id, user(U.est), { decision: 'aprovar' }, req);
+  review(c.id, user(U.est), { decision: 'aprovar' }, req);
   assert.equal(fresh(c).stage, 'aprovacao_cliente', 'regra The Bold (21/10): a V3 que resolve o ajuste volta para o cliente aprovar');
   assert.equal(fresh(c).approved_version_id, null, 'nenhuma aprovação inferida pela etapa');
   P.clientDecision(c.id, user(cu), { decision: 'aprovar' }, req);
@@ -130,7 +141,7 @@ test('permissões por cliente, função e módulo — no backend', () => {
   const c = P.createContent({ client_id: client.id, title: 'X', format: 'estatico', theme: 't', planned_at: new Date(Date.now() + 9 * 864e5).toISOString() }, user(U.est));
   assert.throws(() => P.reviewDecision(c.id, user(U.des), { decision: 'aprovar' }, req), /aprovação|permissão|Ação inválida/);
   P.completeTask(open(c)[0].id, user(U.est));
-  assert.throws(() => P.reviewDecision(c.id, user(U.des), { decision: 'aprovar' }, req), /permissão/, 'designer não aprova revisão');
+  assert.throws(() => P.reviewDecision(c.id, user(U.des), { decision: 'aprovar' }, req), /permissão|Etapa agendada/, 'designer não aprova revisão');
 });
 
 test('histórico é append-only', () => {
@@ -187,4 +198,27 @@ test('atrasos: herdado da migração fica fora da performance; classificar exige
   const lg = one("SELECT * FROM activity_logs WHERE entity_id=? AND action='atraso.classificado'", t.id);
   assert.match(lg.before, /dado_migrado/); assert.match(lg.after, /aguardando_cliente/);
   assert.equal(can(U.ops, 'atrasos'), false, 'Operações não classifica atraso sem liberação da CEO');
+});
+
+test('pronto ≠ disponível (regra oficial): revisão agendada não pode ser antecipada por nenhum caminho', async () => {
+  const c = P.createContent({ client_id: client.id, title: 'Janela estrita', format: 'estatico', planned_at: new Date(Date.now() + 25 * 864e5).toISOString(), stage: 'producao' }, user(U.est));
+  await addImage(c, user(U.des), '#123123');
+  const v = P.editableVersion(fresh(c), U.des.id); run('UPDATE content_versions SET caption=? WHERE id=?', 'x', v.id);
+  for (const t of open(c)) P.completeTask(t.id, user(t.function === 'design' ? U.des : U.est));
+  const c2 = fresh(c);
+  assert.equal(c2.stage, 'analise_producao');
+  const opens = P.stageAvailability(c2);
+  if (!opens) return; // ciclo cuja janela já abriu: nada a testar aqui
+  const t = one("SELECT * FROM tasks WHERE content_id=? AND stage='analise_producao'", c.id);
+  assert.equal(t.status, 'agendada', 'AGENDADA antes da data');
+  assert.throws(() => P.reviewDecision(c.id, user(U.ceo), { decision: 'aprovar' }, req), /Etapa agendada/, 'nem a CEO antecipa');
+  assert.throws(() => P.completeTask(t.id, user(U.rev)), /agendada/, 'concluir a tarefa também é bloqueado');
+  setClock(new Date(new Date(opens).getTime() + 60e3).toISOString());
+  try {
+    activateScheduledTasks();
+    assert.equal(one('SELECT status FROM tasks WHERE id=?', t.id).status, 'aberta', 'na data do marco: disponível');
+    assert.ok(one("SELECT 1 FROM notifications WHERE user_id=? AND title LIKE 'Disponível hoje%'", t.assignee_id), 'responsável avisado na abertura');
+    P.reviewDecision(c.id, user(U.rev), { decision: 'aprovar' }, req);
+    assert.equal(fresh(c).stage, 'aprovacao_cliente');
+  } finally { setClock(null); }
 });

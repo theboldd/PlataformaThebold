@@ -248,21 +248,22 @@ portal.post('/contents/:id/comments/:cid/convert', (req, res) => {
   const c = getMyContent(req);
   const cm = one("SELECT * FROM comments WHERE id=? AND content_id=? AND visibility='client'", req.params.cid, c.id);
   if (!cm || cm.author_id !== req.user.id) throw new HttpError(404, 'Comentário não encontrado.');
-  if (cm.adjustment_id) throw new HttpError(409, 'Este comentário já virou um pedido de ajuste.');
+  // Idempotente: a segunda tentativa devolve o ajuste já existente (nada é criado de novo)
+  if (cm.adjustment_id) return res.json({ item: contentFor(c.id, clientOf(c)), adjustment_id: cm.adjustment_id, already: true });
   if (cm.parent_id) throw new HttpError(422, 'Respostas não podem virar ajuste. Peça o ajuste no conteúdo.');
   const anchor = parseJSON(cm.anchor, {}) || {};
   const aspect = ADJUST_ASPECTS[req.body?.aspect] ? req.body.aspect : null;
   const r = tx(() => {
     const fresh = one('SELECT adjustment_id FROM comments WHERE id=?', cm.id);
-    if (fresh.adjustment_id) throw new HttpError(409, 'Este comentário já virou um pedido de ajuste.');
+    if (fresh.adjustment_id) return { adjustment: one('SELECT * FROM adjustments WHERE id=?', fresh.adjustment_id), mode: 'existente', already: true };
     const out = clientAdjustmentRequest(c.id, req.user, { note: cm.body, carousel_page: anchor.page || null, video_timestamp: anchor.t ?? null, aspect, region: anchor.region || null }, req);
     const adj = out.adjustment || one("SELECT * FROM adjustments WHERE content_id=? AND origin='cliente' ORDER BY created_at DESC LIMIT 1", c.id);
     update('comments', { id: cm.id }, { adjustment_id: adj.id, kind: 'ajuste' });
     update('adjustments', { id: adj.id }, { comment_id: cm.id });
     return { ...out, adjustment: adj };
   });
-  log({ actor: req.user.id, action: 'comentario.convertido_ajuste', entity: 'adjustment', id: r.adjustment.id, client: c.client_id, content: c.id, visibility: 'client', summary: 'Você transformou um comentário em pedido de ajuste' });
-  res.json({ item: contentFor(c.id, clientOf(c)), mode: r.mode, adjustment_id: r.adjustment.id });
+  if (!r.already) log({ actor: req.user.id, action: 'comentario.convertido_ajuste', entity: 'adjustment', id: r.adjustment.id, client: c.client_id, content: c.id, visibility: 'client', summary: 'Você transformou um comentário em pedido de ajuste' });
+  res.json({ item: contentFor(c.id, clientOf(c)), mode: r.mode, adjustment_id: r.adjustment.id, already: !!r.already });
 });
 portal.post('/intent', (req, res) => res.json(detectAdjustment(req.body?.body)));
 // CALENDÁRIO — o cliente visualiza, abre, comenta e aprova; nunca move datas nem edita o planejamento (só leitura aqui)

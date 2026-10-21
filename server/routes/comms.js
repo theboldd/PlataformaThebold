@@ -122,7 +122,7 @@ comms.post('/chat/messages/:id/convert', requireInternal, (req, res) => {
   const author = userName(m.author_id);
   // Idempotência: a mesma mensagem não vira o mesmo tipo de registro duas vezes (ex.: ajuste duplicado)
   const already = parseJSON(m.converted_to, []).find((x) => x.type === type);
-  if (already) throw new HttpError(409, `Esta mensagem já foi transformada em ${type} (${already.by}, ${new Date(already.at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' })}).`);
+  if (already) return res.json({ ...msgDTO({ ...m, author_name: userName(m.author_id) }, req.user), result: already, already: true });
   let result;
   tx(() => {
     if (type === 'tarefa' || type === 'pendencia') {

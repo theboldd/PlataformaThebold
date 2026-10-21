@@ -188,7 +188,8 @@ function ClientRoom({ clientId }) {
                         <Button variant="ink" magnetic disabled={busy} onClick={() => setDraft({ decision: 'aprovar' })} icon={<I.check size={15} />} data-cursor="APROVAR">Aprovar</Button>
                         <Button magnetic disabled={busy} onClick={() => setAdjOpen(true)}>Pedir ajuste</Button>
                       </div>
-                    ) : <p className="sm muted">Você pode ver, mas a decisão é de quem revisa.</p>}
+                    ) : item.opens_at ? <p className="sm muted">Agendada — fica disponível em {fmtDate(item.opens_at)}. Pronto não é disponível: a revisão abre na data do marco.</p>
+                    : <p className="sm muted">Você pode ver, mas a decisão é de quem revisa.</p>}
                   </section>
 
                   <ReviewComments item={item} base={base} onChange={reload} />

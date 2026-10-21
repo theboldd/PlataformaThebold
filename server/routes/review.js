@@ -6,7 +6,7 @@ import { one, all, insert, update, run, uid, now, parseJSON, tx } from '../db.js
 import { requireInternal, requirePerm } from '../lib/auth.js';
 import { can, canAccessClient, assertClient, scopeSQL, HttpError } from '../lib/permissions.js';
 import { log, notify, userName } from '../lib/core.js';
-import { STAGES, reviewDecision, versionMedia } from '../engine/process.js';
+import { STAGES, reviewDecision, versionMedia, stageAvailability } from '../engine/process.js';
 import { fileDTO } from '../services/media.js';
 import { addComment, contentCard } from './ops.js';
 
@@ -57,7 +57,8 @@ review.get('/review/clients/:id', ...guard, (req, res) => {
     comments: all('SELECT cm.*, u.name author_name, u.role_key author_role FROM comments cm JOIN users u ON u.id=cm.author_id WHERE cm.content_id=? ORDER BY cm.created_at DESC LIMIT 20', c.id).map((x) => ({ ...x, anchor: parseJSON(x.anchor) })),
     producers: all("SELECT DISTINCT u.id, u.name, t.function FROM tasks t JOIN users u ON u.id=t.completed_by WHERE t.content_id=? AND t.function IN ('design','edicao','copy')", c.id),
     draft: drafts[c.id] || null,
-    can_decide: c.stage === 'revisao_ajuste' ? (can(req.user, 'revisao', 'approve') || !!one("SELECT 1 FROM client_members WHERE user_id=? AND client_id=? AND function='estrategia'", req.user.id, client.id)) : can(req.user, 'revisao', 'approve'),
+    opens_at: stageAvailability(c),
+    can_decide: stageAvailability(c) ? false : c.stage === 'revisao_ajuste' ? (can(req.user, 'revisao', 'approve') || !!one("SELECT 1 FROM client_members WHERE user_id=? AND client_id=? AND function='estrategia'", req.user.id, client.id)) : can(req.user, 'revisao', 'approve'),
   }));
   res.json({ client, session: s ? { ...s, opened_by_name: userName(s.opened_by) } : null, items,
     history: all("SELECT * FROM review_sessions WHERE client_id=? AND status='finalizada' ORDER BY finished_at DESC LIMIT 5", client.id).map((h) => ({ ...h, summary: parseJSON(h.summary, {}), finished_by_name: userName(h.finished_by) })) });

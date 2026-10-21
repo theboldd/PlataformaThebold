@@ -92,6 +92,37 @@ Nunca se avança sobre uma decisão que ainda depende da CEO.
 - Só entram em indicador individual as tarefas nascidas na plataforma e as classificadas como ATRASO DO RESPONSÁVEL. ATRASO DA EQUIPE conta só no agregado da equipe.
 - Na operação, esses itens continuam visíveis, à parte, como "herdados da migração".
 
+## Aprovação do cliente e versões (decisão de 21/10/2026)
+- `V1 → APROVADA PELO CLIENTE` só com registro explícito de aprovação do cliente: usuário, data e hora, IP e **versão exata**.
+- Ajuste do cliente: `V1 → AJUSTE SOLICITADO → V2 → AGUARDANDO APROVAÇÃO DO CLIENTE`. A V2 **sempre volta** para o cliente (`reenviar_cliente_apos_ajuste = true`).
+- Só um novo registro de aprovação do cliente muda a V2 para `APROVADA`. Nunca inferir aprovação:
+  - pela etapa;
+  - pela conferência da estrategista;
+  - pela conclusão do ajuste.
+- Versão tecnicamente pronta sem o cliente: `LIBERADA PELA EQUIPE` (status `liberada`). **Não equivale** a `APROVADA PELO CLIENTE`.
+- Quando nasce uma versão nova, a anterior vira `SUBSTITUÍDA`. Uma versão antiga nunca aparece como aprovada depois disso.
+
+## Conversão em ajuste (idempotente)
+- Uma mesma mensagem ou comentário gera um ajuste **uma única vez**. Uma nova tentativa devolve o ajuste que já existe e não cria outro.
+- O registro preserva:
+  - o comentário original;
+  - o ajuste;
+  - o vínculo entre os dois;
+  - usuário e data;
+  - conteúdo e versão;
+  - página ou timestamp, quando houver.
+
+## Pronto ≠ disponível (estrito)
+- Etapa com janela (`janela_etapas`: análise do cronograma, revisão de produção) fica `AGENDADA` até a data do marco do ciclo.
+- Enquanto está agendada:
+  - **nenhuma ação operacional a executa**: revisar ou concluir a tarefa retorna 409 no Process Engine, para qualquer pessoa, inclusive CEO;
+  - a interface mostra quando a etapa fica disponível e não oferece o botão.
+- Na data do marco, a tarefa abre, o responsável é avisado e então pode agir.
+
+## Onboarding
+- Hoje **nenhuma pergunta obrigatória está configurada** (`required_keys` vazio, igual ao Notion).
+- A definição das obrigatórias é uma decisão de produto posterior. Não se inventam obrigatoriedades.
+
 ## Regras anteriores que continuam valendo
 - Regra determinística decide status, prazos, permissões, tarefas, atribuições, sincronização e **todo cálculo financeiro**. A IA interpreta e sugere, mas não decide estado crítico, valores nem nada sobre pessoas.
 - Permissão sempre verificada no backend. Esconder botão não é proteção.
