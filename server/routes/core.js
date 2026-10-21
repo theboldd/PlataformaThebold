@@ -6,10 +6,11 @@ import { MODULES, ACTIONS, permissionMap, roleOf, can, canAccessClient, isIntern
 import { bus, log } from '../lib/core.js';
 import { storage, fileDTO } from '../services/media.js';
 import { verifyAssetSig } from '../integrations/meta.js';
+import { accessList, createClientLogin } from '../services/clientAccess.js';
 
 export const core = Router();
 
-const userDTO = (u) => ({ id: u.id, name: u.name, email: u.email, role_key: u.role_key, title: u.title, functions: parseJSON(u.functions, []), active: !!u.active, avatar_color: u.avatar_color, capacity: u.capacity, last_login_at: u.last_login_at });
+const userDTO = (u) => ({ id: u.id, name: u.name, email: u.email, role_key: u.role_key, title: u.title, functions: parseJSON(u.functions, []), active: !!u.active, avatar_color: u.avatar_color, capacity: u.capacity, last_login_at: u.last_login_at, theme: u.theme || 'system' });
 
 // ── AUTH ──
 core.post('/auth/login', (req, res) => {
@@ -34,6 +35,13 @@ core.get('/auth/me', requireAuth, (req, res) => {
   const clients = u.role_key === 'cliente' ? all("SELECT c.id, c.name, c.handle, c.color FROM client_members cm JOIN clients c ON c.id=cm.client_id WHERE cm.user_id=? AND cm.function='cliente'", u.id) : [];
   res.json({ user: userDTO(u), role: { key: role.key, label: role.label, dashboard: role.dashboard, all_clients: !!role.all_clients }, permissions: permissionMap(u), internal: isInternal(u), clients,
     pendencias: can(u, 'pendencias') });
+});
+// Tema claro/escuro: preferência da pessoa, salva no usuário (vale em qualquer aparelho)
+core.put('/auth/theme', requireAuth, (req, res) => {
+  const theme = req.body?.theme;
+  if (!['light', 'dark', 'system'].includes(theme)) throw new HttpError(422, 'Tema inválido.');
+  update('users', { id: req.user.id }, { theme });
+  res.json({ ok: true, theme });
 });
 core.post('/auth/password', requireAuth, (req, res) => {
   const { current, next } = req.body || {};
@@ -94,6 +102,28 @@ core.post('/users/:id/reset-link', requirePerm('usuarios', 'admin'), async (req,
   res.json({ link, sent: mail.sent, reason: mail.reason || null });
 });
 
+// ── ACESSOS DOS CLIENTES (regras oficiais 4 e 7) ──
+core.get('/client-access', requirePerm('usuarios', 'view'), (_req, res) => res.json(accessList()));
+core.post('/client-access/:clientId/email', requirePerm('usuarios', 'admin'), (req, res) => {
+  const c = one('SELECT id, name FROM clients WHERE id=?', req.params.clientId);
+  if (!c) throw new HttpError(404, 'Cliente não encontrado.');
+  const u = createClientLogin(c, req.body?.email, { source: `Informado pela equipe (${req.user.name})`, actor: req.user });
+  res.json({ ok: true, user_id: u.id });
+});
+core.post('/client-access/:clientId/candidates/:cid', requirePerm('usuarios', 'admin'), (req, res) => {
+  const cand = one("SELECT * FROM client_email_candidates WHERE id=? AND client_id=? AND status='a_confirmar'", req.params.cid, req.params.clientId);
+  if (!cand) throw new HttpError(404, 'Sugestão não encontrada.');
+  const c = one('SELECT id, name FROM clients WHERE id=?', cand.client_id);
+  if (req.body?.decision === 'descartar') {
+    update('client_email_candidates', { id: cand.id }, { status: 'descartado', decided_by: req.user.id, decided_at: now() });
+    log({ actor: req.user.id, action: 'acesso.email_descartado', entity: 'client', id: c.id, client: c.id, summary: `E-mail sugerido descartado para ${c.name}: ${cand.email}` });
+    return res.json({ ok: true });
+  }
+  const u = createClientLogin(c, cand.email, { source: `${cand.source} — confirmado por ${req.user.name} (MIGRADO DO NOTION)`, source_url: cand.source_url, actor: req.user });
+  update('client_email_candidates', { id: cand.id }, { status: 'usado', decided_by: req.user.id, decided_at: now() });
+  res.json({ ok: true, user_id: u.id });
+});
+
 // ── USUÁRIOS E PERMISSÕES (admin) ──
 core.get('/users/directory', requireInternal, (_req, res) => {
   res.json(all("SELECT id, name, role_key, title, functions, avatar_color FROM users WHERE active=1 AND role_key<>'cliente' ORDER BY name").map((u) => ({ ...u, functions: parseJSON(u.functions, []) })));
@@ -146,13 +176,15 @@ core.put('/users/:id/clients', requirePerm('usuarios', 'admin'), (req, res) => {
   const links = Array.isArray(req.body?.links) ? req.body.links : [];
   // vínculo de pessoa da equipe com cliente = Divisão de clientes (mesma regra da tela Divisão)
   const sig = (list) => JSON.stringify(list.map((l) => `${l.client_id}:${l.function}`).sort());
+  const prevLinks = all('SELECT client_id, function FROM client_members WHERE user_id=?', u.id).map((l) => `${l.client_id}:${l.function}`);
   const changed = sig(links) !== sig(all('SELECT client_id, function FROM client_members WHERE user_id=?', u.id));
   if (changed && u.role_key !== 'cliente' && !can(req.user, 'divisao', 'edit')) throw new HttpError(403, 'Vincular ou desvincular clientes da equipe é liberado pela CEO (Divisão de clientes).');
   tx(() => {
     run('DELETE FROM client_members WHERE user_id=?', u.id);
     for (const l of links) insert('client_members', { client_id: l.client_id, user_id: u.id, function: u.role_key === 'cliente' ? 'cliente' : l.function });
   });
-  log({ actor: req.user.id, action: 'usuario.clientes', entity: 'user', id: u.id, summary: `Vínculos de ${u.name} atualizados (${links.length})` });
+  log({ actor: req.user.id, action: 'usuario.clientes', entity: 'user', id: u.id, summary: `Vínculos de ${u.name} atualizados (${links.length})`,
+    before: JSON.stringify(prevLinks), after: JSON.stringify(links.map((l) => `${l.client_id}:${l.function}`)) });
   res.json({ ok: true });
 });
 core.put('/users/:id/permissions', requirePerm('usuarios', 'admin'), (req, res) => {

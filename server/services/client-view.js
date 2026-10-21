@@ -111,7 +111,14 @@ export function clientActions(clientId) {
     out.push({ key: `solicitacao:${r.id}`, kind: 'solicitacao', count: 1, title: r.title, short: 'Responder solicitação', context: r.next_action || 'A The Bold precisa de uma informação sua para continuar.',
       consequence: null, due_at: r.expected_at, overdue: false, cta: 'Responder', link: `/portal/solicitacoes?r=${r.id}` });
   }
-  // 5. Onboarding ainda não enviado (cliente novo): é o que libera o início do projeto
+  // 5. Onboarding: cliente migrado com respostas faltando (o que veio do Notion nunca é perguntado de novo)
+  if (ob && ob.form_status === 'migrado_parcial') {
+    const p = profileProgress(clientId);
+    if (p?.missing) out.push({ key: 'onboarding', kind: 'onboarding', count: p.missing, title: 'Completar seu onboarding', short: `Completar onboarding (${p.missing})`,
+      context: `Trouxemos ${p.answered} respostas que você já tinha dado no Notion. Seu onboarding está ${p.percent}% completo.`, consequence: `${p.missing === 1 ? 'Falta 1 informação' : `Faltam ${p.missing} informações`} — só o que ainda não foi respondido.`,
+      due_at: null, overdue: false, cta: 'Continuar', link: '/portal/onboarding?faltando=1' });
+  } else
+  // Onboarding ainda não enviado (cliente novo): é o que libera o início do projeto
   if (ob && ob.status !== 'migrado' && ob.status !== 'concluido' && ob.form_status !== 'concluido') {
     const p = profileProgress(clientId);
     out.push({ key: 'onboarding', kind: 'onboarding', count: 1, title: ob.form_status === 'em_andamento' ? 'Continuar seu onboarding' : 'Preencher seu onboarding', short: 'Responder briefing',

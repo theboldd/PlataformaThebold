@@ -13,6 +13,7 @@ import Inicio from './Inicio.jsx';
 import NewRequest from './NewRequest.jsx';
 import '../styles/portal.css';
 import '../styles/portal-x.css';
+import { ThemeToggle } from '../components/ThemeToggle.jsx';
 
 const Calendario = lazy(() => import('./Calendario.jsx'));
 const Projeto = lazy(() => import('./Projeto.jsx'));
@@ -29,18 +30,6 @@ const Historico = lazy(() => import('./Historico.jsx'));
 const PortalCtx = createContext(null);
 export const usePortal = () => useContext(PortalCtx);
 
-// Modo claro/escuro: segue o sistema por padrão; a escolha fica só neste navegador
-const TONES = { auto: 'Automático', dark: 'Escuro', light: 'Claro' };
-const readTone = () => { try { return localStorage.getItem('bold:tone') || 'auto'; } catch { return 'auto'; } };
-function useTone() {
-  const [tone, setTone] = useState(readTone);
-  const [sysDark, setSysDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
-  useEffect(() => { const mq = window.matchMedia('(prefers-color-scheme: dark)'); const h = () => setSysDark(mq.matches); mq.addEventListener('change', h); return () => mq.removeEventListener('change', h); }, []);
-  const set = (t) => { setTone(t); try { localStorage.setItem('bold:tone', t); } catch { /* sem armazenamento */ } };
-  const resolved = tone === 'auto' ? (sysDark ? 'dark' : 'light') : tone;
-  return { tone, setTone: set, resolved };
-}
-
 const NAV = [
   { to: '/portal', label: 'Início', end: true },
   { to: '/portal/conteudos', label: 'Conteúdos', badge: 'aprovacao' },
@@ -55,14 +44,13 @@ const MORE = [
   { to: '/portal/marca', icon: I.brain, label: 'Sua marca', hint: 'Como a The Bold entende sua marca · Pulso' },
   { to: '/portal/historico', icon: I.history, label: 'Histórico', hint: 'Tudo o que já aconteceu no seu projeto' },
   { to: '/portal/onboarding', icon: I.file, label: 'Onboarding', hint: 'Suas respostas sobre a marca' },
-  { to: '/portal/perfil', icon: I.users, label: 'Meu perfil', hint: 'Senha, acesso e aparência' },
+  { to: '/portal/perfil', icon: I.users, label: 'Meu perfil', hint: 'Senha e acesso' },
 ];
 
 export default function PortalApp() {
   const auth = useAuth();
   const me = useApi('/portal/me');
   const live = useLiveStream(true);
-  const { tone, setTone, resolved } = useTone();
   const [notifOpen, setNotifOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [request, setRequest] = useState(null); // null | {} | { kind, ref }
@@ -75,14 +63,14 @@ export default function PortalApp() {
     window.addEventListener('bold:notification', refresh);
     return () => window.removeEventListener('bold:notification', refresh);
   }, []);
-  useEffect(() => { document.documentElement.setAttribute('data-portal', resolved); return () => document.documentElement.removeAttribute('data-portal'); }, [resolved]);
+  useEffect(() => { document.documentElement.setAttribute('data-portal', ''); return () => document.documentElement.removeAttribute('data-portal'); }, []);
 
   const client = me.data?.client || auth.clients?.[0];
   const badges = { aprovacao: me.data?.counts?.aguardando || 0, decisoes: me.data?.actions_count || 0 };
   const moreActive = MORE.some((m) => loc.pathname.startsWith(m.to)) || loc.pathname === '/portal/projeto';
   return (
-    <PortalCtx.Provider value={{ me: me.data, reloadMe: me.reload, client, openRequest: (ctx = {}) => setRequest(ctx), tone, setTone, tones: TONES }}>
-      <div className="portal" data-tone={resolved}>
+    <PortalCtx.Provider value={{ me: me.data, reloadMe: me.reload, client, openRequest: (ctx = {}) => setRequest(ctx) }}>
+      <div className="portal">
         <a href="#main" className="skip">Pular para o conteúdo</a>
         <header className="p-top">
           <Link to="/portal" className="p-brand" data-cursor="B." aria-label="The Bold — início">
@@ -100,6 +88,7 @@ export default function PortalApp() {
           <div className="p-actions">
             <button className="p-new" onClick={() => setRequest({})} data-cursor="PEDIR"><I.plus size={14} /> <span>Nova solicitação</span></button>
             <span className={`p-live ${live ? '' : 'off'}`} title={live ? 'Atualizando em tempo real' : 'Reconectando'} aria-hidden />
+            <ThemeToggle portal className="p-theme-toggle" />
             <button className="p-icon-btn" onClick={() => setNotifOpen(true)} aria-label={`Notificações (${unread} não lidas)`}>
               <I.bell size={18} />{unread > 0 && <span className="p-dot">{unread > 99 ? '99+' : unread}</span>}
             </button>

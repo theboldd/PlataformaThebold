@@ -29,7 +29,7 @@ a { color: inherit; text-decoration: none; }
 .sm { font-size: var(--fs-sm); }
 .xs { font-size: var(--fs-xs); }
 .strong { font-weight: 600; }
-.bordo { color: var(--bordo); }
+.bordo { color: var(--primary-text); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .bordo { color: var(--bordo-vivo); } }
 .clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .rule { border: 0; border-top: 1px solid var(--line); margin: var(--sp-5) 0; }

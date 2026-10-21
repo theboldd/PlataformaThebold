@@ -278,9 +278,9 @@ portal.get('/onboarding/form', (req, res) => {
   const st = formStatus(c.id);
   const ob = one('SELECT status FROM onboarding WHERE client_id=?', c.id);
   // Acessos nunca voltam para a tela: só a indicação de que já foram informados
-  const answers = Object.fromEntries(Object.entries(st.answers).map(([k, a]) => [k, k.startsWith('acesso_') ? { saved: true } : { value: a.answer, updated_at: a.updated_at, from_notion: a.source_type === 'notion' }]));
+  const answers = Object.fromEntries(Object.entries(st.answers).map(([k, a]) => [k, k.startsWith('acesso_') ? { saved: true, migrated: a.source_type === 'notion' } : { value: a.answer, updated_at: a.updated_at, migrated: a.source_type === 'notion', from_notion: a.source_type === 'notion' }]));
   res.json({ title: form.title, version: form.version, sections: form.sections.map((s) => ({ title: s.title, intro: s.intro || null, questions: s.questions.map(({ key, text, type, options, help, sensitive }) => ({ key, text, type, options, help: help && !/^(CAMPO SENSÍVEL|Linha |Checkboxes|Pode envolver|Resposta:)/.test(help) ? help : null, sensitive: !!sensitive, required: form.required_keys.includes(key) })) })),
-    answers, status: st.status, submitted_at: st.submitted_at, answered: st.answered, total: st.total, missing_required: st.missing_required, missing_keys: st.missing_keys, profile: profileProgress(c.id), migrated: ob?.status === 'migrado' });
+    answers, status: st.status, submitted_at: st.submitted_at, answered: st.answered, total: st.total, missing_required: st.missing_required, missing_keys: st.missing_keys, profile: profileProgress(c.id), migrated: ob?.status === 'migrado' || st.status === 'migrado_parcial' });
 });
 portal.put('/onboarding/answers/:key', (req, res) => {
   const c = myClient(req);

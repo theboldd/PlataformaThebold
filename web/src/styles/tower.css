@@ -14,7 +14,7 @@
 .tw-period-l { font-size: var(--fs-sm); color: var(--muted); }
 .tw-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
 .tw-select { font: inherit; font-size: var(--fs-sm); min-height: 34px; padding: 4px 28px 4px 12px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--ink); max-width: 220px; }
-.tw-clear { font: inherit; font-size: var(--fs-sm); background: none; border: 0; color: var(--bordo); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; min-height: 34px; }
+.tw-clear { font: inherit; font-size: var(--fs-sm); background: none; border: 0; color: var(--primary-text); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; min-height: 34px; }
 
 .tw-sec { margin-bottom: var(--tw-gap); scroll-margin-top: 72px; }
 .tw-sec-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; }
@@ -34,7 +34,7 @@
 .tw-state { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--sp-5); }
 .tw-st { display: flex; flex-direction: column; gap: 6px; text-align: left; background: none; border: 0; border-top: 2px solid var(--ink); padding: var(--sp-4) 0 0; color: inherit; font: inherit; cursor: pointer; }
 .tw-st-big { font-family: var(--font-editorial); font-size: clamp(40px, 3.6vw, 52px); line-height: .9; letter-spacing: -0.03em; margin-bottom: 4px; transition: transform var(--t-med) var(--ease-out); }
-.tw-st-big.alert { color: var(--bordo); }
+.tw-st-big.alert { color: var(--primary-text); }
 .tw-st .tw-label { color: var(--ink); }
 .tw-st-line { font-size: var(--fs-sm); color: var(--muted); }
 .tw-st:hover .tw-st-big, .tw-st:focus-visible .tw-st-big { transform: translateY(-2px); }
@@ -45,7 +45,7 @@
 .tw-item:hover, .tw-item:focus-visible { background: var(--bordo-soft); transform: translateX(2px); }
 .tw-sev { font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
 .tw-sev i { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid currentColor; }
-.tw-sev.s-critico { color: var(--bordo); } .tw-sev.s-critico i { background: currentColor; }
+.tw-sev.s-critico { color: var(--primary-text); } .tw-sev.s-critico i { background: currentColor; }
 .tw-sev.s-alto i { background: linear-gradient(90deg, currentColor 50%, transparent 50%); }
 .tw-item-client { font-weight: 600; font-size: var(--fs-md); margin-top: 4px; }
 .tw-item-t { font-size: var(--fs-md); line-height: 1.4; }
@@ -68,7 +68,7 @@
 .tw-st-l { font-size: var(--fs-sm); font-weight: 500; }
 .tw-st-n { font-size: var(--fs-lg); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
 .tw-st-m { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: var(--fs-xs); color: var(--muted); }
-.tw-st-m em { font-style: normal; color: var(--bordo); font-weight: 600; }
+.tw-st-m em { font-style: normal; color: var(--primary-text); font-weight: 600; }
 .tw-acc { max-width: 860px; }
 .tw-bar { display: grid; grid-template-columns: 180px minmax(0, 1fr) 48px; gap: var(--sp-4); align-items: center; width: 100%; font: inherit; font-size: var(--fs-sm); color: inherit; background: none; border: 0; padding: 8px 0; cursor: pointer; text-align: left; }
 .tw-bar-t { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
@@ -96,7 +96,7 @@
 
 /* Pessoas */
 .tw-pins li { display: grid; grid-template-columns: 140px minmax(0, 1fr) auto; gap: var(--sp-4); align-items: baseline; padding: var(--sp-3) var(--sp-4); background: var(--bordo-soft); border-radius: 10px; margin-bottom: var(--sp-2); font-size: var(--fs-md); }
-.tw-pins .tw-label { color: var(--bordo); }
+.tw-pins .tw-label { color: var(--primary-text); }
 .tw-table { margin-top: var(--sp-4); }
 .tw-tr { display: grid; grid-template-columns: minmax(160px, 1.4fr) 80px 90px 130px minmax(120px, 1.2fr) 110px; gap: var(--sp-4); align-items: center; width: 100%; font: inherit; font-size: var(--fs-md); color: inherit; text-align: left; background: none; border: 0; padding: 12px var(--sp-2); margin: 0 calc(-1 * var(--sp-2)); border-radius: 8px; cursor: pointer; transition: background var(--t-fast); }
 button.tw-tr:hover { background: var(--bordo-soft); }
@@ -105,18 +105,18 @@ button.tw-tr:hover { background: var(--bordo-soft); }
 .tw-person b { font-weight: 600; }
 .tw-tr .n { font-weight: 600; font-variant-numeric: tabular-nums; }
 .tw-tr .n small { font-weight: 400; color: var(--muted); font-size: var(--fs-xs); }
-.tw-tr .alert { color: var(--bordo); }
+.tw-tr .alert { color: var(--primary-text); }
 .tw-cap { position: relative; height: 8px; background: var(--line); border-radius: 4px; }
 .tw-cap i { position: absolute; inset: 0 auto 0 0; background: var(--ink); border-radius: 4px; }
 .tw-cap s { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--bordo); }
 .tw-sit { font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-weight: 700; }
-.tw-sit.s-sobrecarga { color: var(--bordo); }
+.tw-sit.s-sobrecarga { color: var(--primary-text); }
 .tw-sit.s-sem_carga { color: var(--muted); font-weight: 500; }
 
 /* Inteligência */
 .tw-intel { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--sp-5); }
 .tw-in { background: var(--surface); border-radius: 12px; padding: var(--sp-5); display: flex; flex-direction: column; gap: var(--sp-2); }
-.tw-in .tw-label { color: var(--bordo); }
+.tw-in .tw-label { color: var(--primary-text); }
 .tw-in-t { font-size: var(--fs-lg); font-weight: 600; line-height: 1.35; margin: 0; }
 .tw-in p { margin: 0; font-size: var(--fs-sm); line-height: 1.5; color: var(--ink-2); }
 .tw-ev ul { margin: 4px 0 0; padding-left: 18px; font-size: var(--fs-sm); color: var(--ink-2); }
@@ -127,7 +127,7 @@ button.tw-tr:hover { background: var(--bordo-soft); }
 .tw-pm { display: flex; flex-direction: column; gap: 4px; }
 .tw-pm-n { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
 .tw-delta { font-size: var(--fs-xs); color: var(--muted); }
-.tw-delta.bad { color: var(--bordo); } .tw-delta.good { color: var(--ok); }
+.tw-delta.bad { color: var(--primary-text); } .tw-delta.good { color: var(--ok); }
 .tw-moves { margin-top: var(--sp-6); max-width: 860px; }
 .tw-moves ul { list-style: none; margin: 0; padding: 0; }
 .tw-moves li { display: flex; justify-content: space-between; gap: var(--sp-4); padding: 8px 0; font-size: var(--fs-sm); }
@@ -142,7 +142,7 @@ button.tw-tr:hover { background: var(--bordo-soft); }
 .tw-mini dt { color: var(--muted); }
 .tw-mini dd { margin: 0; font-weight: 600; text-align: right; }
 .tw-mini dd small { font-weight: 400; color: var(--muted); }
-.tw-mini dd.alert { color: var(--bordo); }
+.tw-mini dd.alert { color: var(--primary-text); }
 .tw-mini dd.cap { text-transform: capitalize; }
 .tw-mini-p { margin: 0; font-size: var(--fs-sm); }
 .tw-mini .tw-more { margin-top: auto; align-self: flex-start; }
@@ -150,11 +150,11 @@ button.tw-tr:hover { background: var(--bordo-soft); }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .tw-st-big.alert, :root:not([data-theme="light"]) .tw-sev.s-critico, :root:not([data-theme="light"]) .tw-st-m em,
   :root:not([data-theme="light"]) .tw-pins .tw-label, :root:not([data-theme="light"]) .tw-in .tw-label, :root:not([data-theme="light"]) .tw-tr .alert,
-  :root:not([data-theme="light"]) .tw-sit.s-sobrecarga, :root:not([data-theme="light"]) .tw-delta.bad, :root:not([data-theme="light"]) .tw-mini dd.alert, :root:not([data-theme="light"]) .tw-clear { color: #C4566C; }
+  :root:not([data-theme="light"]) .tw-sit.s-sobrecarga, :root:not([data-theme="light"]) .tw-delta.bad, :root:not([data-theme="light"]) .tw-mini dd.alert, :root:not([data-theme="light"]) .tw-clear { color: var(--primary-text); }
 }
 :root[data-theme="dark"] .tw-st-big.alert, :root[data-theme="dark"] .tw-sev.s-critico, :root[data-theme="dark"] .tw-st-m em, :root[data-theme="dark"] .tw-pins .tw-label,
 :root[data-theme="dark"] .tw-in .tw-label, :root[data-theme="dark"] .tw-tr .alert, :root[data-theme="dark"] .tw-sit.s-sobrecarga, :root[data-theme="dark"] .tw-delta.bad,
-:root[data-theme="dark"] .tw-mini dd.alert, :root[data-theme="dark"] .tw-clear { color: #C4566C; }
+:root[data-theme="dark"] .tw-mini dd.alert, :root[data-theme="dark"] .tw-clear { color: var(--primary-text); }
 
 /* Tablet */
 @media (max-width: 1180px) {

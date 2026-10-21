@@ -1,8 +1,8 @@
 /* Divisão de clientes — tabela no espírito da DIVISÃO EQUIPE do Notion */
 .dv-sum { display: flex; flex-wrap: wrap; gap: var(--sp-5); align-items: baseline; margin-bottom: var(--sp-5); font-size: var(--fs-sm); color: var(--muted); }
 .dv-sum b { font-size: 20px; color: var(--ink); font-variant-numeric: tabular-nums; margin-right: 4px; }
-.dv-warn { font: inherit; color: var(--bordo); background: none; border: 1px solid var(--bordo-line); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
-.dv-warn b { color: var(--bordo); font-size: 15px; }
+.dv-warn { font: inherit; color: var(--primary-text); background: none; border: 1px solid var(--bordo-line); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.dv-warn b { color: var(--primary-text); font-size: 15px; }
 .dv-warn.on { background: var(--bordo); color: #fff; } .dv-warn.on b { color: #fff; }
 .dv-warn:disabled { opacity: .4; cursor: default; }
 .dv-bar { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: center; margin-bottom: var(--sp-5); }
@@ -18,7 +18,7 @@
 .dv-chip { display: inline-flex; gap: 6px; align-items: baseline; border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; background: var(--surface); }
 .dv-chip i, .dv-sec { font-style: normal; font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: .05em; }
 .dv-chip em, .dv-st { font-style: normal; font-size: 11px; color: var(--muted); }
-.dv-st.warn { color: var(--bordo); }
+.dv-st.warn { color: var(--primary-text); }
 
 .dv-scroll { overflow-x: auto; }
 .dv-grid { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
@@ -26,7 +26,7 @@
 .dv-grid thead th { font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--muted); }
 .dv-grid tbody th { font-weight: 600; min-width: 200px; }
 .dv-grid tbody th > * + * { margin-left: 8px; }
-.dv-none { color: var(--bordo); font-weight: 600; font-size: 12px; }
+.dv-none { color: var(--primary-text); font-weight: 600; font-size: 12px; }
 
 @media (max-width: 720px) {
   .dv-tr { grid-template-columns: 1fr; gap: 6px; }
@@ -48,7 +48,7 @@
 .dv-fnrow { display: grid; grid-template-columns: 190px 1fr; gap: var(--sp-4); align-items: start; padding: 10px 0; }
 .dv-fnrow + .dv-fnrow { border-top: 1px dashed var(--line); }
 .dv-x { border: 0; background: none; color: var(--muted); font-size: 16px; line-height: 1; padding: 0 2px; cursor: pointer; border-radius: 4px; }
-.dv-x:hover { color: var(--bordo); background: var(--bordo-soft); }
+.dv-x:hover { color: var(--primary-text); background: var(--bordo-soft); }
 .dv-add { border: 1px dashed var(--line-strong, rgba(11,11,11,.25)); background: none; color: var(--muted); border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
 .dv-add:hover { color: var(--ink); border-color: var(--ink); }
 .dv-add.sm { padding: 0 8px; margin-top: 4px; }

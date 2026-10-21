@@ -2,7 +2,7 @@
 // Idempotente: cada disparo é registrado em automation_runs e não se repete para o mesmo marcador.
 import { one, all, insert, update, run, uid, now } from '../db.js';
 import { notify, log } from '../lib/core.js';
-import { STAGES, resolveAssignee, clientUsers, setting } from './process.js';
+import { STAGES, resolveAssignee, clientUsers, setting, stageOpensAt } from './process.js';
 import { automation, isEnabled, onceFor } from './automations.js';
 import { runDetectors } from './intelligence.js';
 import { publishDueContent } from '../integrations/meta.js';
@@ -24,21 +24,53 @@ function remindClient(c, marker, { title, body, cta = 'Revisar agora', link = '/
   notify(ids, { level: 'atencao', type: 'lembrete', title, body, cta, link, groupKey: `lembrete:${c.client_id}`, client: c.client_id });
   return true;
 }
+import { syncDelayReviews } from '../services/delayReview.js';
+import { runJob } from './jobs.js';
 
 const H = 3600e3;
 const cc = () => all("SELECT id FROM users WHERE active=1 AND role_key IN ('operacoes','ceo')").map((r) => r.id);
 
+// Etapas que abriram hoje: tarefa agendada vira tarefa de verdade (com aviso a quem executa)
+export function activateScheduledTasks() {
+  const due = all("SELECT t.*, c.number, c.title ctitle, cl.name client FROM tasks t LEFT JOIN contents c ON c.id=t.content_id LEFT JOIN clients cl ON cl.id=t.client_id WHERE t.status='agendada' AND t.available_at <= ?", now());
+  for (const k of due) {
+    update('tasks', { id: k.id }, { status: 'aberta' });
+    automation('etapa.disponivel', { entity: 'task', id: k.id, client: k.client_id, detail: `${k.title} — disponível desde ${k.available_at.slice(0, 10)}` });
+    if (k.assignee_id) notify(k.assignee_id, { level: 'info', type: 'tarefa', title: `Disponível hoje: ${STAGES[k.stage]?.label || 'etapa'}`, body: `${k.client}: #${k.number} ${k.ctitle}`, link: k.content_id ? `/conteudos/${k.content_id}` : '/', groupKey: `abriu:${k.assignee_id}:${k.stage}:${k.available_at.slice(0, 10)}`, client: k.client_id, content: k.content_id });
+    else notify(cc(), { level: 'urgente', type: 'sem_responsavel', title: `Etapa abriu sem responsável: ${k.title}`, body: `${k.client}: #${k.number} ${k.ctitle}`, link: k.content_id ? `/conteudos/${k.content_id}` : '/pendencias', client: k.client_id, content: k.content_id });
+    log({ kind: 'sistema', action: 'etapa.disponivel', entity: 'task', id: k.id, client: k.client_id, content: k.content_id, summary: `Etapa disponível para execução: ${k.title}` });
+  }
+  return due.length;
+}
+
+// Ajuste único: tarefas criadas antes da regra de janela, em etapas que ainda não abriram, passam a agendadas
+export function reconcileStageWindows() {
+  if (one("SELECT 1 FROM settings WHERE key='janela_reconciliada'")) return 0;
+  let n = 0;
+  for (const t of all(`SELECT t.id, t.stage, t.content_id FROM tasks t WHERE t.status='aberta' AND t.kind='etapa' AND t.started_at IS NULL AND t.stage IN (${setting('janela_etapas').map(() => '?').join(',') || "''"})`, ...setting('janela_etapas'))) {
+    const c = one('SELECT * FROM contents WHERE id=?', t.content_id);
+    const at = c && stageOpensAt(c, t.stage);
+    if (at) { update('tasks', { id: t.id }, { status: 'agendada', available_at: at }); n++; }
+  }
+  run('INSERT INTO settings (key,value,updated_at) VALUES (?,?,?)', 'janela_reconciliada', JSON.stringify(n), now());
+  if (n) log({ kind: 'sistema', action: 'etapa.janela_aplicada', entity: 'sistema', summary: `${n} tarefa(s) de etapas que ainda não abriram passaram para "agendada" (regra: pronto ≠ disponível)` });
+  return n;
+}
+
 export function tick() {
+  const activated = activateScheduledTasks();
+  syncDelayReviews(); // herdados que venceram hoje entram na Revisão de atrasos
   const t = Date.now();
   const nowIso = now();
   // Prazo próximo (< 24h) e vencido
-  for (const k of all("SELECT t.*, c.number, c.title ctitle FROM tasks t LEFT JOIN contents c ON c.id=t.content_id WHERE t.status IN ('aberta','em_andamento') AND t.due_at IS NOT NULL AND t.assignee_id IS NOT NULL AND t.function<>'cliente'")) {
+  // Herdado da migração ou classificado como não atribuível não recebe aviso de prazo: o prazo foi calculado na importação, não combinado.
+  for (const k of all("SELECT t.*, c.number, c.title ctitle FROM tasks t LEFT JOIN contents c ON c.id=t.content_id WHERE t.status IN ('aberta','em_andamento') AND t.due_at IS NOT NULL AND t.assignee_id IS NOT NULL AND t.function<>'cliente' AND (t.perf_status IS NULL OR t.perf_status NOT IN ('migrado','excluido'))")) {
     const due = new Date(k.due_at).getTime();
     if (due < t) {
       if (isEnabled('prazo.vencido') && onceFor('prazo.vencido', k.id, k.due_at)) {
         automation('prazo.vencido', { entity: 'task', id: k.id, client: k.client_id, detail: k.due_at });
         notify(k.assignee_id, { level: 'urgente', type: 'atraso', title: `Prazo vencido: ${k.title}`, body: 'Conclua ou avise Operações sobre o novo prazo.', link: k.content_id ? `/conteudos/${k.content_id}` : '/', groupKey: `atraso:${k.assignee_id}`, client: k.client_id, content: k.content_id });
-        notify(cc(), { level: 'atencao', type: 'atraso', title: 'Tarefas atrasadas', body: `${k.title}`, link: '/pendencias', groupKey: 'atraso:cc' });
+        notify(cc(), { level: 'atencao', type: 'atraso', title: 'Tarefas atrasadas', body: `${k.title}`, link: '/pendencias?escopo=equipe', groupKey: 'atraso:cc' });
         log({ kind: 'sistema', action: 'risco.prazo_vencido', entity: 'task', id: k.id, client: k.client_id, content: k.content_id, summary: `Prazo vencido: ${k.title}` });
       }
     } else if (due - t < 24 * H && isEnabled('prazo.proximo') && onceFor('prazo.proximo', k.id, k.due_at)) {
@@ -69,7 +101,7 @@ export function tick() {
     }
     if (waited >= h3 && isEnabled('cliente.sem_resposta_72h') && onceFor('cliente.sem_resposta_72h', c.id, marker)) {
       automation('cliente.sem_resposta_72h', { entity: 'content', id: c.id, client: c.client_id, detail: marker });
-      notify(cc(), { level: 'urgente', type: 'escalada', title: `${c.cname}: 72h sem resposta do cliente`, body: 'Decidir: segue para a próxima semana ou para o próximo mês?', link: '/pendencias', groupKey: `esc:${c.client_id}`, client: c.client_id });
+      notify(cc(), { level: 'urgente', type: 'escalada', title: `${c.cname}: 72h sem resposta do cliente`, body: 'Decidir: segue para a próxima semana ou para o próximo mês?', link: '/pendencias?escopo=equipe', groupKey: `esc:${c.client_id}`, client: c.client_id });
     }
   }
   // Prazo de aprovação do cliente vencido → registrar atraso, lembrar (sem excesso), avisar o atendimento, avaliar impacto, escalar se a publicação estiver em risco
@@ -131,13 +163,24 @@ export function tick() {
       notify(fin, { level: 'info', type: 'financeiro', title: 'Vencimentos nos próximos 3 dias', body: `${i.cname} — ${i.description}`, link: '/financeiro', groupKey: 'fin:venc' });
     }
   }
+  // Saúde do cliente: uma fotografia por dia (idempotente) — roda também pela rotina externa (/api/cron/tick)
+  if (isEnabled('saude.calcular')) {
+    const ops = all("SELECT id FROM users WHERE active=1 AND role_key IN ('ceo','operacoes')").map((r) => r.id);
+    snapshotHealth((c, h, prev) => {
+      automation('saude.calcular', { entity: 'client', id: c.id, client: c.id, detail: `${prev}→${h.level}` });
+      notify(ops, { level: h.level === 'risco' ? 'urgente' : 'atencao', type: 'saude', title: `${c.name}: saúde do cliente ${LEVEL_LABEL[prev]} → ${LEVEL_LABEL[h.level]}`, body: h.signals.filter((x) => ['risco', 'atencao'].includes(x.level)).map((x) => `${x.label}: ${x.evidence[0]}`).join(' · ').slice(0, 240), link: `/clientes/${c.id}?tab=saude`, client: c.id });
+    });
+  }
+  return { activated };
 }
 
 let last15 = 0, lastPublish = 0;
 export function startScheduler() {
   const safe = (fn, name) => { try { return fn(); } catch (e) { console.error(`[scheduler] ${name}:`, e.message); } };
   const loop = async () => {
-    safe(tick, 'tick');
+    // mesma trava da rotina externa (/api/cron/tick): nunca rodam ao mesmo tempo; execução ignorada não é registrada a cada minuto
+    const r = await runJob('tick', tick, { trigger: 'processo', record: false });
+    if (r.error) console.error('[scheduler] tick:', r.error);
     if (Date.now() - lastPublish > 60e3) { lastPublish = Date.now(); try { await publishDueContent(); } catch (e) { console.error('[scheduler] meta:', e.message); } }
     if (Date.now() - last15 > 15 * 60e3) {
       last15 = Date.now();
@@ -150,14 +193,6 @@ export function startScheduler() {
           generateReport('operacao', new Date(monday.getTime() - 7 * 864e5).toISOString(), monday.toISOString());
         }
       }, 'reports');
-      safe(() => {
-        if (!isEnabled('saude.calcular')) return;
-        const ops = all("SELECT id FROM users WHERE active=1 AND role_key IN ('ceo','operacoes')").map((r) => r.id);
-        snapshotHealth((c, h, prev) => {
-          automation('saude.calcular', { entity: 'client', id: c.id, client: c.id, detail: `${prev}→${h.level}` });
-          notify(ops, { level: h.level === 'risco' ? 'urgente' : 'atencao', type: 'saude', title: `${c.name}: saúde do cliente ${LEVEL_LABEL[prev]} → ${LEVEL_LABEL[h.level]}`, body: h.signals.filter((x) => ['risco', 'atencao'].includes(x.level)).map((x) => `${x.label}: ${x.evidence[0]}`).join(' · ').slice(0, 240), link: `/clientes/${c.id}?tab=saude`, client: c.id });
-        });
-      }, 'health');
       detectTranscripts().catch((e) => console.error('[scheduler] transcrições:', e.message));
     }
   };

@@ -7,6 +7,7 @@ import { api } from '../lib/api.js';
 import { ago } from '../lib/format.js';
 import { LEVEL } from '../lib/status.js';
 import { NavHistory, BackLink, useNavLabel } from '../lib/nav.jsx';
+import { ThemeToggle } from './ThemeToggle.jsx';
 
 const CrumbCtx = createContext(() => {});
 export function useCrumbs(...parts) {
@@ -24,11 +25,12 @@ const NAV = [
     { to: '/', label: 'Visão geral', icon: I.home, mod: 'dashboard', end: true },
     { to: '/torre', label: 'Torre de Controle', icon: I.tower, mod: 'torre' },
     { to: '/processos', label: 'Processos', icon: I.flow, mod: 'processos' },
-    { to: '/pendencias', label: 'Pendências', icon: I.alert, mod: 'pendencias', special: 'pendencias' },
+    { to: '/pendencias', label: 'Pendências', icon: I.alert, team: true },
+    { to: '/atrasos', label: 'Revisão de atrasos', icon: I.history, mod: 'atrasos' },
   ] },
   { group: 'Clientes', items: [
     { to: '/clientes', label: 'Clientes', icon: I.clients, mod: 'clientes' },
-    { to: '/divisao', label: 'Divisão', icon: I.division, team: true },
+    { to: '/divisao', label: 'Divisão', icon: I.division, mod: 'divisao', anyAct: true },
     { to: '/conteudos', label: 'Conteúdos', icon: I.content, mod: 'conteudos' },
     { to: '/revisao', label: 'Sala de Revisão', icon: I.review, mod: 'revisao' },
   ] },
@@ -78,7 +80,7 @@ export function Shell({ children }) {
     return () => { window.removeEventListener('bold:notification', h); window.removeEventListener('bold:message', h); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const allowed = (n) => (n.team ? auth.internal : auth.permissions[n.mod]?.includes('view')) && (n.special !== 'pendencias' || auth.pendencias);
+  const allowed = (n) => (n.team ? auth.internal : n.anyAct ? !!auth.permissions[n.mod]?.length : auth.permissions[n.mod]?.includes('view')) && (n.special !== 'pendencias' || auth.pendencias);
   const groups = NAV.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length);
   return (
     <NavHistory top={TOP} labels={TOP_LABEL}>
@@ -110,6 +112,7 @@ export function Shell({ children }) {
             <div className="crumbs clip"><span>The Bold</span>{crumbs.map((c, i) => <span key={i} className="row gap-2"><span className="sep">/</span>{i === crumbs.length - 1 ? <b className="clip">{c}</b> : <span className="clip">{c}</span>}</span>)}</div>
             <div className="top-actions">
               <span className={`live ${live ? '' : 'off'}`}>{live ? 'Ao vivo' : 'Reconectando'}</span>
+              <ThemeToggle />
               <Button variant="ghost" className="bell" icon={<I.bell />} onClick={() => setNotifOpen(true)} aria-label={`Notificações (${unread} não lidas)`}>{unread > 0 && <span className="dot">{unread > 99 ? '99+' : unread}</span>}</Button>
             </div>
           </header>

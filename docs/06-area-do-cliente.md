@@ -14,7 +14,7 @@ Lacunas encontradas e corrigidas:
 | Versão antiga continuava “aprovada” depois de nascer V+1 | `editableVersion` marca a anterior como `substituida` e grava o motivo da nova versão |
 | Comentário era convertido em ajuste por detecção automática | Três ações separadas: ♡ aprovar · ✎ pedir ajuste · 💬 comentar/perguntar. Comentário nunca aprova nem ajusta |
 | Like aprovava sem confirmação | `POST /portal/contents/:id/approve` exige `confirm: true` e a versão exata (409 se chegou versão nova) |
-| Clientes migrados (`onboarding.status='migrado'`) nunca viam o que faltava | % do perfil e “só o que falta” para todos; respostas do Notion marcadas como “trazidas do seu formulário anterior” |
+| Clientes migrados nunca viam o que faltava | % do perfil e “só o que falta” para todos (inclui `form_status=migrado_parcial`); respostas do Notion com o selo “Migrado do Notion” |
 | `meetings.summary` (ata interna) era enviado ao portal | Portal só mostra o **resumo do cliente aprovado** (`meeting_summaries`) |
 | Rascunhos internos (“V2 criada”) apareciam no histórico do cliente | `versao.criada` passou a ser interno |
 | Materiais podiam ficar “soltos” | Todo envio exige contexto; material avulso vira solicitação |
@@ -39,7 +39,7 @@ Lacunas encontradas e corrigidas:
 | Saúde do cliente (interno, com evidências e tendência) | `services/health.js`, `client_health_snapshots`, aba **Saúde** |
 | Satisfação contextual (no máximo a cada 14 dias) | `satisfaction_prompts/responses` |
 | Histórico com link para o registro original | `clientHistory()`, `portal/Historico.jsx` |
-| Modo claro e escuro (automático por padrão) | `portal-x.css`, Perfil → Aparência |
+| Modo claro e escuro | tema salvo por usuário (`lib/theme.js`, botão no topo) + `portal-x.css` |
 
 ## 3. Procedência das informações (nunca misturadas)
 `client_brain_entries.origin` + `source_type`:
@@ -52,7 +52,7 @@ Observação interna, IA e origem indefinida **não podem** ser compartilhadas c
 Alteração de valor grava antes/depois em `client_brain_history` e no histórico.
 
 ## 4. Testes
-- `npm test` — 17 testes: engine, permissões, mídia e **12 testes da área do cliente pelo HTTP real** (login, cookie, CSRF), incluindo acesso cruzado entre clientes, rotas internas negadas ao cliente, notificações internas nunca entregues ao cliente e vazamento do resumo interno.
+- `npm test` — 19 testes: engine, permissões, mídia e **12 testes da área do cliente pelo HTTP real** (login, cookie, CSRF), incluindo acesso cruzado entre clientes, rotas internas negadas ao cliente, notificações internas nunca entregues ao cliente e vazamento do resumo interno.
 - `npm run ux` — roteiro no Chromium (celular 390px escuro e desktop 1440px claro): saudação, onde está, o que precisa, prazo, o que a The Bold faz, o que vem depois, aprovação em 3 toques, ajuste marcando a imagem, nova solicitação, sem rolagem horizontal, sem erros de JS. 32/32.
 Ambos rodam num **banco temporário** com equipe e cliente de teste descartáveis — a base real nunca é usada nem alterada.
 

@@ -34,8 +34,8 @@ export default function Usuarios() {
       <PageHead kicker="Acesso" title="Usuários e permissões" sub="Permissão = perfil (role) + exceções por pessoa + clientes vinculados + módulo + ação. Tudo é verificado no servidor.">
         {admin && <Button variant="primary" magnetic icon={<I.plus size={15} />} onClick={() => setCreate(true)}>Novo usuário</Button>}
       </PageHead>
-      <Tabs value={tab} onChange={setTab} tabs={[{ key: 'pessoas', label: 'Pessoas', count: data.users.length }, { key: 'perfis', label: 'Perfis (roles)' }]} />
-      {tab === 'pessoas' ? (
+      <Tabs value={tab} onChange={setTab} tabs={[{ key: 'pessoas', label: 'Pessoas', count: data.users.length }, { key: 'acessos', label: 'Acessos dos clientes' }, { key: 'perfis', label: 'Perfis (roles)' }]} />
+      {tab === 'acessos' ? <ClientAccess admin={admin} /> : tab === 'pessoas' ? (
         <>
           <div className="row wrap mb-4 between">
             <Seg value={kind} onChange={setKind} options={[{ value: 'equipe', label: 'Equipe' }, { value: 'clientes', label: 'Clientes' }]} />
@@ -216,6 +216,73 @@ function PasswordBox({ user }) {
         </div>
       )}
       <p className="xs muted" style={{ marginBottom: 0 }}>A senha que a pessoa escolhe não aparece para ninguém, por segurança. Para entrar no lugar dela ou destravar o acesso, defina uma senha provisória acima.</p>
+    </div>
+  );
+}
+
+// ACESSOS DOS CLIENTES — e-mail só de fonte real, com origem; sem e-mail = nada é criado (regras oficiais 4 e 7)
+const ACCESS_TONE = { ativo: 'ok', convite: 'warn', sem_email: '', bloqueado: 'err' };
+function ClientAccess({ admin }) {
+  const toast = useToast();
+  const { data, error, loading, reload } = useApi('/client-access', [], { live: false });
+  const [adding, setAdding] = useState(null);
+  const [email, setEmail] = useState('');
+  const [invite, setInvite] = useState(null);
+  const [busy, setBusy] = useState(false);
+  if (error) return <ErrorBox error={error} />;
+  if (loading || !data) return <Loading rows={6} />;
+  const counts = data.reduce((m, r) => ({ ...m, [r.status]: (m[r.status] || 0) + 1 }), {});
+  const fmt = (v) => (v ? new Date(v).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—');
+  const act = async (fn, ok) => { setBusy(true); try { const r = await fn(); if (ok) toast(ok); reload(); return r; } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); } };
+  const sendInvite = async (r) => {
+    const res = await act(() => api.post(`/users/${r.user_id}/reset-link`));
+    if (res) setInvite({ ...res, client: r.client, email: r.email });
+  };
+  return (
+    <div className="ca">
+      <div className="ca-sum">
+        <span className="ca-n s-ativo"><b>{counts.ativo || 0}</b> acesso ativo</span>
+        <span className="ca-n s-convite"><b>{counts.convite || 0}</b> convite pendente</span>
+        <span className="ca-n s-sem_email"><b>{counts.sem_email || 0}</b> sem e-mail</span>
+        <span className="ca-n s-bloqueado"><b>{counts.bloqueado || 0}</b> bloqueado</span>
+      </div>
+      <p className="xs muted">O e-mail de acesso vem só de dados reais (Notion e plataforma), com a origem registrada. Cliente sem e-mail continua com ficha, onboarding e Brain migrados — só o acesso fica pendente.</p>
+      <div className="table-wrap"><table className="table ca-table">
+        <thead><tr><th>Cliente</th><th>E-mail</th><th>Usuário</th><th>Status do acesso</th><th>Origem do e-mail</th><th>Último acesso</th><th>Permissão</th>{admin && <th />}</tr></thead>
+        <tbody>{data.map((r) => (
+          <tr key={r.client_id}>
+            <td className="sm strong">{cleanName(r.client)}</td>
+            <td className="sm">{r.email || <span className="muted">—</span>}
+              {r.candidates.map((c) => (
+                <div key={c.id} className="ca-cand">
+                  <span className="xs">Encontrado: <b>{c.email}</b> · {c.source}{c.source_url && <> · <a href={c.source_url} target="_blank" rel="noreferrer">ver no Notion ↗</a></>}</span>
+                  {admin && <span className="row gap-2 mt-2"><Button size="sm" disabled={busy} onClick={() => act(() => api.post(`/client-access/${r.client_id}/candidates/${c.id}`, {}), 'Acesso preparado (convite pendente).')}>Usar como acesso</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => act(() => api.post(`/client-access/${r.client_id}/candidates/${c.id}`, { decision: 'descartar' }), 'Sugestão descartada.')}>Descartar</Button></span>}
+                </div>
+              ))}
+            </td>
+            <td className="sm">{r.user || '—'}</td>
+            <td><span className={`tag ${ACCESS_TONE[r.status] ? `tag-${ACCESS_TONE[r.status]}` : ''}`}>{r.status_label}</span></td>
+            <td className="xs">{r.email_source ? <>{r.email_source}{r.email_source_url && <> · <a href={r.email_source_url} target="_blank" rel="noreferrer">origem ↗</a></>}</> : <span className="muted">—</span>}</td>
+            <td className="xs">{fmt(r.last_login_at)}</td>
+            <td className="xs muted">{r.permission || '—'}</td>
+            {admin && <td className="ca-actions">
+              {r.status === 'sem_email' && <Button size="sm" variant="ghost" onClick={() => { setAdding(r); setEmail(''); }}>Informar e-mail</Button>}
+              {(r.status === 'convite' || r.status === 'ativo') && <Button size="sm" variant="ghost" disabled={busy} onClick={() => sendInvite(r)}>{r.status === 'convite' ? 'Enviar convite' : 'Link de nova senha'}</Button>}
+              {r.user_id && <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(() => api.patch(`/users/${r.user_id}`, { active: r.status === 'bloqueado' }), r.status === 'bloqueado' ? 'Acesso desbloqueado.' : 'Acesso bloqueado.')}>{r.status === 'bloqueado' ? 'Desbloquear' : 'Bloquear'}</Button>}
+            </td>}
+          </tr>
+        ))}</tbody>
+      </table></div>
+      <Modal open={!!adding} onClose={() => setAdding(null)} title={`E-mail de acesso — ${adding ? cleanName(adding.client) : ''}`}
+        footer={<><Button variant="ghost" onClick={() => setAdding(null)}>Cancelar</Button><Button variant="primary" disabled={busy || !email.trim()} onClick={async () => { const ok = await act(() => api.post(`/client-access/${adding.client_id}/email`, { email }), 'Acesso preparado (convite pendente).'); if (ok) setAdding(null); }}>Preparar acesso</Button></>}>
+        <Field label="E-mail do cliente" hint="Use um e-mail real informado pelo cliente. A origem fica registrada como “informado pela equipe”."><input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+      </Modal>
+      <Modal open={!!invite} onClose={() => setInvite(null)} title="Convite de acesso" footer={<Button variant="primary" onClick={() => setInvite(null)}>Fechar</Button>}>
+        {invite && <div className="col gap-4">
+          <p className="sm" style={{ margin: 0 }}>{invite.sent ? `E-mail enviado para ${invite.email}.` : `E-mail não enviado (${invite.reason}).`} Você também pode mandar este link pelo WhatsApp — o cliente cria a senha dele (vale 1 hora, uma vez):</p>
+          <div className="row gap-2"><input className="input" readOnly value={invite.link} onFocus={(e) => e.target.select()} /><Button size="sm" onClick={() => { navigator.clipboard?.writeText(invite.link); toast('Link copiado.'); }}>Copiar</Button></div>
+        </div>}
+      </Modal>
     </div>
   );
 }

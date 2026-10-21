@@ -43,7 +43,7 @@
 .lg-form .lg-meta { color: #736C66; }
 .lg-form-head { display: flex; justify-content: space-between; padding-bottom: 14px; border-bottom: 1px solid rgba(11,11,11,.12); }
 .lg-enter { font-family: var(--font-editorial); font-weight: 400; font-size: clamp(48px, 4.4vw, 72px); line-height: .9; letter-spacing: -0.03em; margin: 6px 0 4px; color: #0B0B0B; }
-.lg-enter span { color: var(--bordo); }
+.lg-enter span { color: var(--primary-text); }
 .lg-field { display: flex; flex-direction: column; gap: 4px; }
 .lg-field span { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: #736C66; }
 .lg-field input { border: 0; border-bottom: 1px solid rgba(11,11,11,.25); background: transparent; padding: 12px 0; font-size: 18px; color: #0B0B0B; border-radius: 0; transition: border-color .2s; }
@@ -60,7 +60,7 @@
 .lg-marquee em { font-style: normal; color: rgba(246,243,240,.35); font-size: 14px; }
 @keyframes lg-marq { to { transform: translateX(-33.333%); } }
 .lg-word { font-family: var(--font-editorial); font-size: 23.5vw; line-height: .78; letter-spacing: -0.05em; white-space: nowrap; text-align: center; color: transparent; -webkit-text-stroke: 1px rgba(246,243,240,.16); margin: 2vw 0 -3.6vw; user-select: none; animation: lg-in 1.6s .4s var(--ease-out) both; }
-.lg-word span { color: var(--bordo); -webkit-text-stroke: 0; }
+.lg-word span { color: var(--primary-text); -webkit-text-stroke: 0; }
 
 @media (max-width: 960px) {
   .lg-grid { grid-template-columns: 1fr; }

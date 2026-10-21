@@ -115,6 +115,42 @@ CREATE TABLE IF NOT EXISTS migration_issues (
   kind TEXT NOT NULL, description TEXT NOT NULL, source TEXT, status TEXT NOT NULL DEFAULT 'aberto', created_at TEXT NOT NULL
 );
 
+-- Movimentos de etapa feitos por pessoas (o engine registra os automáticos em activity_logs)
+CREATE TABLE IF NOT EXISTS stage_moves (
+  id TEXT PRIMARY KEY, content_id TEXT NOT NULL REFERENCES contents(id) ON DELETE CASCADE, client_id TEXT,
+  from_stage TEXT NOT NULL, to_stage TEXT NOT NULL,
+  kind TEXT NOT NULL, -- manual | retorno | reabertura | correcao | excecao
+  reason TEXT, actor_id TEXT, prev_assignees TEXT, new_assignees TEXT, impacts TEXT, created_at TEXT NOT NULL
+);
+
+-- E-mails de cliente encontrados em fontes reais que NÃO são cadastro de acesso (ex.: contato publicado num post):
+-- ficam para a equipe confirmar antes de virar login (regra oficial 4 — nada é inventado nem usado sem origem)
+CREATE TABLE IF NOT EXISTS client_email_candidates (
+  id TEXT PRIMARY KEY, client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE, email TEXT NOT NULL,
+  source TEXT NOT NULL, source_url TEXT, confidence TEXT NOT NULL, -- cadastro | conteudo
+  status TEXT NOT NULL DEFAULT 'a_confirmar', -- a_confirmar | usado | descartado
+  decided_by TEXT, decided_at TEXT, created_at TEXT NOT NULL, UNIQUE (client_id, email)
+);
+
+-- Classificação operacional de itens atrasados (regra oficial: atraso ≠ culpa da responsável).
+-- A regra só registra FATOS com fonte; a categoria/atribuição final é de uma pessoa autorizada.
+-- Histórico de cada mudança fica em activity_logs (append-only).
+CREATE TABLE IF NOT EXISTS delay_reviews (
+  task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE, content_id TEXT, client_id TEXT,
+  category TEXT NOT NULL DEFAULT 'sem_contexto', -- atraso_cliente | aguardando_cliente | atraso_equipe | atraso_responsavel | processo_antigo | dado_migrado | responsabilidade_alterada | sem_contexto | reprogramado | cancelado | outro
+  attribution TEXT NOT NULL DEFAULT 'nao_atribuido', -- nao_atribuido | cliente | equipe | responsavel
+  facts TEXT NOT NULL DEFAULT '[]', -- [{k, label, value, source}] fatos levantados por regra a partir da base, cada um com a fonte
+  source_facts TEXT NOT NULL DEFAULT '[]', -- fatos lidos da fonte original (export do Notion), gravados só pelo script de migração
+  decided_by TEXT, -- NULL = só a regra (fatos); preenchido quando uma pessoa classifica
+  decided_at TEXT, note TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+-- Controle de execução das rotinas automáticas (cron idempotente com trava e timeout)
+CREATE TABLE IF NOT EXISTS job_runs (
+  id TEXT PRIMARY KEY, job TEXT NOT NULL, status TEXT NOT NULL, -- rodando | ok | erro | ignorado | expirado
+  started_at TEXT NOT NULL, finished_at TEXT, lease_until TEXT, trigger TEXT, result TEXT, error TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_job_runs ON job_runs(job, started_at);
+
 -- ───────────── ONBOARDING ─────────────
 CREATE TABLE IF NOT EXISTS onboarding (
   id TEXT PRIMARY KEY, client_id TEXT NOT NULL UNIQUE REFERENCES clients(id) ON DELETE CASCADE,
@@ -188,11 +224,12 @@ CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT,
   client_id TEXT REFERENCES clients(id) ON DELETE CASCADE, content_id TEXT REFERENCES contents(id) ON DELETE CASCADE,
   stage TEXT, function TEXT, assignee_id TEXT REFERENCES users(id), -- assignee nulo = sem responsável (gera pendência)
-  status TEXT NOT NULL DEFAULT 'aberta', -- aberta | em_andamento | concluida | cancelada
+  status TEXT NOT NULL DEFAULT 'aberta', -- aberta | em_andamento | agendada (etapa ainda não abriu: available_at) | concluida | cancelada
   kind TEXT NOT NULL DEFAULT 'etapa', -- etapa | ajuste | follow_up | onboarding | reuniao | manual | agendamento
   origin TEXT NOT NULL DEFAULT 'engine', -- engine | manual | reuniao | chat | automacao
   source_type TEXT, source_id TEXT, priority TEXT NOT NULL DEFAULT 'media',
   due_at TEXT, created_by TEXT, created_at TEXT NOT NULL, started_at TEXT, completed_at TEXT, completed_by TEXT
+  -- perf_status (ALTER): NULL = nasceu na plataforma · migrado = herdado, fora da performance até classificar · excluido | equipe | individual = classificado
 );
 CREATE INDEX IF NOT EXISTS ix_tasks_assignee ON tasks(assignee_id, status);
 CREATE INDEX IF NOT EXISTS ix_tasks_content ON tasks(content_id, status);
@@ -458,7 +495,7 @@ db.exec(SCHEMA_PORTAL);
 for (const sql of ['ALTER TABLE adjustments ADD COLUMN aspect TEXT', 'ALTER TABLE client_brain_entries ADD COLUMN shared INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE messages ADD COLUMN ref_type TEXT', 'ALTER TABLE messages ADD COLUMN ref_id TEXT',
   'ALTER TABLE notifications ADD COLUMN cta TEXT', 'ALTER TABLE files ADD COLUMN category TEXT', 'ALTER TABLE files ADD COLUMN context_type TEXT', 'ALTER TABLE files ADD COLUMN context_id TEXT', 'ALTER TABLE meetings ADD COLUMN agenda TEXT',
   'ALTER TABLE comments ADD COLUMN kind TEXT', 'ALTER TABLE adjustments ADD COLUMN comment_id TEXT']) { try { db.exec(sql); } catch { /* já existe */ } }
-for (const sql of ['ALTER TABLE adjustments ADD COLUMN reapproval INTEGER NOT NULL DEFAULT 0','ALTER TABLE clients ADD COLUMN notion_url TEXT', 'ALTER TABLE clients ADD COLUMN notion_section TEXT', 'ALTER TABLE clients ADD COLUMN aliases TEXT', "ALTER TABLE onboarding ADD COLUMN form_status TEXT NOT NULL DEFAULT 'nao_iniciado'", 'ALTER TABLE onboarding ADD COLUMN form_submitted_at TEXT', 'ALTER TABLE client_brain_entries ADD COLUMN source_url TEXT', 'ALTER TABLE contents ADD COLUMN material_url TEXT']) { try { db.exec(sql); } catch { /* já existe */ } }
+for (const sql of ['ALTER TABLE adjustments ADD COLUMN reapproval INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE clients ADD COLUMN notion_url TEXT', 'ALTER TABLE clients ADD COLUMN notion_section TEXT', 'ALTER TABLE clients ADD COLUMN aliases TEXT', "ALTER TABLE onboarding ADD COLUMN form_status TEXT NOT NULL DEFAULT 'nao_iniciado'", 'ALTER TABLE onboarding ADD COLUMN form_submitted_at TEXT', 'ALTER TABLE client_brain_entries ADD COLUMN source_url TEXT', 'ALTER TABLE contents ADD COLUMN material_url TEXT', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'", 'ALTER TABLE tasks ADD COLUMN available_at TEXT', 'ALTER TABLE users ADD COLUMN email_source TEXT', 'ALTER TABLE users ADD COLUMN email_source_url TEXT', 'ALTER TABLE tasks ADD COLUMN perf_status TEXT']) { try { db.exec(sql); } catch { /* já existe */ } }
 
 // ── helpers ───────────────────────────────────────────
 export const one = (sql, ...p) => db.prepare(sql).get(...p);

@@ -60,6 +60,7 @@ const check = (ok, what) => { results.push({ ok: !!ok, what }); console.log(`${o
 const browser = await chromium.launch({ executablePath: fs.existsSync('/opt/pw-browsers/chromium-1194/chrome-linux/chrome') ? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' : undefined });
 for (const [label, viewport, tone] of [['celular', { width: 390, height: 844 }, 'dark'], ['desktop', { width: 1440, height: 960 }, 'light']]) {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: 2, colorScheme: tone, hasTouch: label === 'celular', isMobile: label === 'celular' });
+  if (tone === 'light') await ctx.addInitScript(() => { try { localStorage.setItem('bold-theme', 'light'); } catch { /* */ } });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));

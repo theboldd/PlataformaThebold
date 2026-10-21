@@ -9,7 +9,7 @@ import { usePortal } from './PortalApp.jsx';
 export default function Perfil() {
   const auth = useAuth();
   const toast = useToast();
-  const { client, tone, setTone, tones } = usePortal() || {};
+  const { client } = usePortal() || {};
   const [cur, setCur] = useState('');
   const [next, setNext] = useState('');
   const [busy, setBusy] = useState(false);
@@ -29,14 +29,6 @@ export default function Perfil() {
         <Field label="Nova senha" hint="Mínimo de 10 caracteres."><input className="input" type="password" autoComplete="new-password" minLength={10} value={next} onChange={(e) => setNext(e.target.value)} required /></Field>
         <div><Button variant="primary" disabled={busy}>{busy ? 'Salvando…' : 'Salvar nova senha'}</Button></div>
       </form>
-      <hr className="rule" />
-      <section className="col gap-2">
-        <h2 className="ed-md">Aparência</h2>
-        <div className="p-mode" role="radiogroup" aria-label="Modo de cor">
-          {Object.entries(tones || {}).map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={tone === k} className={tone === k ? 'on' : ''} onClick={() => setTone(k)}>{l}</button>)}
-        </div>
-        <p className="xs muted">Automático segue o modo claro ou escuro do seu aparelho.</p>
-      </section>
       <hr className="rule" />
       <Button onClick={auth.logout} icon={<I.logout size={16} />}>Sair da conta</Button>
     </div>

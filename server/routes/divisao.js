@@ -1,6 +1,6 @@
 // DIVISÃO DE CLIENTES — quem cuida de cada cliente (equivalente à DIVISÃO EQUIPE do Notion).
-// Leitura liberada a toda a equipe interna; a fonte é client_members.
-// Vincular/desvincular: só quem tem divisao:edit (a CEO, ou quem ela liberar em Usuários).
+// Regra oficial 2: VER e EDITAR a Divisão é só da CEO e de quem ela autorizar (permissão "divisao").
+// A equipe comum e os clientes não acessam — a checagem é no servidor (URL/API sem permissão → 403).
 import { Router } from 'express';
 import { all, one, run, update, tx } from '../db.js';
 import { requireInternal, requirePerm } from '../lib/auth.js';
@@ -14,7 +14,11 @@ const ORDER = ['estrategia', 'copy', 'design', 'edicao', 'revisao', 'agendamento
 const CORE = ['estrategia', 'design', 'edicao']; // funções que todo cliente em operação precisa ter
 const SECTION = { 'CLIENTES MKT': 'MKT', 'CLIENTES ADVS MKT': 'ADVS' };
 
-divisao.get('/divisao', requireInternal, (req, res) => {
+const canSee = (u) => can(u, 'divisao', 'view') || can(u, 'divisao', 'edit');
+const guardView = (req, _res, next) => (canSee(req.user) ? next() : next(new HttpError(403, 'A Divisão de clientes é restrita à CEO e a quem ela autorizar.')));
+const teamOf = (clientId, fn) => all("SELECT u.name FROM client_members cm JOIN users u ON u.id=cm.user_id WHERE cm.client_id=? AND cm.function=? ORDER BY u.name", clientId, fn).map((r) => r.name);
+
+divisao.get('/divisao', requireInternal, guardView, (req, res) => {
   const clients = all("SELECT id, name, status, notion_section FROM clients WHERE status<>'encerrado' ORDER BY name");
   const links = all("SELECT cm.client_id, cm.function, u.id user_id, u.name, u.title FROM client_members cm JOIN users u ON u.id=cm.user_id WHERE cm.function<>'cliente' AND u.active=1");
   const pending = new Set(all("SELECT DISTINCT client_id FROM migration_issues WHERE kind='equipe' AND status='aberto' AND client_id IS NOT NULL").map((r) => r.client_id));
@@ -60,13 +64,15 @@ const fnLabel = (fn) => ({ estrategia: 'estratégia', copy: 'copy/legenda', desi
 divisao.post('/divisao/vinculo', requirePerm('divisao', 'edit'), (req, res) => {
   const { c, u, fn } = input(req);
   let given = 0;
+  const before = teamOf(c.id, fn);
   tx(() => {
     run('INSERT OR IGNORE INTO client_members (client_id,user_id,function) VALUES (?,?,?)', c.id, u.id, fn);
     run("INSERT OR IGNORE INTO channel_members (channel_id,user_id) SELECT id, ? FROM channels WHERE client_id=? AND kind='cliente'", u.id, c.id);
     for (const t of all("SELECT * FROM tasks WHERE client_id=? AND function=? AND assignee_id IS NULL AND status IN ('aberta','em_andamento')", c.id, fn)) { update('tasks', { id: t.id }, { assignee_id: u.id }); given++; }
   });
   if (given) notify(u.id, { level: 'info', type: 'tarefa', title: `${c.name}: ${given} tarefa(s) de ${fnLabel(fn)}`, body: 'Você foi vinculado(a) a este cliente na Divisão.', link: '/processos', client: c.id });
-  log({ actor: req.user.id, action: 'divisao.vinculo', entity: 'client', id: c.id, client: c.id, summary: `${u.name} vinculado(a) a ${c.name} em ${fnLabel(fn)}${given ? ` · ${given} tarefa(s) sem dono atribuída(s)` : ''}` });
+  log({ actor: req.user.id, action: 'divisao.vinculo', entity: 'client', id: c.id, client: c.id, summary: `${u.name} vinculado(a) a ${c.name} em ${fnLabel(fn)}${given ? ` · ${given} tarefa(s) sem dono atribuída(s)` : ''}`,
+    before: JSON.stringify({ funcao: fn, equipe: before }), after: JSON.stringify({ funcao: fn, equipe: teamOf(c.id, fn) }) });
   res.json({ ok: true, tasks: given });
 });
 
@@ -74,6 +80,7 @@ divisao.post('/divisao/vinculo', requirePerm('divisao', 'edit'), (req, res) => {
 divisao.post('/divisao/desvinculo', requirePerm('divisao', 'edit'), (req, res) => {
   const { c, u, fn } = input(req);
   const moved = [];
+  const before = teamOf(c.id, fn);
   tx(() => {
     run('DELETE FROM client_members WHERE client_id=? AND user_id=? AND function=?', c.id, u.id, fn);
     for (const t of all("SELECT * FROM tasks WHERE client_id=? AND function=? AND assignee_id=? AND status IN ('aberta','em_andamento')", c.id, fn, u.id)) {
@@ -83,6 +90,7 @@ divisao.post('/divisao/desvinculo', requirePerm('divisao', 'edit'), (req, res) =
     }
   });
   const orphan = moved.filter((x) => !x).length;
-  log({ actor: req.user.id, action: 'divisao.desvinculo', entity: 'client', id: c.id, client: c.id, summary: `${u.name} desvinculado(a) de ${c.name} em ${fnLabel(fn)}${moved.length ? ` · ${moved.length} tarefa(s) aberta(s) repassada(s)${orphan ? `, ${orphan} sem responsável` : ''}` : ''}` });
+  log({ actor: req.user.id, action: 'divisao.desvinculo', entity: 'client', id: c.id, client: c.id, summary: `${u.name} desvinculado(a) de ${c.name} em ${fnLabel(fn)}${moved.length ? ` · ${moved.length} tarefa(s) aberta(s) repassada(s)${orphan ? `, ${orphan} sem responsável` : ''}` : ''}`,
+    before: JSON.stringify({ funcao: fn, equipe: before }), after: JSON.stringify({ funcao: fn, equipe: teamOf(c.id, fn) }) });
   res.json({ ok: true, moved: moved.length, orphan });
 });

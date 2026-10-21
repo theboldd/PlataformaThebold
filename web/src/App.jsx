@@ -6,6 +6,7 @@ import { Shell } from './components/Shell.jsx';
 import { Cursor } from './components/Cursor.jsx';
 import { Loading } from './components/ui.jsx';
 import Login from './pages/Login.jsx';
+import { applyTheme } from './lib/theme.js';
 
 const P = (f) => lazy(f);
 const Dashboard = P(() => import('./pages/Dashboard.jsx'));
@@ -23,6 +24,7 @@ const Comunicacao = P(() => import('./pages/Comunicacao.jsx'));
 const Pendencias = P(() => import('./pages/Pendencias.jsx'));
 const Migracao = P(() => import('./pages/Migracao.jsx'));
 const Divisao = P(() => import('./pages/Divisao.jsx'));
+const Atrasos = P(() => import('./pages/Atrasos.jsx'));
 const CRM = P(() => import('./pages/CRM.jsx'));
 const Financeiro = P(() => import('./pages/Financeiro.jsx'));
 const Insights = P(() => import('./pages/Insights.jsx'));
@@ -42,7 +44,7 @@ export default function App() {
   // tenta de novo em vez de "deslogar" quem atualizou a página.
   const load = useCallback(async () => {
     for (let i = 0; i < 4; i++) {
-      try { setAuth(await api.get('/auth/me')); setDown(false); return; } catch (e) {
+      try { const me = await api.get('/auth/me'); applyTheme(me.user?.theme); setAuth(me); setDown(false); return; } catch (e) {
         if (e.status === 401 || e.status === 403) { setAuth(null); setDown(false); return; }
         await new Promise((r) => setTimeout(r, 600 * (i + 1)));
       }
@@ -88,6 +90,7 @@ export default function App() {
                     <Route path="/pendencias" element={<Pendencias />} />
                     <Route path="/migracao" element={<Migracao />} />
                     <Route path="/divisao" element={<Divisao />} />
+                    <Route path="/atrasos" element={<Atrasos />} />
                     <Route path="/crm" element={<CRM />} />
                     <Route path="/financeiro" element={<Financeiro />} />
                     <Route path="/insights" element={<Insights />} />

@@ -8,7 +8,7 @@
 
 /* Board */
 .board-note { display: flex; align-items: center; gap: 10px; font-size: var(--fs-sm); color: var(--ink-2); padding: 10px 0 18px; }
-.board-note .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--bordo); animation: pulse 2.4s infinite var(--ease); color: var(--bordo); }
+.board-note .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--bordo); animation: pulse 2.4s infinite var(--ease); color: var(--primary-text); }
 .board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(268px, 1fr); gap: var(--sp-4); overflow-x: auto; padding-bottom: var(--sp-4); scroll-snap-type: x proximity; }
 .lane { scroll-snap-align: start; min-width: 0; display: flex; flex-direction: column; }
 .lane-head { border-top: 2px solid var(--ink); padding: 12px 0 10px; position: sticky; top: 0; }
@@ -28,7 +28,7 @@
 .ticker::-webkit-scrollbar { display: none; }
 .ticker .item { font-size: var(--fs-sm); color: var(--ink-2); }
 .ticker .item .when { color: var(--faint); margin-right: 8px; font-size: var(--fs-xs); }
-.ticker .item a:hover { color: var(--bordo); }
+.ticker .item a:hover { color: var(--primary-text); }
 
 /* Etapas (definição) */
 .stage-def { padding: 14px 0; border-bottom: 1px solid var(--line); }
@@ -60,7 +60,7 @@
 .kv dt { color: var(--muted); font-size: var(--fs-xs); letter-spacing: .1em; text-transform: uppercase; padding-top: 2px; }
 .kv dd { margin: 0; min-width: 0; }
 .dropzone { border: 1px dashed var(--line-strong); border-radius: var(--r-md); padding: var(--sp-5); text-align: center; color: var(--muted); cursor: pointer; transition: border-color var(--t-fast), background var(--t-fast); }
-.dropzone.over, .dropzone:hover { border-color: var(--bordo); background: var(--bordo-soft); color: var(--ink); }
+.dropzone.over, .dropzone:hover { border-color: var(--primary-text); background: var(--bordo-soft); color: var(--ink); }
 .progress { height: 3px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
 .progress > span { display: block; height: 100%; background: var(--bordo); transition: width var(--t-fast); }
 .comment { padding: 12px 0; border-bottom: 1px solid var(--line); }
@@ -107,7 +107,7 @@
 .milestone { padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-xs); }
 .milestone .k { text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
 .milestone.past { color: var(--faint); }
-.milestone.now .k { color: var(--bordo); font-weight: 600; }
+.milestone.now .k { color: var(--primary-text); font-weight: 600; }
 .ob-banner { border: 1px solid var(--err); background: var(--err-soft); border-radius: var(--r-md); padding: var(--sp-4) var(--sp-5); margin-bottom: var(--sp-5); }
 .ob-item { display: grid; grid-template-columns: 24px minmax(0, 1fr) 100px 110px 110px auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
 @media (max-width: 900px) { .ob-item { grid-template-columns: 24px minmax(0, 1fr) auto; } .ob-item .hide-m { display: none; } }

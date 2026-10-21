@@ -6,19 +6,13 @@ import { useCrumbs } from '../components/Shell.jsx';
 import { Avatar, Button, Field, PageHead, Section, Seg, Tag } from '../components/ui.jsx';
 import { FUNCTIONS } from '../lib/status.js';
 import { ago } from '../lib/format.js';
-
-// Tema por pessoa (preferência local do navegador)
-export function applyTheme(t) {
-  if (t === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
-  try { if (t === 'system') localStorage.removeItem('bold-theme'); else localStorage.setItem('bold-theme', t); } catch { /* armazenamento indisponível */ }
-}
-const readTheme = () => { try { return localStorage.getItem('bold-theme') || 'system'; } catch { return 'system'; } };
+import { saveTheme } from '../lib/theme.js';
 
 export default function Perfil() {
   useCrumbs('Perfil');
   const auth = useAuth();
   const toast = useToast();
-  const [theme, setTheme] = useState(readTheme);
+  const [theme, setTheme] = useState(auth.user.theme || 'system');
   const [pw, setPw] = useState({ current: '', next: '', confirm: '' });
   const u = auth.user;
   const changePw = async (e) => {
@@ -42,7 +36,7 @@ export default function Perfil() {
             </ul>
           </Section>
           <Section title="Aparência">
-            <Seg label="Tema" value={theme} onChange={(t) => { setTheme(t); applyTheme(t); }} options={[{ value: 'system', label: 'Sistema' }, { value: 'light', label: 'Claro' }, { value: 'dark', label: 'Escuro' }]} />
+            <Seg label="Tema" value={theme} onChange={(t) => { setTheme(t); saveTheme(t); }} options={[{ value: 'system', label: 'Sistema' }, { value: 'light', label: 'Claro' }, { value: 'dark', label: 'Escuro' }]} />
             <p className="xs faint mt-4">Preferência salva neste navegador.</p>
           </Section>
         </div>

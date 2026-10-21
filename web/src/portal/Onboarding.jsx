@@ -95,7 +95,7 @@ export default function Onboarding() {
       )}
       {sec.questions.map((q) => (
         <div key={q.key} className="p-ob-q">
-          <label htmlFor={`q-${q.key}`}>{q.text}{q.required ? ' *' : ''}</label>
+          <label htmlFor={`q-${q.key}`}>{q.text}{q.required ? ' *' : ''}{data.answers[q.key]?.migrated && <span className="p-ob-src">Migrado do Notion</span>}</label>
           {q.help && <div className="help">{q.help}</div>}
           {q.sensitive ? (
             <input id={`q-${q.key}`} type={/senha/i.test(q.text) ? 'password' : 'text'} autoComplete="off" value={values[q.key] ?? ''}
@@ -114,7 +114,7 @@ export default function Onboarding() {
           ) : (
             <textarea id={`q-${q.key}`} rows={q.type === 'text' ? 1 : 4} value={values[q.key] ?? ''} onChange={(e) => change(q, e.target.value)} onBlur={() => flush(q)} />
           )}
-          <div className="p-ob-saved" aria-live="polite">{{ salvando: 'Salvando…', salvo: 'Salvo', erro: 'Não foi possível salvar — tente de novo' }[state[q.key]] || (q.sensitive && data.answers[q.key]?.saved ? 'Guardado com segurança' : data.answers[q.key]?.from_notion ? 'Resposta trazida do seu formulário anterior' : '')}</div>
+          <div className="p-ob-saved" aria-live="polite">{{ salvando: 'Salvando…', salvo: 'Salvo', erro: 'Não foi possível salvar — tente de novo' }[state[q.key]] || (q.sensitive && data.answers[q.key]?.saved ? 'Guardado com segurança' : '')}</div>
         </div>
       ))}
 

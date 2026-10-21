@@ -1,19 +1,11 @@
 /* ═══════════════════════════════════════════════════════════════
    ÁREA DO CLIENTE — camada editorial (Meu Momento Bold, Decisões, Solicitações, Marca)
-   Modo claro e escuro. Serif só em títulos, números e momentos de personalidade; sans no resto.
+   Modo claro e escuro (tema salvo por usuário, em lib/theme.js). Serif só em títulos, números e momentos de personalidade; sans no resto.
    ═══════════════════════════════════════════════════════════════ */
-.portal[data-tone="light"] {
-  --bg: #F6F3F0; --surface: #FBFAF8; --surface-2: #EBE5DF;
-  --ink: #0B0B0B; --ink-2: #3B3734; --muted: #6F6862; --faint: #9A928B;
-  --line: rgba(11,11,11,.10); --line-strong: rgba(11,11,11,.24);
-  --bordo-soft: rgba(74,23,37,.07); --bordo-line: rgba(74,23,37,.3);
-  --ok: #3E6A4E; --warn: #8A5D17; --err: #9E3A2E; --info: #3B556F;
-  --rose: var(--bordo);
-}
-.portal[data-tone="light"] .p-top { background: color-mix(in srgb, #F6F3F0 86%, transparent); }
-.portal[data-tone="light"] .p-select option { background: #FBFAF8; }
-.portal[data-tone="light"] .p-brand-avatar { box-shadow: 0 0 0 2px #F6F3F0, 0 0 0 3px var(--bordo-line); }
-.portal[data-tone="light"] .p-media { box-shadow: 0 30px 80px -50px rgba(74,23,37,.45); }
+:root[data-theme="light"] .portal .p-top { background: color-mix(in srgb, #F6F3F0 86%, transparent); }
+:root[data-theme="light"] .portal .p-select option { background: #FBFAF8; }
+:root[data-theme="light"] .portal .p-brand-avatar { box-shadow: 0 0 0 2px #F6F3F0, 0 0 0 3px var(--bordo-line); }
+:root[data-theme="light"] .portal .p-media { box-shadow: 0 30px 80px -50px rgba(74,23,37,.45); }
 /* O visualizador de conteúdo é sempre uma galeria escura: o conteúdo é o protagonista */
 .p-overlay, .portal .p-overlay {
   --bg: #060505; --surface: #121010; --surface-2: #1C1818; --ink: #F4EFEA; --ink-2: #D6CEC7; --muted: #9B928B; --faint: #6E6660;
@@ -31,8 +23,9 @@
 .p-new { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--ink);
   font-size: 11px; letter-spacing: .14em; text-transform: uppercase; cursor: pointer; transition: border-color var(--t-fast), background var(--t-fast); }
 .p-new:hover { border-color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
-@media (max-width: 1280px) { .p-client { display: none; } }
-@media (max-width: 1060px) { .p-new span { display: none; } .p-new { width: 36px; padding: 0; justify-content: center; } }
+.p-brand, .p-new, .p-nav a, .p-nav button { white-space: nowrap; flex: none; }
+@media (max-width: 1500px) { .p-client { display: none; } }
+@media (max-width: 1320px) { .p-new span { display: none; } .p-new { width: 36px; padding: 0; justify-content: center; } }
 .p-fab { display: none; }
 .p-more-mobile { display: none !important; }
 @media (max-width: 860px) {

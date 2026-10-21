@@ -90,7 +90,7 @@ export default function Executive() {
       <section className="ex-kpis" aria-label="Indicadores executivos">
         <Kpi n={k.risk.n} label="Clientes em risco" alert={k.risk.n > 0} onClick={() => setDrawer({ kind: 'risk' })}
           aux={k.risk.n ? (k.risk.critico ? `${k.risk.critico} em risco crítico` : 'risco alto') : 'nenhum cliente em risco'} />
-        <Kpi n={k.critical.n} label="Pendências críticas" alert={k.critical.n > 0} to="/pendencias?sev=critica"
+        <Kpi n={k.critical.n} label="Pendências críticas" alert={k.critical.n > 0} to="/pendencias?escopo=equipe&sev=critica"
           aux={k.critical.n ? (k.critical.vencidas ? pl(k.critical.vencidas, 'vencida', 'vencidas') : 'nenhuma vencida') : 'nada travando a operação'} />
         <Kpi n={k.producao.n} label="Em produção" onClick={() => setDrawer({ kind: 'stage', stage: k.producao.stages.join(','), title: 'Em produção' })}
           aux={k.producao.n ? (k.producao.atrasados ? `${k.producao.atrasados} com prazo vencido` : 'todos no prazo') : 'nenhum conteúdo em produção'} />
@@ -124,7 +124,7 @@ export default function Executive() {
               ))}
             </ol>
           )}
-          <div className="ex-foot"><Link className="ex-more" to="/pendencias">Ver todas as pendências <I.arrow size={13} /></Link></div>
+          <div className="ex-foot"><Link className="ex-more" to="/pendencias?escopo=equipe">Ver todas as pendências <I.arrow size={13} /></Link></div>
         </section>
 
         {/* PRÓXIMOS COMPROMISSOS */}

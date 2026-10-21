@@ -11,7 +11,7 @@
 .ex-head { display: flex; justify-content: space-between; align-items: flex-end; gap: var(--sp-5); flex-wrap: wrap; padding-top: var(--sp-4); }
 .ex-meta { font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--muted); }
 .ex-hello { font-family: var(--font-editorial); font-weight: 400; font-size: clamp(36px, 4.2vw, 58px); line-height: .95; letter-spacing: -0.02em; text-transform: uppercase; margin: var(--sp-3) 0 6px; }
-.ex-hello i { font-style: normal; color: var(--bordo); }
+.ex-hello i { font-style: normal; color: var(--primary-text); }
 .ex-q { font-family: var(--font-editorial); font-style: italic; font-size: clamp(18px, 1.6vw, 22px); color: var(--ink-2); margin: 0; }
 .ex-period { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .ex-period-l { font-size: var(--fs-xs); color: var(--muted); }
@@ -22,7 +22,7 @@
 .ex-state { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: calc(-1 * var(--sp-4)) 0 0; padding: var(--sp-4) var(--sp-5); background: var(--surface); border-radius: 12px; }
 .ex-state.s-critico { background: var(--bordo-soft); }
 .ex-state-tag { font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
-.s-critico .ex-state-tag { color: var(--bordo); }
+.s-critico .ex-state-tag { color: var(--primary-text); }
 .ex-state-t { font-size: var(--fs-lg); font-weight: 600; }
 .ex-base { font-size: var(--fs-sm); color: var(--muted); margin-left: auto; }
 .ex-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid currentColor; flex: none; }
@@ -33,7 +33,7 @@
 .ex-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-5); }
 .ex-kpi { display: flex; flex-direction: column; gap: 6px; padding: var(--sp-4) 0 0; border: 0; border-top: 2px solid var(--ink); background: none; color: inherit; text-decoration: none; text-align: left; font: inherit; cursor: pointer; }
 .ex-kpi-n { font-family: var(--font-editorial); font-size: clamp(40px, 3.4vw, 48px); line-height: .9; letter-spacing: -0.03em; font-variant-numeric: lining-nums tabular-nums; transition: transform var(--t-med) var(--ease-out); }
-.ex-kpi-n.alert { color: var(--bordo); }
+.ex-kpi-n.alert { color: var(--primary-text); }
 .ex-kpi-l { font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-weight: 700; margin-top: 4px; }
 .ex-kpi-a { font-size: var(--fs-sm); color: var(--muted); }
 .ex-kpi:hover .ex-kpi-n, .ex-kpi:focus-visible .ex-kpi-n { transform: translateY(-2px); }
@@ -60,13 +60,13 @@
 .ex-att-list, .ex-ag-list, .ex-bars, .ex-rec { list-style: none; margin: 0; padding: 0; }
 .ex-att-list { display: flex; flex-direction: column; gap: 10px; }
 .ex-att-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px var(--sp-5); padding: var(--sp-4) var(--sp-5); border-radius: 12px; background: var(--surface); color: inherit; text-decoration: none; border-left: 3px solid var(--line-strong); transition: background var(--t-fast), transform var(--t-med) var(--ease-out); }
-.ex-att-item.l-critico { border-left-color: var(--bordo); }
+.ex-att-item.l-critico { border-left-color: var(--primary-text); }
 .ex-att-item:hover, .ex-att-item:focus-visible { background: var(--bordo-soft); transform: translateX(2px); }
 .ex-att-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; grid-column: 1; }
 .ex-prio { font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
-.l-critico .ex-prio { color: var(--bordo); }
+.l-critico .ex-prio { color: var(--primary-text); }
 .ex-att-client { font-size: var(--fs-sm); font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
-.ex-att-time { font-size: var(--fs-sm); color: var(--bordo); font-weight: 600; }
+.ex-att-time { font-size: var(--fs-sm); color: var(--primary-text); font-weight: 600; }
 .ex-att-item.l-atencao .ex-att-time { color: var(--ink-2); }
 .ex-att-p { grid-column: 1; font-size: var(--fs-lg); font-weight: 500; line-height: 1.35; }
 .ex-att-meta { grid-column: 1; display: flex; flex-wrap: wrap; gap: 4px 20px; font-size: var(--fs-sm); color: var(--ink-2); }
@@ -97,7 +97,7 @@
 /* Inteligência */
 .ex-in { padding: var(--sp-4) 0; display: flex; flex-direction: column; gap: 6px; }
 .ex-in + .ex-in { border-top: 1px solid var(--line); }
-.ex-in-k { font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-weight: 700; color: var(--bordo); }
+.ex-in-k { font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-weight: 700; color: var(--primary-text); }
 .ex-in-t { font-size: var(--fs-lg); font-weight: 600; line-height: 1.35; margin: 0; }
 .ex-in-p { font-size: var(--fs-sm); line-height: 1.5; color: var(--ink-2); margin: 0; }
 .ex-in .ex-more { align-self: flex-start; }
@@ -120,12 +120,12 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .ex-hello i, :root:not([data-theme="light"]) .ex-kpi-n.alert, :root:not([data-theme="light"]) .l-critico .ex-prio,
-  :root:not([data-theme="light"]) .ex-att-time, :root:not([data-theme="light"]) .ex-in-k, :root:not([data-theme="light"]) .s-critico .ex-state-tag { color: #C4566C; }
-  :root:not([data-theme="light"]) .ex-att-item.l-critico { border-left-color: #C4566C; }
+  :root:not([data-theme="light"]) .ex-att-time, :root:not([data-theme="light"]) .ex-in-k, :root:not([data-theme="light"]) .s-critico .ex-state-tag { color: var(--primary-text); }
+  :root:not([data-theme="light"]) .ex-att-item.l-critico { border-left-color: var(--primary-text); }
 }
 :root[data-theme="dark"] .ex-hello i, :root[data-theme="dark"] .ex-kpi-n.alert, :root[data-theme="dark"] .l-critico .ex-prio, :root[data-theme="dark"] .ex-att-time,
-:root[data-theme="dark"] .ex-in-k, :root[data-theme="dark"] .s-critico .ex-state-tag { color: #C4566C; }
-:root[data-theme="dark"] .ex-att-item.l-critico { border-left-color: #C4566C; }
+:root[data-theme="dark"] .ex-in-k, :root[data-theme="dark"] .s-critico .ex-state-tag { color: var(--primary-text); }
+:root[data-theme="dark"] .ex-att-item.l-critico { border-left-color: var(--primary-text); }
 
 /* Tablet */
 @media (max-width: 1100px) {

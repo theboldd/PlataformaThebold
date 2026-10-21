@@ -5,7 +5,7 @@ import { requireInternal, requirePerm } from '../lib/auth.js';
 import { can, canAccessClient, assertClient, assertCan, scopeSQL, clientScope, HttpError, PENDENCIAS_ROLES, roleOf } from '../lib/permissions.js';
 import { log, notify, parseMentions, recordMentions, userName, businessDaysFrom } from '../lib/core.js';
 import { STAGES, LANES, STAGE_ORDER, publicStatus, productionTracks, createContent, completeTask, reviewDecision, clientDecision, schedule, confirmPublished,
-  blockContent, unblockContent, cancelContent, returnToStage, nextAction, contentRisk, editableVersion, currentVersion, versionMedia, resolveAssignee, ensureCycle, setting, DEFAULT_SETTINGS, buildMilestones } from '../engine/process.js';
+  blockContent, unblockContent, cancelContent, returnToStage, movePreview, moveContent, MOVE_KINDS, nextAction, contentRisk, editableVersion, currentVersion, versionMedia, resolveAssignee, ensureCycle, setting, DEFAULT_SETTINGS, buildMilestones } from '../engine/process.js';
 import { automation, automationStats } from '../engine/automations.js';
 import { computePendencies, clientSummary, clientRisk, runDetectors, opsMetrics, stageDistribution, teamLoad, OPERATING } from '../engine/intelligence.js';
 import { executiveOverview } from '../engine/executive.js';
@@ -14,6 +14,8 @@ import { ingest, fileDTO, TMP_DIR } from '../services/media.js';
 import { BRAIN_SECTIONS, exportClientBrainMarkdown } from '../ai/memory.js';
 import { integrationStatus } from '../integrations/vault.js';
 import { activeForm, formStatus } from '../services/onboarding.js';
+import { myPendencies } from './pendencias.js';
+import { isInherited } from '../services/delayReview.js';
 
 export const ops = Router();
 ops.use(requireInternal);
@@ -161,6 +163,8 @@ ops.get('/clients/:id/brain.md', requirePerm('brain', 'view'), (req, res) => { a
 ops.put('/clients/:id/team', requirePerm('divisao', 'edit'), (req, res) => {
   assertClient(req.user, req.params.id);
   const members = (req.body?.members || []).filter((m) => m.user_id && m.function && m.function !== 'cliente');
+  const teamSnap = () => all("SELECT u.name, cm.function FROM client_members cm JOIN users u ON u.id=cm.user_id WHERE cm.client_id=? AND cm.function<>'cliente' ORDER BY cm.function, u.name", req.params.id).map((r) => `${r.function}:${r.name}`);
+  const before = teamSnap();
   tx(() => {
     run("DELETE FROM client_members WHERE client_id=? AND function<>'cliente'", req.params.id);
     members.forEach((m) => run('INSERT OR IGNORE INTO client_members (client_id,user_id,function) VALUES (?,?,?)', req.params.id, m.user_id, m.function));
@@ -172,7 +176,8 @@ ops.put('/clients/:id/team', requirePerm('divisao', 'edit'), (req, res) => {
       if (a) { update('tasks', { id: t.id }, { assignee_id: a }); notify(a, { level: 'info', type: 'tarefa', title: t.title, body: 'Atribuída após atualização da equipe do cliente', link: t.content_id ? `/conteudos/${t.content_id}` : '/', content: t.content_id }); }
     }
   });
-  log({ actor: req.user.id, action: 'cliente.equipe', entity: 'client', id: req.params.id, client: req.params.id, summary: `Equipe do cliente atualizada: ${members.map((m) => `${userName(m.user_id)} (${m.function})`).join(', ')}` });
+  log({ actor: req.user.id, action: 'cliente.equipe', entity: 'client', id: req.params.id, client: req.params.id, summary: `Equipe do cliente atualizada: ${members.map((m) => `${userName(m.user_id)} (${m.function})`).join(', ')}`,
+    before: JSON.stringify(before), after: JSON.stringify(teamSnap()) });
   res.json({ ok: true });
 });
 ops.patch('/onboarding/items/:id', requirePerm('clientes', 'edit'), (req, res) => {
@@ -208,7 +213,8 @@ export function contentCard(c, user = null) {
   const v = currentVersion(c.id);
   const thumb = v ? versionMedia(v.id)[0] : null;
   const risk = contentRisk(c);
-  return { id: c.id, number: c.number, title: c.title, format: c.format, client_id: c.client_id, client: cl?.name, client_color: cl?.color, stage: c.stage, stage_label: STAGES[c.stage].label, lane: STAGES[c.stage].lane,
+  const opens = !owner ? one("SELECT available_at FROM tasks WHERE content_id=? AND status='agendada' ORDER BY available_at LIMIT 1", c.id)?.available_at || null : null;
+  return { opens_at: opens, id: c.id, number: c.number, title: c.title, format: c.format, client_id: c.client_id, client: cl?.name, client_color: cl?.color, stage: c.stage, stage_label: STAGES[c.stage].label, lane: STAGES[c.stage].lane,
     priority: c.priority, planned_at: c.planned_at, blocked: !!c.blocked, block_reason: c.block_reason, waiting_on: c.waiting_on, owner: owner?.name || (owner ? 'SEM RESPONSÁVEL' : null), owner_id: owner?.assignee_id,
     due_at: owner?.due_at, hours_in_stage: hoursSince(c.stage_entered_at), risk: risk.level, risk_reasons: risk.reasons, version: v?.number || null, thumb: thumb ? fileDTO(thumb).urls.thumb : null,
     restricted: user ? !canAccessClient(user, c.client_id) : false, rounds: c.revision_rounds + c.client_adjust_rounds, month: c.cycle_month || c.planned_at?.slice(0, 7) || null,
@@ -249,7 +255,7 @@ ops.get('/contents/:id', requirePerm('conteudos', 'view'), (req, res) => {
     comments: all('SELECT cm.*, u.name author_name, u.role_key author_role, v.number version_number FROM comments cm JOIN users u ON u.id=cm.author_id LEFT JOIN content_versions v ON v.id=cm.version_id WHERE cm.content_id=? ORDER BY cm.created_at', c.id).map((x) => ({ ...x, anchor: parseJSON(x.anchor) })),
     history: all('SELECT l.*, u.name actor_name FROM activity_logs l LEFT JOIN users u ON u.id=l.actor_id WHERE l.content_id=? ORDER BY l.created_at DESC', c.id),
     tracks: productionTracks(c.format),
-    permissions: { edit: can(req.user, 'conteudos', 'edit'), approve: can(req.user, 'conteudos', 'approve'), review: can(req.user, 'revisao', 'approve'), admin: can(req.user, 'conteudos', 'admin') },
+    permissions: { move: can(req.user, 'processos', 'edit'), edit: can(req.user, 'conteudos', 'edit'), approve: can(req.user, 'conteudos', 'approve'), review: can(req.user, 'revisao', 'approve'), admin: can(req.user, 'conteudos', 'admin') },
     meta_connected: integrationStatus('meta').status === 'conectado',
   });
 });
@@ -341,6 +347,24 @@ ops.post('/contents/:id/material', requirePerm('conteudos', 'edit'), (req, res) 
 ops.post('/contents/:id/unblock', requirePerm('conteudos', 'edit'), (req, res) => { unblockContent(req.params.id, req.user, req.body?.note); res.json({ ok: true }); });
 ops.post('/contents/:id/cancel', (req, res) => res.json(cancelContent(req.params.id, req.user, req.body?.reason)));
 ops.post('/contents/:id/return', (req, res) => res.json(returnToStage(req.params.id, req.user, req.body?.stage, req.body?.reason)));
+// Mover etapa manualmente: prévia do impacto (antes de confirmar) e o movimento registrado
+ops.get('/contents/:id/move-preview', requirePerm('processos', 'view'), (req, res) => {
+  const c = getContentOr404(req.params.id);
+  assertClient(req.user, c.client_id);
+  res.json({ ...movePreview(c, String(req.query.to || ''), req.query.kind), can_move: can(req.user, 'processos', 'edit') });
+});
+ops.post('/contents/:id/move', requirePerm('processos', 'edit'), (req, res) => {
+  const c = getContentOr404(req.params.id);
+  assertClient(req.user, c.client_id);
+  res.json(moveContent(c.id, req.user, { to: req.body?.to, reason: req.body?.reason, kind: req.body?.kind }));
+});
+ops.get('/contents/:id/moves', requirePerm('processos', 'view'), (req, res) => {
+  const c = getContentOr404(req.params.id);
+  assertClient(req.user, c.client_id);
+  res.json(all('SELECT m.*, u.name actor FROM stage_moves m LEFT JOIN users u ON u.id=m.actor_id WHERE m.content_id=? ORDER BY m.created_at DESC', c.id)
+    .map((m) => ({ ...m, kind_label: MOVE_KINDS[m.kind] || m.kind, from_label: STAGES[m.from_stage]?.label, to_label: STAGES[m.to_stage]?.label, impacts: parseJSON(m.impacts, []),
+      prev: parseJSON(m.prev_assignees, []).map(userName), next: parseJSON(m.new_assignees, []).map(userName) })));
+});
 ops.post('/contents/:id/duplicate', requirePerm('conteudos', 'create'), (req, res) => {
   const c = getContentOr404(req.params.id);
   assertClient(req.user, c.client_id);
@@ -432,7 +456,7 @@ ops.put('/process/settings/:key', requirePerm('automacoes', 'admin'), (req, res)
 });
 
 // ═════════════ TAREFAS ═════════════
-const taskRow = (t) => ({ ...t, content: t.content_id ? one('SELECT number, title, stage, format FROM contents WHERE id=?', t.content_id) : null, client: t.client_id ? one('SELECT name FROM clients WHERE id=?', t.client_id)?.name : null, overdue: !!(t.due_at && t.due_at < now()) });
+const taskRow = (t) => ({ ...t, content: t.content_id ? one('SELECT number, title, stage, format FROM contents WHERE id=?', t.content_id) : null, client: t.client_id ? one('SELECT name FROM clients WHERE id=?', t.client_id)?.name : null, overdue: !!(t.due_at && t.due_at < now() && !isInherited(t)), inherited: !!(t.due_at && t.due_at < now() && isInherited(t)) });
 ops.get('/tasks/mine', (req, res) => {
   res.json(all("SELECT * FROM tasks WHERE assignee_id=? AND status IN ('aberta','em_andamento') ORDER BY due_at IS NULL, due_at", req.user.id).map(taskRow));
 });
@@ -484,7 +508,7 @@ ops.get('/review/queue', requirePerm('revisao', 'view'), (req, res) => {
   res.json({ items, team: all("SELECT id, name, role_key FROM users WHERE active=1 AND role_key IN ('design','edicao','copy','producao','estrategia') ORDER BY name") });
 });
 
-// ═════════════ CENTRO DE PENDÊNCIAS (exclusivo CEO + Operações) ═════════════
+// ═════════════ CENTRO DE PENDÊNCIAS (Minhas: toda a equipe · Equipe: permissão pendencias) ═════════════
 // Centro de Pendências: ver routes/pendencias.js
 
 // ═════════════ TORRE DE CONTROLE / DASHBOARDS ═════════════
@@ -533,12 +557,45 @@ function executiveBrief(m, risks, pend, insights) {
 ops.get('/torre', requirePerm('torre', 'view'), (req, res) => res.json(tower(req.user, req.query)));
 ops.get('/torre/automations', requirePerm('torre', 'view'), (req, res) => res.json(automationRuns(req.query)));
 ops.get('/torre/people/:id/tasks', requirePerm('torre', 'view'), (req, res) => res.json(personTasks(req.params.id)));
+// "O que eu preciso fazer hoje?" — igual para toda a equipe, só com dados da própria pessoa e dos clientes dela
+const FLOW_VIEW = ['cronograma', 'analise_cronograma', 'aprovacao_tema', 'producao', 'analise_producao', 'aprovacao_cliente', 'agendamento', 'agendado', 'publicado'];
+function todayFor(u, mine) {
+  const nowIso = now();
+  const end = new Date(); end.setHours(23, 59, 59, 999); const endIso = end.toISOString();
+  const week = new Date(Date.now() + 7 * 864e5).toISOString();
+  // Herdado da migração com prazo vencido não é "atrasada": o prazo foi calculado na importação (fica à parte, em revisão)
+  const inherited = mine.filter((t) => t.due_at && t.due_at < nowIso && isInherited(t));
+  const overdue = mine.filter((t) => t.due_at && t.due_at < nowIso && !isInherited(t));
+  const today = mine.filter((t) => t.due_at && t.due_at >= nowIso && t.due_at <= endIso);
+  const next = mine.filter((t) => t.due_at && t.due_at > endIso && t.due_at <= week);
+  const scheduled = one("SELECT COUNT(*) n, MIN(available_at) first FROM tasks WHERE assignee_id=? AND status='agendada'", u.id);
+  const pend = myPendencies(u);
+  const clients = all("SELECT c.id, c.name, GROUP_CONCAT(DISTINCT cm.function) fns FROM client_members cm JOIN clients c ON c.id=cm.client_id WHERE cm.user_id=? AND cm.function<>'cliente' AND c.status<>'encerrado' GROUP BY c.id ORDER BY c.name", u.id)
+    .map((c) => ({ id: c.id, name: c.name, functions: c.fns.split(','), open: mine.filter((t) => t.client_id === c.id).length }));
+  const unread = all("SELECT id, type, title, body, link, count, updated_at FROM notifications WHERE user_id=? AND read_at IS NULL ORDER BY updated_at DESC LIMIT 5", u.id);
+  const unreadTotal = one('SELECT COUNT(*) n FROM notifications WHERE user_id=? AND read_at IS NULL', u.id).n;
+  // Você está aqui: a tarefa mais urgente com conteúdo → cliente → processo → etapa → próxima ação
+  const focusTask = [...overdue, ...today, ...next, ...inherited, ...mine].find((t) => t.content_id);
+  let here = null;
+  if (focusTask) {
+    const c = one('SELECT * FROM contents WHERE id=?', focusTask.content_id);
+    if (c && canAccessClient(u, c.client_id)) {
+      const na = nextAction(c);
+      here = { task: focusTask.title, task_due: focusTask.due_at, client_id: c.client_id, client: one('SELECT name FROM clients WHERE id=?', c.client_id)?.name, content_id: c.id, content: `#${c.number} ${c.title}`,
+        steps: FLOW_VIEW.map((k) => ({ key: k, label: STAGES[k].label })), current: c.stage, current_label: STAGES[c.stage].label, next: na.text, next_who: na.who };
+    }
+  }
+  return { overdue: overdue.length, inherited: inherited.length, today: today.length, next7: next.length, no_due: mine.filter((t) => !t.due_at).length, scheduled: scheduled.n, scheduled_first: scheduled.first,
+    pendencies: pend.length, pendencies_top: pend.slice(0, 4), clients, unread: unreadTotal, unread_items: unread, here,
+    focus: [...overdue, ...today, ...next].slice(0, 6).concat(inherited.slice(0, Math.max(0, 6 - overdue.length - today.length - next.length)).map((t) => ({ ...t, inherited: true }))) };
+}
+
 ops.get('/dashboard', (req, res) => {
   const u = req.user;
   const kind = roleOf(u).dashboard;
   const m = opsMetrics(u);
   const mine = all("SELECT * FROM tasks WHERE assignee_id=? AND status IN ('aberta','em_andamento') ORDER BY due_at IS NULL, due_at", u.id).map(taskRow);
-  const base = { kind, metrics: m, my_tasks: mine, meetings: upcomingMeetings(u, 3) };
+  const base = { kind, metrics: m, my_tasks: mine, meetings: upcomingMeetings(u, 3), today: kind === 'ceo' ? null : todayFor(u, mine) };
   const sc = scopeSQL(u, 'client_id');
   if (kind === 'ceo') {
     // Visão executiva: resumo → prioridade → contexto; o detalhe completo continua na Torre de Controle
