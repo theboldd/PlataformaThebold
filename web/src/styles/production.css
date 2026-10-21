@@ -117,3 +117,13 @@
 .bar { height: 4px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
 .bar > span { display: block; height: 100%; background: var(--ink); }
 .moved-wrap > .ccard { animation: moved 1.6s var(--ease-out); }
+
+/* Comentário que virou ajuste */
+.cm-adj { display: inline-flex; margin-top: 6px; font: inherit; font-size: var(--fs-xs); font-weight: 600; color: var(--primary-text); background: none; border: 1px solid currentColor; border-radius: 999px; padding: 2px 10px; cursor: pointer; }
+.cm-adj-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; padding: 10px; border: 1px dashed var(--line); border-radius: 8px; }
+.cm-adj-form .select { width: auto; min-height: 30px; padding: 2px 8px; font-size: 12px; }
+.linklike { font: inherit; color: var(--primary-text); background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
+.cap-diff { white-space: pre-wrap; }
+.cap-diff del { background: color-mix(in srgb, var(--err) 14%, transparent); color: var(--err); text-decoration: line-through; }
+.cap-diff ins { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ink); text-decoration: none; font-weight: 600; }
+.tag-mig { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; border-color: var(--line); color: var(--ink-2); }

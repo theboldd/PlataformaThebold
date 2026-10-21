@@ -1,0 +1,68 @@
+// CALENDÁRIO EDITORIAL DO CLIENTE — opera sobre o modelo do The Bold OS (conteúdos, etapas, versões, aprovações).
+// O Notion não é fonte aqui: o que veio de lá já está nos conteúdos, com a origem marcada; nada é lido nem escrito no Notion.
+// Cada conteúdo é separado por FASE (derivada da etapa) e por SITUAÇÃO DA DATA (com data, sem data, já passada na migração).
+import { Router } from 'express';
+import { one, all, parseJSON } from '../db.js';
+import { requireInternal, requirePerm } from '../lib/auth.js';
+import { assertClient, HttpError } from '../lib/permissions.js';
+import { STAGES } from '../engine/process.js';
+import { contentCard } from './ops.js';
+
+export const editorial = Router();
+
+export const PHASES = [
+  { key: 'planejado', label: 'Planejado', stages: ['cronograma', 'analise_cronograma', 'ajuste_cronograma', 'aprovacao_tema'] },
+  { key: 'producao', label: 'Em produção', stages: ['producao', 'analise_producao', 'ajuste_interno', 'ajuste_cliente', 'revisao_ajuste'] },
+  { key: 'aprovacao', label: 'Com o cliente para aprovar', stages: ['aprovacao_cliente'] },
+  { key: 'aprovado', label: 'Para agendar', stages: ['agendamento'] }, // aprovado só quando há registro (approved_version_id)
+  { key: 'agendado', label: 'Agendado', stages: ['agendado'] },
+  { key: 'publicado', label: 'Publicado', stages: ['publicado'] },
+];
+const PHASE_OF = Object.fromEntries(PHASES.flatMap((p) => p.stages.map((s) => [s, p.key])));
+
+function item(c, user) {
+  const card = contentCard(c, user);
+  const notes = c.internal_notes || '';
+  const migrated = parseJSON(c.strategy_tags, []).some((t) => String(t).startsWith('importado-notion'));
+  const notionPost = /Post citado no Notion:/.test(notes);
+  const date = c.published_at || c.scheduled_at || c.planned_at || null;
+  const live = all("SELECT t.function, t.status, u.name FROM tasks t LEFT JOIN users u ON u.id=t.assignee_id WHERE t.content_id=? AND t.status IN ('aberta','em_andamento','agendada')", c.id);
+  return {
+    ...card,
+    phase: PHASE_OF[c.stage] || null,
+    date, date_kind: c.published_at ? 'publicado' : c.scheduled_at ? 'agendado' : c.planned_at ? 'previsto' : null,
+    date_source: !c.planned_at ? null : migrated && notionPost ? 'post do Notion' : migrated ? 'Notion' : 'plataforma',
+    migrated, past_at_migration: migrated && !!c.planned_at && c.planned_at < c.created_at,
+    approved: !!c.approved_version_id,
+    deps: {
+      material: c.material_status === 'aguardando' || (!!c.blocked && c.waiting_on === 'cliente') ? 'aguardando material do cliente' : c.material_status === 'recebido' ? 'material recebido' : null,
+      approval: c.stage === 'aprovacao_tema' ? 'tema aguardando o cliente' : c.stage === 'aprovacao_cliente' ? 'aguardando aprovação do cliente' : null,
+      blocked: c.blocked ? c.block_reason || 'bloqueado' : null,
+      // etapa diz "aprovado", mas a plataforma não tem o registro da aprovação (ex.: veio da coluna "Para agendamento" do Notion)
+      approval_missing: ['agendamento', 'agendado', 'publicado'].includes(c.stage) && !c.approved_version_id ? 'aprovação do cliente não registrada na plataforma' : null,
+    },
+    people: live.map((t) => ({ fn: t.function, name: t.name || 'sem responsável', scheduled: t.status === 'agendada' })),
+    versions: one('SELECT COUNT(*) n FROM content_versions WHERE content_id=?', c.id).n,
+    open_adjustments: one("SELECT COUNT(*) n FROM adjustments WHERE content_id=? AND status='aberto'", c.id).n,
+  };
+}
+
+editorial.get('/clients/:id/editorial', requireInternal, requirePerm('conteudos', 'view'), (req, res) => {
+  assertClient(req.user, req.params.id);
+  const cl = one('SELECT id, name, handle FROM clients WHERE id=?', req.params.id);
+  if (!cl) throw new HttpError(404, 'Cliente não encontrado.');
+  const rows = all("SELECT * FROM contents WHERE client_id=? AND stage<>'cancelado' ORDER BY COALESCE(published_at, scheduled_at, planned_at) IS NULL, COALESCE(published_at, scheduled_at, planned_at), number", cl.id);
+  const items = rows.map((c) => item(c, req.user));
+  const n = (f) => items.filter(f).length;
+  res.json({
+    client: cl, phases: PHASES.map(({ key, label, stages }) => ({ key, label, stages: stages.map((s) => ({ key: s, label: STAGES[s].label })), n: n((i) => i.phase === key) })),
+    items,
+    counts: {
+      total: items.length, com_data: n((i) => i.date), sem_data: n((i) => !i.date), passada_na_migracao: n((i) => i.past_at_migration),
+      migrados: n((i) => i.migrated), material: n((i) => i.deps.material === 'aguardando material do cliente'), aprovacao: n((i) => i.deps.approval), bloqueados: n((i) => i.deps.blocked), sem_registro_aprovacao: n((i) => i.deps.approval_missing),
+      cancelados: one("SELECT COUNT(*) n FROM contents WHERE client_id=? AND stage='cancelado'", cl.id).n,
+      com_midia: n((i) => i.thumb),
+    },
+    months: [...new Set(items.filter((i) => i.date).map((i) => i.date.slice(0, 7)))].sort(),
+  });
+});

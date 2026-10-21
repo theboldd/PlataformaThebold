@@ -32,7 +32,7 @@ export default function Calendario() {
   const todayKey = dayKey(today.toISOString());
   const Ev = ({ e }) => e.kind === 'meeting'
     ? <span className="p-ev meeting"><I.meeting size={11} /> {fmtTime(e.date)} {e.title}</span>
-    : <Link to="/portal" className={`p-ev s-${e.status}`} title={`${e.title} — ${STATUS[e.status] || e.status}`}><span aria-hidden>{GLYPH[e.status] || '·'}</span> {FORMATS[e.format]} · {e.title}</Link>;
+    : <Link to={`/portal/conteudos?post=${e.id}`} className={`p-ev s-${e.status}`} title={`${e.title} — ${STATUS[e.status] || e.status}`}><span aria-hidden>{GLYPH[e.status] || '·'}</span> {FORMATS[e.format]} · {e.title}</Link>;
 
   return (
     <div className="p-page">

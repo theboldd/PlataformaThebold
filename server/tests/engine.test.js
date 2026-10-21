@@ -183,3 +183,26 @@ test('atrasos: herdado da migração fica fora da performance; classificar exige
   assert.match(lg.before, /dado_migrado/); assert.match(lg.after, /aguardando_cliente/);
   assert.equal(can(U.ops, 'atrasos'), false, 'Operações não classifica atraso sem liberação da CEO');
 });
+
+test('comentário vira ajuste: só onde a equipe está com o conteúdo, uma vez, ligado ao comentário', async () => {
+  const { addComment } = await import('../routes/ops.js');
+  const prod = P.createContent({ client_id: client.id, title: 'Com comentário', format: 'estatico', stage: 'producao' }, U.est);
+  const cm = addComment(prod, U.rev, { body: 'Trocar a cor do título', visibility: 'internal' });
+  const adj = P.commentToAdjustment(cm.id, U.est, { size: 'simples' });
+  assert.equal(adj.origin, 'interno'); assert.equal(adj.size, 'simples');
+  assert.equal(one('SELECT adjustment_id FROM comments WHERE id=?', cm.id).adjustment_id, adj.id);
+  assert.ok(one("SELECT 1 FROM tasks WHERE id=? AND kind='ajuste' AND status='aberta'", adj.task_id));
+  assert.throws(() => P.commentToAdjustment(cm.id, U.est), /já virou ajuste/);
+  // cliente comentou: vira ajuste "do cliente"; página do carrossel vem da âncora
+  const cc = addComment(prod, cu, { body: 'Pode aumentar a foto?', anchor: { page: 2 } });
+  const a2 = P.commentToAdjustment(cc.id, U.est);
+  assert.equal(a2.origin, 'cliente'); assert.equal(a2.carousel_page, 2);
+  // conteúdo com o cliente: a mudança passa pela decisão do cliente, não pela conversão
+  const wait = P.createContent({ client_id: client.id, title: 'Esperando cliente', format: 'estatico', stage: 'aprovacao_cliente' }, U.est);
+  const cw = addComment(wait, cu, { body: 'Não gostei da cor' });
+  assert.throws(() => P.commentToAdjustment(cw.id, U.est), /decisão do cliente/);
+  // sem permissão de editar conteúdo ou sem acesso ao cliente
+  const cx = addComment(prod, U.rev, { body: 'Outro ponto', visibility: 'internal' });
+  assert.throws(() => P.commentToAdjustment(cx.id, U.out), /Sem permissão/);
+  assert.ok(one("SELECT 1 FROM activity_logs WHERE action='comentario.virou_ajuste' AND entity_id=?", cm.id));
+});

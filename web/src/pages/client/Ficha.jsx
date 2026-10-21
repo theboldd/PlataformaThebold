@@ -106,6 +106,7 @@ function Entries({ data, clientId, reload }) {
                 </div>
               ) : <div className="ficha-content">{e.content}</div>}
               <div className="xs faint mt-2">
+                {String(e.source_type || '').startsWith('notion') && <span className="tag tag-mig">Migrado do Notion</span>}{' '}
                 {SOURCE[e.source_type] || e.source_type}{e.source_page ? ` · ${e.source_page}` : ''}
                 {e.source_url && <> · <a className="link" href={e.source_url} target="_blank" rel="noreferrer">origem</a></>}
                 {e.author ? ` · por ${e.author}` : ''}{e.updated_at ? ` · editado ${ago(e.updated_at)}${e.editor ? ` por ${e.editor}` : ''}` : ''}

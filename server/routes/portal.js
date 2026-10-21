@@ -136,7 +136,10 @@ portal.post('/contents/:id/adjust', upload.single('file'), async (req, res) => {
   const page = req.body.carousel_page ? Number(req.body.carousel_page) : null;
   const t = req.body.video_timestamp ? Number(req.body.video_timestamp) : null;
   clientDecision(c.id, req.user, { decision: 'ajuste', note, carousel_page: page, video_timestamp: t }, req);
-  addComment(one('SELECT * FROM contents WHERE id=?', c.id), req.user, { body: `Ajuste solicitado: ${note}`, anchor: page || t != null ? { page, t } : null, file_id: fileId });
+  const cm = addComment(one('SELECT * FROM contents WHERE id=?', c.id), req.user, { body: `Ajuste solicitado: ${note}`, anchor: page || t != null ? { page, t } : null, file_id: fileId });
+  // o comentário aponta para o ajuste que a decisão acabou de criar (histórico ligado)
+  const adj = one("SELECT id FROM adjustments WHERE content_id=? AND origin='cliente' AND requested_by=? ORDER BY created_at DESC LIMIT 1", c.id, req.user.id);
+  if (adj) update('comments', { id: cm.id }, { adjustment_id: adj.id });
   res.json(feedItem(one('SELECT * FROM contents WHERE id=?', c.id), one('SELECT * FROM clients WHERE id=?', c.client_id)));
 });
 // Cliente edita a legenda direto no feed → nova versão (a anterior é preservada) + equipe notificada

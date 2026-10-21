@@ -119,18 +119,9 @@ export default function ConteudoDetalhe() {
               { key: 'detalhes', label: 'Briefing' },
               { key: 'historico', label: 'Histórico' },
             ]} />
-            {tab === 'comentarios' && <Comments contentId={c.id} comments={comments} onChange={reload} mediaCount={current?.media?.length || 0} />}
+            {tab === 'comentarios' && <Comments contentId={c.id} comments={comments} onChange={reload} mediaCount={current?.media?.length || 0} adjustments={adjustments} canAdjust={pm.edit && data.comment_to_adjustment} onAdjustTab={() => setTab('ajustes')} />}
             {tab === 'tarefas' && <TasksList tasks={tasks} me={auth.user.id} onComplete={completeTask} />}
-            {tab === 'ajustes' && (!adjustments.length ? <Empty title="Nenhum ajuste." /> : adjustments.map((a) => (
-              <div key={a.id} className="task-row" style={{ alignItems: 'flex-start' }}>
-                <span className={`tag ${a.origin === 'cliente' ? 'tag-warn' : 'tag-info'}`}>{a.origin}</span>
-                <div className="grow">
-                  <div className={a.status !== 'aberto' ? 'done' : ''}>{a.description}</div>
-                  <div className="xs faint">{a.requested_by_name} → {a.assigned_name || 'sem responsável'} · sobre V{a.version_number || '—'}{a.carousel_page ? ` · página ${a.carousel_page}` : ''}{a.video_timestamp != null ? ` · ${a.video_timestamp}s` : ''}{a.size === 'simples' ? ' · simples' : ''} · {ago(a.created_at)}</div>
-                </div>
-                <span className={`tag ${a.status === 'aberto' ? 'tag-err' : 'tag-ok'}`}>{a.status}</span>
-              </div>
-            )))}
+            {tab === 'ajustes' && <AdjustHistory adjustments={adjustments} onComment={() => setTab('comentarios')} />}
             {tab === 'aprovacoes' && (!approvals.length ? <Empty title="Sem aprovações registradas." /> : approvals.map((a) => (
               <div key={a.id} className="task-row" style={{ alignItems: 'flex-start' }}>
                 <span className={`tag ${a.decision === 'aprovado' ? 'tag-ok' : 'tag-err'}`}>{a.decision === 'aprovado' ? '✓ aprovado' : 'ajuste'}</span>
@@ -392,3 +383,30 @@ function ReasonModal({ open, onClose, title, label, onSave, busy, danger }) {
   );
 }
 
+
+// Histórico de ajustes agrupado pela versão em que foi pedido (rodada) → versão que resolveu
+function AdjustHistory({ adjustments, onComment }) {
+  if (!adjustments.length) return <Empty title="Nenhum ajuste." />;
+  const rounds = [...new Set(adjustments.map((a) => a.version_number || 0))].sort((a, b) => b - a);
+  return rounds.map((v) => {
+    const list = adjustments.filter((a) => (a.version_number || 0) === v);
+    const open = list.filter((a) => a.status === 'aberto').length;
+    return (
+      <section key={v} className="mb-5">
+        <div className="section-head"><h3 className="ed-md">{v ? `Pedidos sobre a V${v}` : 'Pedidos sem versão'}</h3><span className="xs faint">{list.length} ajuste(s){open ? ` · ${open} aberto(s)` : ' · todos resolvidos'}</span></div>
+        {list.map((a) => (
+          <div key={a.id} className="task-row" style={{ alignItems: 'flex-start' }}>
+            <span className={`tag ${a.origin === 'cliente' ? 'tag-warn' : 'tag-info'}`}>{a.origin}</span>
+            <div className="grow">
+              <div className={a.status !== 'aberto' ? 'done' : ''}>{a.description}</div>
+              <div className="xs faint">{a.requested_by_name} → {a.assigned_name || 'sem responsável'}{a.carousel_page ? ` · página ${a.carousel_page}` : ''}{a.video_timestamp != null ? ` · ${a.video_timestamp}s` : ''}{a.size === 'simples' ? ' · simples' : ''}{a.reapproval ? ' · volta para o cliente aprovar' : ''} · pedido {fmtDateTime(a.created_at)}
+                {a.done_at ? ` · resolvido ${fmtDateTime(a.done_at)}${a.resolved_version_number ? ` na V${a.resolved_version_number}` : ''}` : ''}
+                {a.comment_id ? <> · <button className="linklike" onClick={onComment}>veio de um comentário</button></> : null}</div>
+            </div>
+            <span className={`tag ${a.status === 'aberto' ? 'tag-err' : 'tag-ok'}`}>{a.status}</span>
+          </div>
+        ))}
+      </section>
+    );
+  });
+}

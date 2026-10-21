@@ -1,6 +1,7 @@
 // CONTEÚDOS — a principal experiência do cliente.
 // ♡ → ♥ é a aprovação formal (LIKE = APROVAÇÃO). Comentário = conversa ou pedido de ajuste (o sistema entende e encaminha).
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { useApi, useToast } from '../lib/hooks.js';
 import { fmtDate, fmtDateTime, fmtMonth, ago, cleanName, initials } from '../lib/format.js';
@@ -27,6 +28,15 @@ export default function Feed() {
   const feed = useApi(`/portal/feed${qs ? `?${qs}` : ''}`, []);
   const items = feed.data?.items || [];
   const pending = items.filter((x) => x.can_like).length;
+  // Vindo do calendário (?post=id): abre direto aquele conteúdo, no mês dele
+  const [sp, setSp] = useSearchParams();
+  useEffect(() => {
+    const id = sp.get('post');
+    const it = id && items.find((x) => x.id === id);
+    if (!it) return;
+    setView('grade'); if (it.planned_at) setMonth(it.planned_at.slice(0, 7)); setOpenId(id);
+    setSp((p) => { const n = new URLSearchParams(p); n.delete('post'); return n; }, { replace: true });
+  }, [sp, items]); // eslint-disable-line react-hooks/exhaustive-deps
   const replace = (it) => { feed.setData((d) => ({ ...d, items: d.items.map((x) => (x.id === it.id ? it : x)) })); reloadMe?.(); };
 
   const months = [...new Set(items.map((x) => (x.planned_at || '').slice(0, 7)).filter(Boolean))].sort();

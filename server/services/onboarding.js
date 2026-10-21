@@ -116,3 +116,25 @@ export function submitForm(clientId, actor, onComplete) {
   onComplete?.();
   return formStatus(clientId);
 }
+
+// Cards de onboarding: por cliente, o quanto do formulário oficial já existe, por seção e por origem (Notion × plataforma).
+// Só conta o que está gravado; nada é estimado.
+export function onboardingCard(clientId) {
+  const form = activeForm();
+  const st = formStatus(clientId);
+  if (!form || !st) return null;
+  const A = st.answers;
+  const has = (k) => !!A[k]?.answer?.trim();
+  const sections = form.sections.map((s) => ({ title: s.title, total: s.questions.length, answered: s.questions.filter((q) => has(q.key)).length,
+    from_notion: s.questions.filter((q) => has(q.key) && String(A[q.key].source_type).startsWith('notion')).length }));
+  const vals = Object.values(A).filter((a) => a.answer?.trim());
+  const ob = one('SELECT id, status FROM onboarding WHERE client_id=?', clientId);
+  const items = ob ? all('SELECT status, who, due_at FROM onboarding_items WHERE onboarding_id=?', ob.id) : [];
+  const last = vals.map((a) => a.updated_at || a.answered_at).sort().pop() || null;
+  return {
+    status: ob?.status || null, form_status: st.status, total: st.total, answered: st.answered, missing: st.total - st.answered,
+    from_notion: vals.filter((a) => String(a.source_type).startsWith('notion')).length, from_platform: vals.filter((a) => !String(a.source_type).startsWith('notion')).length,
+    sections, items: { total: items.length, pending: items.filter((i) => i.status === 'pendente').length, client_pending: items.filter((i) => i.status === 'pendente' && i.who === 'cliente').length },
+    last_answer_at: last, submitted_at: st.submitted_at,
+  };
+}

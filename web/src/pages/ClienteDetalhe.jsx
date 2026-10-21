@@ -3,11 +3,13 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api.js';
 import { useApi, useAuth, useToast } from '../lib/hooks.js';
 import { useCrumbs } from '../components/Shell.jsx';
-import { Avatar, Button, ContentCard, Empty, ErrorBox, Field, Loading, Modal, Risk, Stat, Status, Tabs, Timeline } from '../components/ui.jsx';
+import { Avatar, Button, Empty, ErrorBox, Field, Loading, Modal, Risk, Stat, Tabs, Timeline } from '../components/ui.jsx';
 import { I } from '../components/Icons.jsx';
 import { ago, bytes, cleanName, fmtDate, fmtDateTime, fmtMonth, money } from '../lib/format.js';
 import { FUNCTIONS } from '../lib/status.js';
 import Ficha from './client/Ficha.jsx';
+import Editorial from './client/Editorial.jsx';
+import { ClientOnboardingCard } from './client/OnboardingCards.jsx';
 import '../styles/production.css';
 
 const BRAIN = [['posicionamento', 'Posicionamento'], ['publico', 'Público'], ['persona', 'Persona'], ['tom', 'Tom de voz'], ['linguagem', 'Linguagem'], ['oferta', 'Oferta'], ['produtos', 'Produtos e serviços'], ['objetivos', 'Objetivos'], ['estrategia', 'Estratégia'], ['preferencias', 'Preferências'], ['restricoes', 'Restrições'], ['referencias', 'Referências'], ['regras', 'Regras específicas'], ['importante', 'Informações importantes']];
@@ -30,7 +32,7 @@ export default function ClienteDetalhe() {
   const tabs = [
     { key: 'visao', label: 'Visão geral' }, { key: 'ficha', label: 'Ficha' }, { key: 'brain', label: 'Resumo do Brain' },
     { key: 'onboarding', label: 'Onboarding', count: ob && ob.status !== 'concluido' ? missing.length : 0 },
-    { key: 'conteudos', label: 'Conteúdos', count: data.contents.length }, { key: 'reunioes', label: 'Reuniões', count: data.meetings.length },
+    { key: 'conteudos', label: 'Calendário editorial', count: data.contents.length }, { key: 'reunioes', label: 'Reuniões', count: data.meetings.length },
     { key: 'equipe', label: 'Equipe' }, { key: 'arquivos', label: 'Arquivos', count: data.files.length },
     ...(data.finance ? [{ key: 'financeiro', label: 'Financeiro' }] : []), { key: 'historico', label: 'Histórico' },
   ];
@@ -58,7 +60,7 @@ export default function ClienteDetalhe() {
       {tab === 'ficha' && <Ficha clientId={c.id} />}
       {tab === 'brain' && <BrainTab data={data} reload={reload} />}
       {tab === 'onboarding' && <OnboardingTab data={data} missing={missing} reload={reload} />}
-      {tab === 'conteudos' && <ContentsTab data={data} />}
+      {tab === 'conteudos' && <Editorial clientId={c.id} />}
       {tab === 'reunioes' && (!data.meetings.length ? <Empty title="Nenhuma reunião registrada." /> : (
         <ul className="list">{data.meetings.map((m) => (
           <li key={m.id}><span className="idx" style={{ width: 90, fontSize: 18 }}>{fmtDate(m.starts_at)}</span><div className="grow"><div className="sm strong">{m.title}</div><div className="xs muted">{m.status} · {new Date(m.starts_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}{m.summary ? ` · ${m.summary}` : ''}</div></div><span className="xs faint">Google: {m.gcal_sync?.replace('_', ' ')}</span><Link className="btn btn-sm btn-ghost" to={`/reunioes?m=${m.id}`}>Abrir</Link></li>
@@ -208,7 +210,7 @@ function OnboardingTab({ data, missing, reload }) {
       <Link className="btn btn-sm btn-ghost" to={`/clientes/${data.client.id}?tab=ficha`}>Ver respostas</Link>
     </div>
   );
-  if (ob.status === 'migrado') return <div>{formLine}<p className="sm muted">Cliente migrado do Notion: o onboarding aconteceu antes da plataforma. As respostas encontradas estão na Ficha, com a origem de cada uma.</p></div>;
+  if (ob.status === 'migrado') return <div>{formLine}<ClientOnboardingCard clientId={data.client.id} /><p className="sm muted">Cliente migrado do Notion: o onboarding aconteceu antes da plataforma. As respostas encontradas estão na Ficha, com a origem de cada uma.</p></div>;
   const groups = [['formulario', 'Formulário'], ['material', 'Materiais'], ['acesso', 'Acessos'], ['interno', 'Interno']];
   const set = async (item, status) => { try { await api.patch(`/onboarding/items/${item.id}`, { status }); toast(`“${item.label}” → ${status}`); reload(); } catch (e) { toast(e.message, 'err'); } };
   const now = new Date().toISOString();
@@ -216,6 +218,7 @@ function OnboardingTab({ data, missing, reload }) {
   return (
     <div>
       {formLine}
+      <ClientOnboardingCard clientId={data.client.id} />
       {ob.status !== 'concluido' && missing.length > 0 ? (
         <div className="ob-banner">
           <div className="row between wrap"><div className="caps" style={{ color: 'var(--err)' }}>Onboarding incompleto</div><span className="sm">{done}/{ob.items.length} itens · iniciado {ago(ob.started_at)}</span></div>
@@ -256,20 +259,6 @@ function OnboardingTab({ data, missing, reload }) {
       })}
     </div>
   );
-}
-
-function ContentsTab({ data }) {
-  const months = [...new Set(data.contents.map((c) => c.planned_at?.slice(0, 7) || 'sem data'))].sort().reverse();
-  if (!data.contents.length) return <Empty title="Nenhum conteúdo ainda." />;
-  return months.map((m) => {
-    const list = data.contents.filter((c) => (c.planned_at?.slice(0, 7) || 'sem data') === m);
-    return (
-      <section key={m} className="mb-5">
-        <div className="section-head"><h3 className="ed-md" style={{ textTransform: 'capitalize' }}>{m === 'sem data' ? 'Sem data' : fmtMonth(m)}</h3><span className="xs faint">{list.length} conteúdo(s)</span></div>
-        <div className="grid-3">{list.map((c) => <div key={c.id} className="col gap-1"><ContentCard c={c} /><Status s={c.status} /></div>)}</div>
-      </section>
-    );
-  });
 }
 
 function TeamTab({ data, reload }) {

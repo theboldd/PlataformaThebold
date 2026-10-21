@@ -429,6 +429,33 @@ function lastProducer(contentId, fn) {
   return one("SELECT completed_by FROM tasks WHERE content_id=? AND function=? AND status='concluida' AND completed_by IS NOT NULL ORDER BY completed_at DESC LIMIT 1", contentId, fn)?.completed_by || null;
 }
 
+// Comentário que vira ajuste (feito pela equipe): o comentário original fica intacto e passa a apontar para o ajuste criado.
+// Só onde a equipe está com o conteúdo. Quando o conteúdo espera o cliente ou já foi aprovado, a mudança de etapa
+// passa pela decisão do cliente (registrada pelo cliente ou pela equipe em nome dele), não por aqui.
+export const COMMENT_ADJ_STAGES = ['producao', 'analise_producao', 'ajuste_interno', 'ajuste_cliente', 'revisao_ajuste'];
+export function commentToAdjustment(commentId, actor, { size = 'normal', track = 'visual', description } = {}) {
+  return tx(() => {
+    const cm = one('SELECT * FROM comments WHERE id=?', commentId);
+    if (!cm) throw new HttpError(404, 'Comentário não encontrado.');
+    if (cm.adjustment_id) throw new HttpError(409, 'Este comentário já virou ajuste.');
+    const c = getContent(cm.content_id);
+    if (!can(actor, 'conteudos', 'edit') || !canAccessClient(actor, c.client_id)) throw new HttpError(403, 'Sem permissão para criar ajuste neste conteúdo.');
+    if (!COMMENT_ADJ_STAGES.includes(c.stage)) throw new HttpError(409, ['aprovacao_tema', 'aprovacao_cliente', 'agendamento', 'agendado'].includes(c.stage)
+      ? 'O conteúdo está com o cliente ou já aprovado: registre a decisão do cliente (ajuste) em vez de converter o comentário.'
+      : `Na etapa “${STAGES[c.stage].label}” não cabe ajuste de produção.`);
+    const author = one('SELECT role_key FROM users WHERE id=?', cm.author_id);
+    const origin = author?.role_key === 'cliente' ? 'cliente' : 'interno';
+    const anchor = parseJSON(cm.anchor, {}) || {};
+    let cur = c;
+    if (origin === 'cliente' && c.stage === 'revisao_ajuste') cur = enterStage(c, 'ajuste_cliente', actor, { reason: 'pedido do cliente (comentário) durante a revisão do ajuste' });
+    const adj = createAdjustment(cur, actor, { description: String(description || cm.body).trim(), origin, size: size === 'simples' ? 'simples' : 'normal', track: track === 'legenda' ? 'legenda' : 'visual',
+      carousel_page: anchor.page || null, video_timestamp: anchor.t ?? null });
+    update('comments', { id: cm.id }, { adjustment_id: adj.id });
+    log({ actor: actor.id, action: 'comentario.virou_ajuste', entity: 'comment', id: cm.id, client: c.client_id, content: c.id, summary: `Comentário ${origin === 'cliente' ? 'do cliente' : 'interno'} virou ajuste: ${cm.body.slice(0, 120)}`, after: adj.id });
+    return adj;
+  });
+}
+
 // Decisão do cliente (feed de aprovação) — tema ou conteúdo final
 export function clientDecision(contentId, actor, { decision, note, carousel_page, video_timestamp, region, size, on_behalf_note }, req) {
   return tx(() => {

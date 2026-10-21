@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { isInherited } from '../services/delayReview.js';
 import { one, all, insert, update, run, uid, now, parseJSON, tx } from '../db.js';
 import { requireInternal, requirePerm, requireAuth } from '../lib/auth.js';
 import { can, canAccessClient, assertClient, scopeSQL, isInternal, HttpError } from '../lib/permissions.js';
@@ -141,7 +142,7 @@ comms.get('/calendar', requireInternal, async (req, res) => {
   }
   const sct = scopeSQL(req.user, 't.client_id');
   for (const t of all(`SELECT t.*, cl.name client, u.name assignee FROM tasks t LEFT JOIN clients cl ON cl.id=t.client_id LEFT JOIN users u ON u.id=t.assignee_id WHERE t.status IN ('aberta','em_andamento') AND t.function<>'cliente' AND t.due_at BETWEEN ? AND ? AND (t.client_id IS NULL OR ${sct.sql})${req.query.client_id ? ' AND t.client_id=?' : ''} ${req.query.mine ? 'AND t.assignee_id=?' : ''}`, start, end, ...sct.params, ...cp, ...(req.query.mine ? [req.user.id] : []))) {
-    items.push({ id: `t:${t.id}`, type: 'prazo', title: `Prazo: ${t.title}`, start: t.due_at, assignee: t.assignee, client_id: t.client_id, link: t.content_id ? `/conteudos/${t.content_id}` : null, overdue: t.due_at < now() });
+    items.push({ id: `t:${t.id}`, type: 'prazo', title: `Prazo: ${t.title}`, start: t.due_at, assignee: t.assignee, client_id: t.client_id, link: t.content_id ? `/conteudos/${t.content_id}` : null, overdue: t.due_at < now() && !isInherited(t), inherited: isInherited(t) });
   }
   const scm = scopeSQL(req.user, 'm.client_id');
   for (const m of all(`SELECT m.*, cl.name client FROM meetings m LEFT JOIN clients cl ON cl.id=m.client_id WHERE m.status<>'cancelada' AND m.starts_at BETWEEN ? AND ? AND (m.client_id IS NULL OR ${scm.sql})${req.query.client_id ? ' AND m.client_id=?' : ''}`, start, end, ...scm.params, ...cp)) {

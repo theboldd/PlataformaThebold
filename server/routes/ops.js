@@ -5,7 +5,7 @@ import { requireInternal, requirePerm } from '../lib/auth.js';
 import { can, canAccessClient, assertClient, assertCan, scopeSQL, clientScope, HttpError, PENDENCIAS_ROLES, roleOf } from '../lib/permissions.js';
 import { log, notify, parseMentions, recordMentions, userName, businessDaysFrom } from '../lib/core.js';
 import { STAGES, LANES, STAGE_ORDER, publicStatus, productionTracks, createContent, completeTask, reviewDecision, clientDecision, schedule, confirmPublished,
-  blockContent, unblockContent, cancelContent, returnToStage, movePreview, moveContent, MOVE_KINDS, nextAction, contentRisk, editableVersion, currentVersion, versionMedia, resolveAssignee, ensureCycle, setting, DEFAULT_SETTINGS, buildMilestones } from '../engine/process.js';
+  blockContent, unblockContent, cancelContent, returnToStage, movePreview, moveContent, MOVE_KINDS, commentToAdjustment, COMMENT_ADJ_STAGES, nextAction, contentRisk, editableVersion, currentVersion, versionMedia, resolveAssignee, ensureCycle, setting, DEFAULT_SETTINGS, buildMilestones } from '../engine/process.js';
 import { automation, automationStats } from '../engine/automations.js';
 import { computePendencies, clientSummary, clientRisk, runDetectors, opsMetrics, stageDistribution, teamLoad, OPERATING } from '../engine/intelligence.js';
 import { executiveOverview } from '../engine/executive.js';
@@ -249,12 +249,14 @@ ops.get('/contents/:id', requirePerm('conteudos', 'view'), (req, res) => {
     cycle: c.cycle_id ? (({ milestones, ...cy }) => ({ ...cy, milestones: parseJSON(milestones, {}) }))(one('SELECT * FROM cycles WHERE id=?', c.cycle_id)) : null,
     versions,
     tasks: all('SELECT t.*, u.name assignee_name FROM tasks t LEFT JOIN users u ON u.id=t.assignee_id WHERE t.content_id=? ORDER BY t.created_at DESC', c.id),
-    adjustments: all('SELECT a.*, r.name requested_by_name, s.name assigned_name, v.number version_number FROM adjustments a LEFT JOIN users r ON r.id=a.requested_by LEFT JOIN users s ON s.id=a.assigned_to LEFT JOIN content_versions v ON v.id=a.version_id WHERE a.content_id=? ORDER BY a.created_at DESC', c.id),
+    adjustments: all(`SELECT a.*, r.name requested_by_name, s.name assigned_name, v.number version_number, rv.number resolved_version_number, (SELECT cm.id FROM comments cm WHERE cm.adjustment_id=a.id LIMIT 1) comment_id
+      FROM adjustments a LEFT JOIN users r ON r.id=a.requested_by LEFT JOIN users s ON s.id=a.assigned_to LEFT JOIN content_versions v ON v.id=a.version_id LEFT JOIN content_versions rv ON rv.id=a.resolved_version_id WHERE a.content_id=? ORDER BY a.created_at DESC`, c.id),
     approvals: all('SELECT ap.*, u.name user_name, u.role_key, v.number version_number FROM approvals ap JOIN users u ON u.id=ap.user_id LEFT JOIN content_versions v ON v.id=ap.version_id WHERE ap.content_id=? ORDER BY ap.created_at DESC', c.id),
     reviews: all('SELECT r.*, u.name reviewer_name, v.number version_number FROM reviews r LEFT JOIN users u ON u.id=r.reviewer_id LEFT JOIN content_versions v ON v.id=r.version_id WHERE r.content_id=? ORDER BY r.created_at DESC', c.id),
     comments: all('SELECT cm.*, u.name author_name, u.role_key author_role, v.number version_number FROM comments cm JOIN users u ON u.id=cm.author_id LEFT JOIN content_versions v ON v.id=cm.version_id WHERE cm.content_id=? ORDER BY cm.created_at', c.id).map((x) => ({ ...x, anchor: parseJSON(x.anchor) })),
     history: all('SELECT l.*, u.name actor_name FROM activity_logs l LEFT JOIN users u ON u.id=l.actor_id WHERE l.content_id=? ORDER BY l.created_at DESC', c.id),
     tracks: productionTracks(c.format),
+    comment_to_adjustment: COMMENT_ADJ_STAGES.includes(c.stage),
     permissions: { move: can(req.user, 'processos', 'edit'), edit: can(req.user, 'conteudos', 'edit'), approve: can(req.user, 'conteudos', 'approve'), review: can(req.user, 'revisao', 'approve'), admin: can(req.user, 'conteudos', 'admin') },
     meta_connected: integrationStatus('meta').status === 'conectado',
   });
@@ -371,6 +373,8 @@ ops.post('/contents/:id/duplicate', requirePerm('conteudos', 'create'), (req, re
   const n = createContent({ client_id: c.client_id, title: `${c.title} (cópia)`, format: c.format, theme: c.theme, objective: c.objective, reference: c.reference, briefing: c.briefing, strategy_tags: parseJSON(c.strategy_tags, []), planned_at: req.body?.planned_at || null }, req.user);
   res.json(contentCard(n, req.user));
 });
+// Comentário → ajuste (equipe): regra e etapas permitidas em engine/process.js (commentToAdjustment)
+ops.post('/comments/:id/ajuste', requirePerm('conteudos', 'edit'), (req, res) => res.json(commentToAdjustment(req.params.id, req.user, req.body || {})));
 // Comentários (equipe pode marcar como interno; menções notificam)
 ops.post('/contents/:id/comments', requirePerm('conteudos', 'view'), (req, res) => {
   const c = getContentOr404(req.params.id);
