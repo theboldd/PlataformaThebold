@@ -621,7 +621,8 @@ export function contentRisk(c) {
   const reasons = [];
   let score = 0;
   const t = Date.now();
-  const tasks = all("SELECT due_at, assignee_id, kind FROM tasks WHERE content_id=? AND status IN ('aberta','em_andamento')", c.id);
+  // herdado da migração: o prazo foi calculado na importação — não é "prazo vencido" até ser classificado
+  const tasks = all("SELECT due_at, assignee_id, kind FROM tasks WHERE content_id=? AND status IN ('aberta','em_andamento') AND (perf_status IS NULL OR perf_status NOT IN ('migrado','excluido'))", c.id);
   const overdue = tasks.filter((x) => x.due_at && new Date(x.due_at).getTime() < t);
   if (overdue.length) { score += 3; reasons.push('Prazo da etapa vencido'); }
   else if (tasks.some((x) => x.due_at && new Date(x.due_at).getTime() - t < 24 * 3600e3)) { score += 1; reasons.push('Prazo vence em menos de 24h'); }

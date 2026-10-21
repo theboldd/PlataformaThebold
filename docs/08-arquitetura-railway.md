@@ -1,167 +1,244 @@
-# THE BOLD OS — Arquitetura de produção no Railway
+# THE BOLD OS — Relatório de arquitetura para o Railway
 
-**Status: proposta para validação.** Nada foi migrado. A prévia na Vercel continua como está até a CEO aprovar.
+**Status: relatório aprovado para elaboração. Migração NÃO aprovada.** Nada foi migrado nem será sem aprovação explícita deste plano pela CEO.
+A Vercel continua como prévia até lá. Itens marcados com **[confirmar]** dependem de conferência no painel do Railway/Vercel na hora de executar.
 
-## 1. Mapa da arquitetura atual
+---
 
-| Peça | Como funciona hoje | Onde está |
+## 1. Arquitetura atual
+
+| Peça | Como funciona hoje | Onde roda |
 |---|---|---|
-| Frontend | React 19 + Vite, compilado em `web/dist` | Vercel (estático) / local |
-| Backend/API | Express 5 em Node 22 (`server/index.js`). Um único processo serve a API **e** o frontend compilado | Vercel (função) / local (`npm start`) |
-| Banco | SQLite (`node:sqlite`, síncrono): **um arquivo** `bold.db` de ~3,7 MB hoje | Local em `storage/`; na Vercel, cópia cifrada `real-snapshot/bold.db.enc` decifrada em `/tmp` a cada instância |
-| Arquivos | Originais e variações (sharp, ffmpeg) em disco local (`storage/originals`, `storage/derived`), atrás de uma interface `storage` já pronta para S3/R2 | Local; na Vercel, `/tmp` (temporário) |
-| Autenticação | Senha scrypt; sessão em cookie httpOnly com registro na tabela `sessions` | Na Vercel: "sessão assinada" sem estado (`BOLD_STATELESS_SESSIONS`), porque cada instância tem sua própria cópia da base |
-| Rotinas | `startScheduler()` dentro do processo, a cada minuto: prazos, ativação de etapas, cobrança, detectores, publicação | Só funciona com processo contínuo. Na Vercel **não roda**; existe o `/api/cron/tick` com cron diário |
-| Integrações | Google Calendar, Slack (avisos), Meta, Resend, Claude: todas por variável de ambiente e OAuth | Nenhuma conectada ainda |
-| Cofre | Tokens de integração cifrados (AES-256-GCM) com `BOLD_VAULT_KEY` (ou `storage/.vault-key`) | — |
+| Frontend | React 19 + Vite, compilado em `web/dist` (estático) | Vercel (CDN) · local |
+| Backend/API | Express 5 em Node 22 (`server/index.js`). Um processo serve a API e, fora da Vercel, também o frontend | Vercel (uma função serverless, `api/index.js`) · local (`npm start`) |
+| Banco | SQLite via `node:sqlite` (síncrono), **um arquivo** `bold.db` (~3,7 MB) | Local em `storage/`. Na Vercel: cópia cifrada `real-snapshot/bold.db.enc` decifrada em `/tmp` em cada instância |
+| Armazenamento | Originais e variações de mídia (sharp, ffmpeg) em disco: `originals/`, `derived/`, atrás da interface `storage` (`server/services/media.js`) já preparada para S3/R2 | Local. Na Vercel, `/tmp` (temporário) |
+| Autenticação | Senha scrypt. Sessão em cookie httpOnly registrada na tabela `sessions`; CSRF por cabeçalho `x-bold-request` | Na Vercel: sessão **assinada sem estado** (`BOLD_STATELESS_SESSIONS`), porque cada instância tem a própria cópia do banco |
+| Rotinas | Agendador no processo (`startScheduler`, a cada minuto) + rota externa `/api/cron/tick` | Na Vercel o agendador **não roda**; só o cron diário da Vercel |
+| Cofre | Tokens de integração cifrados (AES-256-GCM) com `BOLD_VAULT_KEY` | — |
 
-## 2. O que hoje depende da Vercel (e muda no Railway)
+## 2. Dependências da Vercel (o que muda ao sair dela)
 
-1. `api/index.js`: adaptador serverless que decifra o snapshot para `/tmp` e liga as sessões sem estado. **No Railway não é usado**: o servidor normal (`npm start`) roda direto.
-2. `vercel.json`: *rewrites*, inclusão de arquivos na função, cron diário. **Não é usado no Railway.**
-3. Dados temporários em `/tmp` → no Railway ficam num **volume persistente**.
-4. **ffmpeg:** a função da Vercel não tem ffmpeg, então vídeos não são processados lá. No Railway ele é instalado na imagem.
-5. Sessões sem estado: no Railway, com uma instância e banco persistente, volta a sessão normal (pode ser revogada no logout).
+| Dependência | Arquivo | No Railway |
+|---|---|---|
+| Adaptador serverless que decifra o snapshot para `/tmp` e deriva segredos da `BOLD_SNAPSHOT_KEY` | `api/index.js` | Não é usado: o servidor normal (`npm start`) roda direto |
+| Rewrites, inclusão de arquivos na função, `maxDuration` 60 s | `vercel.json` | Não é usado |
+| Cron diário `0 10 * * *` (UTC) chamando `/api/cron/tick` | `vercel.json` | Substituído pelo serviço de cron do Railway |
+| Banco e arquivos em `/tmp` (perdidos a cada instância nova) | `api/index.js` | Volume persistente |
+| Sessões sem estado | `server/lib/auth.js` | Volta a sessão com registro no banco (logout revoga de verdade) |
+| `VERCEL_GIT_COMMIT_SHA` no `/api/health` | `server/index.js` | Trocar por `RAILWAY_GIT_COMMIT_SHA` **[confirmar nome]** |
+| Sem ffmpeg na função | — | ffmpeg instalado na imagem |
 
-Nenhuma dessas mudanças exige alterar o código de negócio nem o banco.
+Nenhuma dessas mudanças altera regra de negócio, esquema do banco ou dados.
 
-## 3. Arquitetura proposta
+## 3. Backend atual (inventário)
+
+- **Endpoints:** ~150 rotas em `server/routes/` (core 27, ops 50, portal 20, business 14, comms 12, review 6, ficha 6, atrasos 6, pendências 5, divisão 3) + rotas no `server/index.js`.
+- **Rotas especiais:**
+  - `GET /api/health`: healthcheck (banco + versão).
+  - `GET /api/cron/tick`: rotinas, protegida por `CRON_SECRET`.
+  - `GET /api/cron/status`: últimas execuções; exige a permissão `automacoes`.
+  - `GET /api/integrations/:provider/callback`: retorno de OAuth (Google, Meta, Slack).
+  - `/api/integrations/webhooks/*`: prefixo reservado e isento de CSRF. **Nenhum webhook está implementado hoje.**
+  - `GET /api/media/:id/...`: entrega de mídia com checagem de permissão.
+- **Jobs e rotinas** (todos em `server/engine/scheduler.js`):
+  - ativação das etapas agendadas;
+  - avisos de prazo próximo e vencido;
+  - régua de cobrança do cliente (24/48/72 h);
+  - lembrete de reunião;
+  - processo parado;
+  - onboarding atrasado;
+  - follow-up de CRM;
+  - faturas vencidas;
+  - detectores de inteligência (15 min);
+  - relatório semanal (segunda);
+  - publicação agendada na Meta (1 min);
+  - inclusão diária dos itens herdados vencidos na Revisão de atrasos.
+- **Processamento de mídia:** assíncrono no mesmo processo (sharp, ffmpeg).
+
+## 4. Integrações
+
+| Integração | Situação | Credenciais |
+|---|---|---|
+| Resend (e-mail: redefinir senha, cobranças, relatórios) | Código pronto, **sem chave** | `RESEND_API_KEY`, `BOLD_MAIL_FROM` |
+| Google Calendar/Meet | Código de OAuth pronto, não conectado | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
+| Slack | Código de OAuth pronto, não conectado | `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` |
+| Meta (Instagram) | Código pronto, não conectado | `META_APP_ID`, `META_APP_SECRET`, `META_GRAPH_VERSION` |
+| Anthropic (Claude) | Código pronto | `ANTHROPIC_API_KEY`, `BOLD_AI_MODEL` |
+| Notion | **Só leitura**, por exportação feita na migração (`storage/migration/`). O código **não tem nenhuma escrita no Notion** | — |
+
+## 5. Domínio
+
+- Hoje: domínio `*.vercel.app` do projeto `plataforma-thebold`. O repositório não configura domínio próprio. **[confirmar no painel da Vercel se há domínio próprio apontado]**
+- No Railway:
+  1. Subir primeiro no domínio temporário `*.up.railway.app`.
+  2. Validar.
+  3. Só então apontar o domínio próprio (CNAME no DNS) e trocar `PUBLIC_BASE_URL`.
+  4. Atualizar as URLs de retorno de OAuth no Google, Meta e Slack.
+
+## 6. Arquitetura proposta (separada por função)
 
 ```
-                        ┌───────────────────────────── Railway (projeto "the-bold-os") ─────────────────────────────┐
-  usuários  ──HTTPS──▶  │  SERVIÇO WEB  (Node 22, 1 réplica)                                                         │
-  (equipe e clientes)   │   • Express: API /api/* + frontend compilado (web/dist)                                    │
-                        │   • Agendador interno (a cada minuto): prazos, etapas, cobrança, apuração, sincronizações   │
-  GitHub (main) ─deploy▶│   • Processamento de mídia (sharp + ffmpeg) em segundo plano no mesmo processo             │
-                        │   • VOLUME /data  →  bold.db · originals/ · derived/ · backups/ · .vault-key               │
-                        │                                                                                            │
-                        │  SERVIÇO CRON  (Railway Cron, ex.: a cada hora)                                            │
-                        │   • curl -H "Authorization: Bearer $CRON_SECRET" https://<app>/api/cron/tick               │
-                        │   • rede de segurança: as rotinas rodam mesmo se o agendador interno travar                │
-                        └────────────────────────────────────────────────────────────────────────────────────────────┘
-        Externos: Resend (e-mail) · Google (Calendar/Meet) · Slack · Meta · Anthropic (Claude) · cópia externa dos backups (R2/S3)
+                    ┌──────────────────────── Railway · projeto "the-bold-os" ────────────────────────┐
+ equipe e clientes  │ (1) SERVIÇO WEB/API  Node 22 · 1 réplica                                          │
+ ──── HTTPS ──────▶ │     Express: /api/* + frontend (web/dist) · agendador interno a cada minuto       │
+                    │     processamento de mídia (sharp + ffmpeg) em segundo plano                       │
+                    │        │                                                                           │
+                    │        ▼                                                                           │
+                    │ (2) BANCO = (5) VOLUME /data  →  bold.db · originals/ · derived/ · backups/        │
+                    │     (montado SÓ no serviço web — volume do Railway liga a um serviço apenas)       │
+                    │                                                                                    │
+                    │ (4) SERVIÇO CRON  (imagem mínima com curl; roda e encerra)                         │
+                    │     curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://<web>/api/cron/tick  │
+                    └──────────────────────────────────────────────────────────────────────────────────┘
+ (6) Externos: Resend · Google · Slack · Meta · Anthropic · cópia externa dos backups (R2/S3)
 ```
 
-### Por que essa separação (e não mais serviços)
+### (1) Serviço web/API
+Um processo só (API + frontend + agendador). Separar não traz ganho nesta escala.
 
-- **Web e API juntos.** Já é um processo só, e separar não traz ganho nesta escala. O frontend pode ir para CDN depois sem mexer no backend.
-- **Rotinas no mesmo processo + Cron externo.** O agendador interno roda a cada minuto e cobre "ninguém está com a plataforma aberta". O Cron do Railway chama `/api/cron/tick`, que é idempotente (`onceFor`), e garante que nada se perde se o processo reiniciar.
-- **Worker separado: ainda não.** O processamento de mídia é assíncrono e o volume é baixo. Vira serviço próprio se o volume de vídeos crescer.
-- **Banco: SQLite no volume, sem migração.** Uma réplica só, porque o SQLite aceita um escritor por vez. Postgres só faz sentido quando precisar de várias réplicas, e isso exige reescrever a camada de dados para assíncrona.
-- **Arquivos no volume.** A interface `storage` já está pronta para R2/S3 quando o volume de mídia justificar.
+### (2) Banco
+SQLite no volume, **sem migração de banco**. Só uma réplica, porque o SQLite aceita um escritor por vez. Postgres só quando houver necessidade real de várias réplicas, e isso exige reescrever a camada de dados para assíncrona. Seria uma decisão separada.
 
-## 4. Serviços necessários
+### (3) Worker
+**Não é necessário agora.** A mídia é processada em segundo plano no próprio serviço web, e o volume é baixo. Vira serviço próprio se o volume de vídeo crescer. Detalhe: como o volume liga a um serviço só, um worker separado exigiria levar os arquivos para R2/S3.
 
-| Serviço | Tipo no Railway | Recursos sugeridos |
+### (4) Cron jobs
+- O cron do Railway **não acessa o banco** (o volume é do serviço web). Ele só chama `/api/cron/tick` por HTTP e encerra.
+- **Horário:** o cron do Railway usa **UTC**. Exemplo: `0 * * * *` (de hora em hora). As 7h de Brasília são `0 10 * * *`.
+- **Execução ainda ativa:** se uma execução do cron ainda estiver ativa, o Railway pode **pular a próxima**. Por isso o cron só faz a chamada HTTP, que retorna rápido. O trabalho pesado fica no serviço web.
+- **Já implementado** (`server/engine/jobs.js`):
+  - **Trava com prazo (lease):** a rotina `tick` nunca roda duas vezes ao mesmo tempo, seja chamada pelo agendador interno ou pelo cron externo. A segunda chamada é **ignorada** e registrada.
+  - **Timeout:** 50 s. Se o processo morrer no meio, o lease vence e a próxima execução marca a anterior como **expirada** e segue.
+  - **Idempotência:** cada efeito (aviso, cobrança, tarefa) usa um marcador próprio em `automation_runs` (`onceFor`). Repetir a rotina não duplica nada.
+  - **Registro:** cada execução fica em `job_runs` (rodando, ok, erro, ignorado ou expirado), com 30 dias de retenção, e pode ser consultada em `/api/cron/status`.
+- **Fuso:** datas guardadas em UTC (ISO). Regras de dia e semana usam `America/Sao_Paulo` de forma explícita.
+
+### (5) Armazenamento persistente
+Um volume em `/data`: banco, mídia e backups locais. A interface `storage` permite levar a mídia para R2/S3 depois, sem mudar as regras.
+
+### (6) Serviços externos
+Resend, Google, Slack, Meta, Anthropic e bucket R2/S3 para a cópia externa cifrada dos backups. Todos por variável de ambiente.
+
+## 7. Serviços necessários no Railway
+
+| Serviço | Tipo | Recursos sugeridos |
 |---|---|---|
-| `the-bold-os` | Web service a partir do GitHub (`main`) | 1 vCPU · 1 GB RAM (ffmpeg pede memória) · **1 réplica** |
-| Volume `data` | Volume montado em `/data` | 5 GB para começar (hoje: ~4 MB de banco + mídia futura) |
-| `cron-tick` | Cron service (imagem mínima com curl) | Agenda `0 * * * *` (de hora em hora) |
+| `the-bold-os` | Web service a partir do GitHub (`main`), via Dockerfile | 1 vCPU · 1 GB RAM · **1 réplica** · healthcheck `/api/health` |
+| Volume `data` | Volume em `/data`, ligado ao `the-bold-os` | 5 GB para começar |
+| `cron-tick` | Cron service | `0 * * * *` (UTC) |
 
-## 5. Dependências
-
-- Node 22 (exige `node:sqlite`) e as dependências do `package.json` (express, multer, sharp, cookie-parser, @anthropic-ai/sdk).
-- **ffmpeg** na imagem, para posters e prévias de vídeo. Recomendo um **Dockerfile** próprio (Node 22 Debian slim + ffmpeg) em vez de detecção automática, para a versão ficar fixa.
-- Build: `npm ci && npm run build`. Start: `npm start`.
-
-## 6. Variáveis de ambiente
+## 8. Variáveis de ambiente
 
 | Variável | Obrigatória | Para quê |
 |---|---|---|
-| `NODE_ENV=production` | sim | Cookie seguro e otimizações |
+| `NODE_ENV=production` | sim | Cookie seguro |
 | `PORT` | automática | O Railway define |
-| `PUBLIC_BASE_URL` | sim | Links em e-mails e retornos de OAuth (ex.: `https://os.thebold.com.br`) |
+| `PUBLIC_BASE_URL` | sim | Links de e-mail e retornos de OAuth |
 | `BOLD_DATA_DIR=/data` · `BOLD_STORAGE_DIR=/data` | sim | Banco e arquivos no volume |
-| `BOLD_VAULT_KEY` | sim | 32 bytes em base64 para cifrar tokens de integração (gerar uma vez e guardar fora do repositório) |
-| `CRON_SECRET` | sim | Protege `/api/cron/tick` |
-| `RESEND_API_KEY` · `BOLD_MAIL_FROM` | para e-mail | Redefinição de senha, cobranças, relatórios |
-| `ANTHROPIC_API_KEY` · `BOLD_AI_MODEL` | para IA | Brain, resumos, revisão inteligente |
-| `GOOGLE_CLIENT_ID` · `GOOGLE_CLIENT_SECRET` | para agenda/Meet | OAuth do Google |
-| `SLACK_CLIENT_ID` · `SLACK_CLIENT_SECRET` | para Slack | OAuth do Slack |
-| `META_APP_ID` · `META_APP_SECRET` | para Instagram | Publicação |
-| `BOLD_SNAPSHOT_KEY` | só na 1ª subida | Decifrar a base real para o volume, se essa for a estratégia escolhida (seção 9) |
+| `BOLD_VAULT_KEY` | sim | 32 bytes base64. **Atenção:** na Vercel ela é derivada da chave do snapshot. Se houver token salvo, usar o mesmo valor; hoje não há integração conectada |
+| `BOLD_SESSION_SECRET` | recomendado | Assinatura de tokens (redefinição de senha) |
+| `CRON_SECRET` | sim | Protege `/api/cron/tick` (o mesmo valor no serviço de cron) |
+| `RESEND_API_KEY` · `BOLD_MAIL_FROM` | para e-mail | — |
+| `ANTHROPIC_API_KEY` · `BOLD_AI_MODEL` | para IA | — |
+| `GOOGLE_*` · `SLACK_*` · `META_*` | para cada integração | — |
+| `BOLD_SNAPSHOT_KEY` | só na 1ª subida | Carga única da base (seção 11) |
 
-Não usar no Railway: `BOLD_STATELESS_SESSIONS` e `BOLD_SCHEDULER=off`. O agendador fica **ligado**.
+**Não usar no Railway:** `BOLD_STATELESS_SESSIONS`, `BOLD_SCHEDULER=off`, `BOLD_DEMO`, `BOLD_DEMO_PASSWORD`.
 
-## 7. Estratégia de deploy
-
-1. Criar o projeto no Railway, ligado ao repositório `theboldd/PlataformaThebold`, branch `main`.
-2. Criar o volume em `/data` e as variáveis da seção 6.
-3. Primeira subida em um **domínio temporário do Railway**, com a base real carregada (seção 9).
-4. **Validação** (checklist abaixo) com a Rebeca. Só depois: domínio próprio e desligar a prévia da Vercel.
-5. Depois disso, cada push na `main` faz deploy automático, com *healthcheck* em `/api/health`. Com volume, o Railway troca a instância com alguns segundos de indisponibilidade; não há perda de dados.
-
-**Checklist de validação:**
-- login da equipe;
-- 24 clientes e 451 conteúdos presentes;
-- ativação de etapa agendada;
-- cron respondendo;
-- upload de imagem e de vídeo (gera poster);
-- reinício do serviço sem perder dados;
-- backup e restauração testados.
-
-## 8. Estratégia de backup
+## 9. Backups
 
 | Camada | Como | Frequência e retenção |
 |---|---|---|
-| Backup do volume (Railway) | Recurso de backups do volume do Railway | Diário · conforme o plano |
-| Backup da aplicação | Rotina noturna faz `VACUUM INTO /data/backups/bold-AAAA-MM-DD.db` (cópia consistente com o sistema rodando) | 7 diários + 4 semanais |
-| Cópia externa | O mesmo arquivo, **cifrado** (AES-256-GCM, mesma técnica do snapshot), enviado para R2/S3 | Diário · 30 dias |
-| Arquivos de mídia | Ficam no volume. Cópia externa quando migrarem para R2/S3 | — |
+| Volume (Railway) | Backups de volume do Railway **[confirmar disponibilidade no plano]** | Diário |
+| Aplicação | Rotina noturna `VACUUM INTO /data/backups/bold-AAAA-MM-DD.db` (cópia consistente com o sistema no ar), via `runJob` com trava | 7 diários + 4 semanais |
+| Externa | Mesmo arquivo cifrado (AES-256-GCM) enviado para R2/S3 | Diário · 30 dias |
 
-**Restauração:** parar o serviço, trocar o `bold.db` pelo backup e subir de novo. O procedimento será testado na validação.
+A rotina de backup **ainda não está no código**. Entra com a migração aprovada.
 
-A rotina de backup ainda não existe no código. Ela entra junto com a migração aprovada.
-
-## 9. O que precisa ser migrado (e como)
-
-| Item | Origem | Destino | Como |
-|---|---|---|---|
-| Base real (`bold.db`) | Cópia mestra local + `real-snapshot/bold.db.enc` | `/data/bold.db` | **Opção A (recomendada):** na 1ª subida, se `/data/bold.db` não existir e houver `BOLD_SNAPSHOT_KEY`, o servidor decifra o snapshot uma única vez. Depois a variável é removida. **Opção B:** enviar o arquivo pelo terminal do Railway |
-| Senhas da equipe | No snapshot já estão as senhas fortes (`storage/.team-password`) | Igual | Nada a fazer |
-| Arquivos de mídia | Ainda não há mídia enviada na base real | `/data/originals`, `/data/derived` | Nada a migrar hoje |
-| Chave do cofre | Nenhuma integração conectada | `BOLD_VAULT_KEY` nova | Gerar no Railway |
-| Variáveis e segredos | — | Variáveis do Railway | Cadastrar (seção 6) |
-
-**Atenção:** o que foi alterado **na prévia da Vercel** (comentários, senhas trocadas, mudanças de etapa) é temporário e **não será migrado**. A fonte é a base mestra.
-
-## 10. O que pode permanecer como está
-
-- Todo o código de negócio, o banco SQLite e o esquema. Nenhuma mudança estrutural.
-- O repositório e o fluxo de commits.
-- A **Vercel**, como prévia ou ambiente de teste, até a validação. Depois pode ser desligada ou ficar como *staging*.
-- `api/index.js` e `vercel.json` continuam no repositório e não atrapalham o Railway.
-- Os dados de migração do Notion (`storage/migration/`) ficam **fora** da produção, guardados com a cópia mestra.
-
-## 11. Riscos e como tratar
+## 10. Riscos
 
 | Risco | Impacto | Mitigação |
 |---|---|---|
-| Instância única (ponto único de falha) | Plataforma fora do ar enquanto reinicia | *Healthcheck* + reinício automático; cron externo recupera as rotinas; backups |
-| SQLite com um escritor | Limita escala horizontal | Suficiente para a operação atual. Postgres quando houver necessidade real |
-| Volume corrompido ou perdido | Perda de dados | 3 camadas de backup, uma delas fora do Railway |
-| ffmpeg sem memória em vídeos grandes | Falha no processamento | 1 GB de RAM; fila de mídia vira worker se crescer |
-| Deploy com breve indisponibilidade | Alguns segundos fora do ar | Deploy fora do horário de pico |
+| Instância única | Fora do ar enquanto reinicia | Healthcheck + reinício automático; o cron externo recupera as rotinas; backups |
+| SQLite com um escritor | Não escala horizontalmente | Suficiente para a operação atual |
+| Volume perdido ou corrompido | Perda de dados | 3 camadas de backup, uma fora do Railway |
+| Cron pulado (execução anterior ativa) ou sobreposto ao agendador interno | Rotina atrasa ou roda em dobro | Cron só faz a chamada HTTP; trava + idempotência no servidor |
+| Fuso UTC × Brasília | Rotina na hora errada | Cron em UTC documentado; regras de negócio com fuso explícito |
+| Duas fontes de verdade na transição | Dados divergentes | A Vercel é só prévia; dados alterados nela **não migram**. Depois da virada, o Railway é a única base |
+| Mudança de domínio | OAuth e links de e-mail quebrados | Atualizar `PUBLIC_BASE_URL` e as URLs de retorno antes de conectar integrações |
+| Deploy reinicia o serviço | Alguns segundos fora do ar | Deploy fora de pico |
 | Segredos | Vazamento | Só em variáveis do Railway; nunca no repositório |
-| Duas fontes de verdade durante a transição | Confusão | Até a validação a Vercel é **só prévia**; depois, o Railway é a única fonte |
 
-## 12. Estimativa de custo (confirmar na calculadora do Railway antes de assinar)
+## 11. Plano de migração (executar só após aprovação)
 
-- O plano **Hobby** custa US$ 5/mês com US$ 5 de uso incluídos. O **Pro** custa US$ 20/mês, com mais recursos e colaboração em equipe.
-- Serviço web contínuo (cerca de 0,25–0,5 vCPU média e 0,5–1 GB de RAM): **~US$ 5–15/mês** de uso.
-- Volume de 5 GB: **~US$ 1/mês**. O cron de hora em hora é desprezível. Tráfego de saída é baixo neste volume.
-- **Total estimado: US$ 10–25/mês**, conforme o plano e o uso real.
-- Fora do Railway: Resend (plano gratuito cobre o volume inicial), R2/S3 para a cópia externa (centavos), Claude (por uso).
+1. **Código, sem efeito em produção:**
+   - `Dockerfile` (Node 22 slim + ffmpeg);
+   - `railway.json` com healthcheck;
+   - carga única da base: se `/data/bold.db` não existir e houver `BOLD_SNAPSHOT_KEY`, o servidor decifra o snapshot uma vez;
+   - rotina de backup;
+   - `/api/health` com a versão do Railway.
+2. **Congelar a base mestra:**
+   - gerar o snapshot a partir da cópia mestra local;
+   - anotar contagens: clientes, conteúdos, tarefas, logs, revisões de atraso;
+   - anotar o hash (sha256) do arquivo.
+3. **Criar no Railway:** projeto, serviço web, volume em `/data`, variáveis e serviço de cron (ainda pausado).
+4. **Primeira subida no domínio temporário:** a base é carregada do snapshot. Depois, remover `BOLD_SNAPSHOT_KEY`.
+5. **Validação** (seção 13) com a CEO.
+6. **Virada:**
+   - domínio próprio;
+   - ativar o cron do Railway;
+   - remover o cron da Vercel (`vercel.json`);
+   - a Vercel fica como *staging* ou é desligada.
 
-Os valores são aproximados e os preços mudam. A conferência é feita na hora de criar o projeto.
+## 12. Plano de rollback
 
-## 13. Próximo passo (depende de aprovação)
+- **Até a virada (passo 6):** nada muda para quem usa a Vercel. Rollback = não virar; apagar o projeto do Railway se quiser.
+- **Depois da virada:**
+  1. Apontar o domínio de volta para a Vercel.
+  2. Gerar um snapshot novo a partir de `/data/bold.db` (para não perder o que foi feito no Railway).
+  3. Publicar o snapshot na Vercel.
+  4. Pausar o cron do Railway.
+  5. O volume continua guardado como cópia.
+- **Deploy com defeito no Railway:** reverter para o deploy anterior no painel. O volume não é alterado pelo deploy.
+- **Dados corrompidos:** parar o serviço, restaurar o último `backups/bold-*.db` e subir.
 
-Com o "ok" da CEO, entram no código, sem nada irreversível:
-- `Dockerfile` com ffmpeg;
-- `railway.json` com *healthcheck*;
-- carga única da base a partir do snapshot;
-- rotina de backup noturno;
-- serviço de cron.
+## 13. Validação pós-migração
 
-Depois: subida em domínio temporário → validação → domínio próprio.
+| Verificação | Critério |
+|---|---|
+| Contagens | Clientes, conteúdos, tarefas, `activity_logs` e `delay_reviews` iguais às anotadas no passo 2 |
+| Integridade | `PRAGMA integrity_check` = ok; os triggers de append-only de `activity_logs` existem |
+| Login | Equipe e cliente; logout revoga a sessão |
+| Permissões | Divisão, Carteira e Atrasos negados (403) para quem não tem; cliente não vê dado interno |
+| Rotinas | Chamada manual ao `/api/cron/tick` → `ok`; segunda chamada simultânea → `ignorado`; `job_runs` registrando |
+| Etapas | Uma tarefa `agendada` vira `aberta` na data certa |
+| Mídia | Upload de imagem e vídeo; poster gerado (ffmpeg) |
+| Persistência | Reiniciar o serviço sem perder nenhum dado |
+| Backup | Gerar, restaurar numa cópia e conferir as contagens |
+| E-mail | Redefinição de senha chega (depois da chave do Resend) |
+
+## 14. Estimativa de custo [confirmar na calculadora do Railway]
+
+| Item | Custo estimado |
+|---|---|
+| Plano Hobby | US$ 5/mês (inclui US$ 5 de uso) |
+| Plano Pro | US$ 20/mês |
+| Serviço web contínuo (~0,25–0,5 vCPU, 0,5–1 GB) | ~US$ 5–15/mês |
+| Volume de 5 GB | ~US$ 1/mês |
+| Cron de hora em hora | Desprezível |
+| **Total** | **US$ 10–25/mês** |
+
+Fora do Railway: Resend (o gratuito cobre o início), R2/S3 (centavos) e Claude (por uso).
+
+## 15. Fonte de verdade na migração
+
+Ver a regra 11 em `docs/07-regras-oficiais.md`:
+
+| Momento | Fonte de verdade |
+|---|---|
+| Antes da migração | Notion (fonte existente) |
+| Durante a migração | Notion → The Bold OS |
+| Depois da migração | The Bold OS |
+
+Sem sincronização bidirecional e sem escrita automática no Notion.

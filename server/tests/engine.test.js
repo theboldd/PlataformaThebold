@@ -146,3 +146,40 @@ test('mídia: o original é preservado byte a byte; preview é derivado', async 
   const prev = one("SELECT * FROM file_variants WHERE file_id=? AND variant='preview'", f.id);
   assert.ok(prev && prev.width <= 2560 && prev.width > 0, 'preview otimizado gerado separadamente');
 });
+
+test('rotinas: trava impede execução simultânea, timeout registra erro e lease vencido expira', async () => {
+  const { runJob } = await import('../engine/jobs.js');
+  let n = 0;
+  const slow = () => new Promise((r) => setTimeout(() => { n++; r({ n }); }, 50));
+  const [a, b] = await Promise.all([runJob('t1', slow), runJob('t1', slow)]);
+  assert.ok(a.ok && b.skipped, 'a segunda chamada é ignorada');
+  assert.equal(n, 1);
+  assert.equal(one("SELECT COUNT(*) n FROM job_runs WHERE job='t1' AND status='ignorado'").n, 1);
+  const t = await runJob('t2', () => new Promise(() => {}), { timeoutMs: 30 });
+  assert.match(t.error, /timeout/);
+  insert('job_runs', { id: uid('jr_'), job: 't3', status: 'rodando', started_at: now(), lease_until: new Date(Date.now() - 1000).toISOString(), trigger: 'teste' });
+  assert.ok((await runJob('t3', () => 1)).ok);
+  assert.equal(one("SELECT COUNT(*) n FROM job_runs WHERE job='t3' AND status='expirado'").n, 1);
+});
+
+test('atrasos: herdado da migração fica fora da performance; classificar exige evidência e registra antes/depois', async () => {
+  const D = await import('../services/delayReview.js');
+  const c = P.createContent({ client_id: client.id, title: 'Herdado', format: 'estatico', stage: 'agendamento', strategy_tags: ['importado-notion-outubro'], internal_notes: 'Importado do Notion · quadro X' }, null);
+  D.markMigratedTasks();
+  const t = one("SELECT * FROM tasks WHERE content_id=? AND status='aberta'", c.id);
+  assert.equal(t.perf_status, 'migrado');
+  run('UPDATE tasks SET due_at=? WHERE id=?', new Date(Date.now() - 864e5).toISOString(), t.id);
+  D.syncDelayReviews();
+  const d = one('SELECT * FROM delay_reviews WHERE task_id=?', t.id);
+  assert.equal(d.category, 'dado_migrado'); assert.equal(d.attribution, 'nao_atribuido'); assert.equal(d.decided_by, null);
+  const { teamLoad } = await import('../engine/intelligence.js');
+  const me = teamLoad().find((u) => u.id === t.assignee_id);
+  assert.equal(me.late, 0); assert.ok(me.inherited >= 1);
+  assert.throws(() => D.classify(t.id, U.ceo, { category: 'atraso_responsavel', note: '' }), /evidência/);
+  assert.throws(() => D.classify(t.id, U.ceo, { category: 'atraso_responsavel', note: 'curto' }), /evidência/);
+  D.classify(t.id, U.ceo, { category: 'aguardando_cliente', note: 'Cliente não enviou o material (mensagem de 10/10).' });
+  assert.equal(one('SELECT perf_status FROM tasks WHERE id=?', t.id).perf_status, 'excluido');
+  const lg = one("SELECT * FROM activity_logs WHERE entity_id=? AND action='atraso.classificado'", t.id);
+  assert.match(lg.before, /dado_migrado/); assert.match(lg.after, /aguardando_cliente/);
+  assert.equal(can(U.ops, 'atrasos'), false, 'Operações não classifica atraso sem liberação da CEO');
+});

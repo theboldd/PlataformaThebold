@@ -3,6 +3,7 @@
 import { one, all, insert, update, uid, now, parseJSON } from '../db.js';
 import { STAGES, contentRisk, nextAction } from './process.js';
 import { scopeSQL } from '../lib/permissions.js';
+import { PERF_SQL } from '../services/delayReview.js';
 
 const H = 3600e3;
 const ago = (iso) => (Date.now() - new Date(iso).getTime());
@@ -28,6 +29,13 @@ export function computePendencies() {
     if (!k.assignee_id) {
       out.push({ ...base, severity: 'critica', title: `Tarefa sem responsável: ${k.title}`, problem: `${k.client_name && k.title.endsWith(` — ${k.client_name}`) ? k.title.slice(0, -(k.client_name.length + 3)) : k.title} — sem responsável`, cause: 'responsavel', late_ms: ago(k.created_at), late: fmtDays(ago(k.created_at)), impact_w: 3,
         who: 'Operações (definir responsável)', impact: 'O fluxo para: ninguém foi notificado.', action: 'Atribuir responsável', next: `Vincular uma pessoa com a função “${k.function}” ao cliente ou atribuir manualmente.` });
+      continue;
+    }
+    // Herdado da migração com prazo vencido: o prazo foi calculado na importação, não combinado — não é atraso de ninguém até ser classificado
+    if (overdue && ['migrado', 'excluido'].includes(k.perf_status)) {
+      out.push({ ...base, severity: 'media', title: `Herdado da migração: ${k.title}`, problem: `${k.client_name && k.title.endsWith(` — ${k.client_name}`) ? k.title.slice(0, -(k.client_name.length + 3)) : k.title} — ${k.perf_status === 'migrado' ? 'herdado da migração, em revisão' : 'prazo vencido, classificado como não atribuível'}`, cause: 'migracao', inherited: true, late_ms: 0, late: null, impact_w: 1,
+        who: k.assignee_name, impact: 'Prazo calculado pela plataforma na importação do Notion (não foi combinado). Não conta como atraso de ninguém até ser classificado.', action: 'Confirmar a situação real',
+        next: 'Confirmar se já foi publicado ou agendado; quem tem a permissão de classificar atrasos decide se reprograma, cancela ou classifica.' });
       continue;
     }
     if (overdue) {
@@ -119,7 +127,7 @@ export function runDetectors() {
       impact: 'Consome horas de produção e empurra o agendamento.', suggestion: 'Revisar briefing e registrar a preferência do cliente no Client Brain antes da próxima versão.', action: 'Abrir conteúdo', action_payload: JSON.stringify({ link: `/conteudos/${r.content_id}` }) });
   }
   // 2. Etapa que mais concentra conteúdos atrasados
-  const late = all(`SELECT t.stage, COUNT(*) n FROM tasks t WHERE t.status IN ('aberta','em_andamento') AND t.due_at < ? AND t.stage IS NOT NULL GROUP BY t.stage ORDER BY n DESC`, now());
+  const late = all(`SELECT t.stage, COUNT(*) n FROM tasks t WHERE t.status IN ('aberta','em_andamento') AND t.due_at < ? AND t.stage IS NOT NULL AND ${PERF_SQL.equipe('t')} GROUP BY t.stage ORDER BY n DESC`, now());
   if (late[0] && late[0].n >= 2) {
     put(`gargalo:${late[0].stage}`, { detector: 'gargalo', severity: late[0].n >= 5 ? 'alta' : 'media', metric: late[0].n, problem: `${late[0].n} tarefas atrasadas em “${STAGES[late[0].stage]?.label}”.`,
       cause: 'Capacidade da função abaixo do volume do ciclo ou entrada concentrada no mesmo marco.', impact: 'Todos os conteúdos seguintes do ciclo herdam o atraso.',
@@ -175,7 +183,8 @@ export function opsMetrics(user) {
     aguardando_cliente: q("SELECT COUNT(*) n FROM contents WHERE {S} AND stage IN ('aprovacao_tema','aprovacao_cliente')").n,
     em_revisao: q("SELECT COUNT(*) n FROM contents WHERE {S} AND stage IN ('analise_cronograma','analise_producao','revisao_ajuste')").n,
     bloqueados: q("SELECT COUNT(*) n FROM contents WHERE {S} AND blocked=1 AND stage NOT IN ('publicado','cancelado')").n,
-    atrasadas: q("SELECT COUNT(*) n FROM tasks WHERE {S} AND status IN ('aberta','em_andamento') AND due_at < ?", nowIso).n,
+    atrasadas: q(`SELECT COUNT(*) n FROM tasks t WHERE {S} AND status IN ('aberta','em_andamento') AND due_at < ? AND ${PERF_SQL.equipe('t')}`, nowIso).n,
+    herdados_revisao: q("SELECT COUNT(*) n FROM tasks WHERE {S} AND status IN ('aberta','em_andamento') AND due_at < ? AND perf_status IN ('migrado','excluido')", nowIso).n,
     prazos_hoje: q("SELECT COUNT(*) n FROM tasks WHERE {S} AND status IN ('aberta','em_andamento') AND due_at >= ? AND due_at <= ?", nowIso, today.toISOString()).n,
     sem_responsavel: q("SELECT COUNT(*) n FROM tasks WHERE {S} AND status IN ('aberta','em_andamento') AND assignee_id IS NULL").n,
     agendados: q("SELECT COUNT(*) n FROM contents WHERE {S} AND stage='agendado'").n,
@@ -189,7 +198,8 @@ export function stageDistribution(user) {
 export function teamLoad() {
   return all(`SELECT u.id, u.name, u.role_key, u.capacity, u.functions,
     (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento')) open,
-    (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento') AND t.due_at < ?) late,
+    (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento') AND t.due_at < ? AND ${PERF_SQL.individual('t')}) late,
+    (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento') AND t.due_at < ? AND t.perf_status IN ('migrado','excluido')) inherited,
     (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status='concluida' AND t.completed_at > ?) done_7d
-    FROM users u WHERE u.active=1 AND u.role_key<>'cliente' ORDER BY open DESC`, now(), new Date(Date.now() - 7 * 864e5).toISOString());
+    FROM users u WHERE u.active=1 AND u.role_key<>'cliente' ORDER BY open DESC`, now(), now(), new Date(Date.now() - 7 * 864e5).toISOString());
 }

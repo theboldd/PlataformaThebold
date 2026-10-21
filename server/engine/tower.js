@@ -6,6 +6,7 @@ import { one, all, now, parseJSON } from '../db.js';
 import { scopeSQL, can } from '../lib/permissions.js';
 import { STAGES, STAGE_ORDER } from './process.js';
 import { computePendencies, clientRisk, teamLoad, runDetectors, OPERATING } from './intelligence.js';
+import { PERF_SQL, perfOK, isInherited } from '../services/delayReview.js';
 import { CATALOG } from './automations.js';
 
 const DAY = 864e5;
@@ -71,9 +72,11 @@ export function tower(user, qs = {}) {
   const T = tw();
   const openTasks = all(`SELECT t.*, c.name client, u.name assignee FROM tasks t LEFT JOIN clients c ON c.id=t.client_id LEFT JOIN users u ON u.id=t.assignee_id
     WHERE t.status IN ('aberta','em_andamento') AND t.function<>'cliente' AND ${T.sql}`, ...T.p);
-  const lateTasks = openTasks.filter((t) => t.due_at && t.due_at < nowIso);
+  // Atraso só conta o que pode ser atribuído; herdado da migração aparece à parte (em revisão)
+  const lateTasks = openTasks.filter((t) => t.due_at && t.due_at < nowIso && perfOK.equipe(t));
+  const inheritedLate = openTasks.filter((t) => t.due_at && t.due_at < nowIso && isInherited(t));
   const lateByContent = new Map();
-  for (const t of all(`SELECT content_id, COUNT(*) n FROM tasks WHERE status IN ('aberta','em_andamento') AND due_at < ? AND content_id IS NOT NULL GROUP BY content_id`, nowIso)) lateByContent.set(t.content_id, t.n);
+  for (const t of all(`SELECT content_id, COUNT(*) n FROM tasks t WHERE status IN ('aberta','em_andamento') AND due_at < ? AND content_id IS NOT NULL AND ${PERF_SQL.equipe('t')} GROUP BY content_id`, nowIso)) lateByContent.set(t.content_id, t.n);
   const pend = can(user, 'pendencias') ? computePendencies().filter((p) => !F.client_id || p.client_id === F.client_id) : null;
   const critical = pend ? pend.filter((p) => p.severity === 'critica') : [];
   const members = all("SELECT cm.client_id, cm.function, u.name FROM client_members cm JOIN users u ON u.id=cm.user_id WHERE cm.function<>'cliente'");
@@ -129,7 +132,7 @@ export function tower(user, qs = {}) {
     const row = {
       id: c.id, name: c.name, status: c.status, risk: r.level, reasons: r.reasons,
       pendencias: pend ? pend.filter((p) => p.client_id === c.id).length : null,
-      aguardando: cs.filter((x) => WAIT.includes(x.stage)).length, atrasos: openTasks.filter((t) => t.client_id === c.id && t.due_at && t.due_at < nowIso).length,
+      aguardando: cs.filter((x) => WAIT.includes(x.stage)).length, atrasos: openTasks.filter((t) => t.client_id === c.id && t.due_at && t.due_at < nowIso && perfOK.equipe(t)).length,
       bloqueados: cs.filter((x) => x.blocked).length, ativos: cs.filter((x) => ACTIVE.includes(x.stage)).length,
       sem_funcao: missing.map((fn) => ESSENTIAL[fn]), decisoes: migOpen[c.id] || 0,
     };
@@ -146,12 +149,13 @@ export function tower(user, qs = {}) {
   const teamConflicts = one("SELECT COUNT(*) n FROM migration_issues WHERE status='aberto' AND kind='equipe'").n;
 
   // ── Pessoas ──
-  const done = Object.fromEntries(all(`SELECT completed_by id, COUNT(*) n, SUM(due_at IS NOT NULL AND completed_at > due_at) late FROM tasks WHERE status='concluida' AND completed_at BETWEEN ? AND ? GROUP BY completed_by`, P.start, P.end).map((r) => [r.id, r]));
+  const done = Object.fromEntries(all(`SELECT completed_by id, COUNT(*) n, SUM(due_at IS NOT NULL AND completed_at > due_at AND ${PERF_SQL.individual('tasks')}) late FROM tasks WHERE status='concluida' AND completed_at BETWEEN ? AND ? GROUP BY completed_by`, P.start, P.end).map((r) => [r.id, r]));
   const people = teamLoad().filter((u) => !F.assignee_id || u.id === F.assignee_id).map((u) => {
     const open = openTasks.filter((t) => t.assignee_id === u.id);
-    const late = open.filter((t) => t.due_at && t.due_at < nowIso).length;
+    const late = open.filter((t) => t.due_at && t.due_at < nowIso && perfOK.individual(t)).length;
+    const inherited = open.filter((t) => t.due_at && t.due_at < nowIso && isInherited(t)).length;
     const ratio = u.capacity ? open.length / u.capacity : 0;
-    return { id: u.id, name: u.name, functions: parseJSON(u.functions, []), capacity: u.capacity, open: open.length, late, done: done[u.id]?.n || 0, done_late: done[u.id]?.late || 0,
+    return { id: u.id, name: u.name, functions: parseJSON(u.functions, []), capacity: u.capacity, open: open.length, late, inherited, done: done[u.id]?.n || 0, done_late: done[u.id]?.late || 0,
       situation: open.length > u.capacity ? 'sobrecarga' : ratio >= 0.8 ? 'alta' : open.length === 0 ? 'sem_carga' : 'normal' };
   });
   const totalOpen = openTasks.length;
@@ -181,8 +185,8 @@ export function tower(user, qs = {}) {
       ajustes_cliente: one(`SELECT COUNT(*) n FROM adjustments a JOIN contents c ON c.id=a.content_id WHERE a.origin='cliente' AND a.created_at BETWEEN ? AND ? AND ${c2.sql}`, s, e, ...c2.p).n,
       publicados: one(`SELECT COUNT(*) n FROM contents c WHERE c.published_at BETWEEN ? AND ? AND ${c2.sql}`, s, e, ...c2.p).n,
       tarefas_concluidas: one(`SELECT COUNT(*) n FROM tasks t WHERE t.status='concluida' AND t.completed_at BETWEEN ? AND ? AND ${t2.sql}`, s, e, ...t2.p).n,
-      concluidas_atraso: one(`SELECT COUNT(*) n FROM tasks t WHERE t.status='concluida' AND t.completed_at BETWEEN ? AND ? AND t.due_at IS NOT NULL AND t.completed_at > t.due_at AND ${t2.sql}`, s, e, ...t2.p).n,
-      prazos_estourados: one(`SELECT COUNT(*) n FROM tasks t WHERE t.due_at BETWEEN ? AND ? AND t.due_at < ? AND (t.status IN ('aberta','em_andamento') OR (t.status='concluida' AND t.completed_at > t.due_at)) AND ${t2.sql}`, s, e, nowIso, ...t2.p).n,
+      concluidas_atraso: one(`SELECT COUNT(*) n FROM tasks t WHERE t.status='concluida' AND t.completed_at BETWEEN ? AND ? AND t.due_at IS NOT NULL AND t.completed_at > t.due_at AND ${PERF_SQL.equipe('t')} AND ${t2.sql}`, s, e, ...t2.p).n,
+      prazos_estourados: one(`SELECT COUNT(*) n FROM tasks t WHERE t.due_at BETWEEN ? AND ? AND t.due_at < ? AND (t.status IN ('aberta','em_andamento') OR (t.status='concluida' AND t.completed_at > t.due_at)) AND ${PERF_SQL.equipe('t')} AND ${t2.sql}`, s, e, nowIso, ...t2.p).n,
     };
     const appr = all(`SELECT a.created_at, (SELECT MAX(l.created_at) FROM activity_logs l WHERE l.content_id=a.content_id AND l.action='etapa.alterada' AND l.after IN ('aprovacao_cliente','aprovacao_tema') AND l.created_at<=a.created_at) sent
       FROM approvals a JOIN contents c ON c.id=a.content_id WHERE a.kind IN ('cliente','tema') AND a.created_at BETWEEN ? AND ? AND ${c2.sql}`, s, e, ...c2.p).filter((x) => x.sent);
@@ -218,7 +222,7 @@ export function tower(user, qs = {}) {
     const ev = [];
     if (i.detector === 'gargalo') {
       const st = i.fingerprint.split(':')[1];
-      for (const r of all(`SELECT c.name, COUNT(*) n FROM tasks t LEFT JOIN clients c ON c.id=t.client_id WHERE t.status IN ('aberta','em_andamento') AND t.due_at < ? AND t.stage=? GROUP BY c.name ORDER BY n DESC LIMIT 3`, nowIso, st)) ev.push(`${r.name || 'Sem cliente'}: ${pl(r.n, 'tarefa atrasada', 'tarefas atrasadas')}`);
+      for (const r of all(`SELECT c.name, COUNT(*) n FROM tasks t LEFT JOIN clients c ON c.id=t.client_id WHERE t.status IN ('aberta','em_andamento') AND t.due_at < ? AND t.stage=? AND ${PERF_SQL.equipe('t')} GROUP BY c.name ORDER BY n DESC LIMIT 3`, nowIso, st)) ev.push(`${r.name || 'Sem cliente'}: ${pl(r.n, 'tarefa atrasada', 'tarefas atrasadas')}`);
     } else if (i.detector === 'material') {
       for (const c of content.filter((x) => x.blocked && x.waiting_on === 'cliente').slice(0, 4)) ev.push(`${c.client} · #${c.number} ${c.title}`);
     } else if (i.detector === 'tempo_aprovacao') ev.push(`Média de ${String(i.metric).replace('.', ',')} ${i.metric === 1 ? 'dia' : 'dias'} entre envio e aprovação nos últimos 60 dias.`);
@@ -266,14 +270,14 @@ export function tower(user, qs = {}) {
     operacao: { n: inOp.length, producao: inOp.filter((c) => PROD.includes(c.stage) && !REVIEW.includes(c.stage)).length, revisao: inOp.filter((c) => REVIEW.includes(c.stage)).length, clientes: inOp.filter((c) => WAIT.includes(c.stage)).length },
     clientes: { n: clients.length, ativos: clients.filter((c) => c.status === 'ativo').length, a_confirmar: clients.filter((c) => c.status === 'a_confirmar').length, com_operacao: new Set(inOp.map((c) => c.client_id)).size, em_risco: riskLevels.filter((r) => ['alto', 'critico'].includes(r)).length },
     producao: { n: content.filter((c) => PROD.includes(c.stage)).length, bloqueados: blocks.length, agendados: content.filter((c) => c.stage === 'agendado').length, publicados: cur.publicados },
-    prazos: { n: lateTasks.length, hoje: openTasks.filter((t) => t.due_at && t.due_at >= nowIso && t.due_at <= endToday).length, sem_responsavel: unassigned.length },
+    prazos: { n: lateTasks.length, herdados: inheritedLate.length, hoje: openTasks.filter((t) => t.due_at && t.due_at >= nowIso && t.due_at <= endToday).length, sem_responsavel: unassigned.length },
     riscos: { n: risks.length, criticas: pend ? critical.length : null, clientes: new Set(risks.map((r) => r.client_id).filter(Boolean)).size },
     pessoas: { n: people.length, sobrecarga: people.filter((p) => p.situation === 'sobrecarga').length, sem_carga: people.filter((p) => p.situation === 'sem_carga').length, abertas: totalOpen },
   };
   const top = risks[0] ? `${risks[0].client ? `${risks[0].client}: ` : ''}${risks[0].problem}` : bottlenecks[0] ? `Gargalo em “${bottlenecks[0].label}” (${pl(bottlenecks[0].n, 'item', 'itens')}).`
     : intel[0] ? intel[0].what : null;
   const summary = {
-    lines: [`${pl(state.operacao.n, 'item em operação', 'itens em operação')}`, `${pl(state.prazos.n, 'tarefa atrasada', 'tarefas atrasadas')}`, `${pl(state.clientes.em_risco, 'cliente em risco', 'clientes em risco')}`]
+    lines: [`${pl(state.operacao.n, 'item em operação', 'itens em operação')}`, `${pl(state.prazos.n, 'tarefa atrasada', 'tarefas atrasadas')}${state.prazos.herdados ? ` (+ ${state.prazos.herdados} herdadas da migração, em revisão)` : ''}`, `${pl(state.clientes.em_risco, 'cliente em risco', 'clientes em risco')}`]
       .concat(pend ? [`${pl(critical.length, 'pendência crítica', 'pendências críticas')}`] : []),
     focus: top,
   };
@@ -295,8 +299,9 @@ export function tower(user, qs = {}) {
     people, people_insights: peopleInsights, fn_load: fnLoad,
     performance: { current: cur, previous: prev, comparable, first_event: firstEvent, moves, moves_n: movesN, pendencias_abertas: pend ? pend.length : null },
     intel, finance: fin, crm, automations: autos, report, meetings,
-    deadlines: openTasks.filter((t) => t.due_at).sort((a, b) => a.due_at.localeCompare(b.due_at)).slice(0, 25)
-      .map((t) => ({ id: t.id, title: t.title, client: t.client, assignee: t.assignee, due_at: t.due_at, content_id: t.content_id, client_id: t.client_id, overdue: t.due_at < nowIso })),
+    // herdados vencidos ficam fora desta lista: estão na Revisão de atrasos
+    deadlines: openTasks.filter((t) => t.due_at && !(isInherited(t) && t.due_at < nowIso)).sort((a, b) => a.due_at.localeCompare(b.due_at)).slice(0, 25)
+      .map((t) => ({ id: t.id, title: t.title, client: t.client, assignee: t.assignee, due_at: t.due_at, content_id: t.content_id, client_id: t.client_id, overdue: t.due_at < nowIso && perfOK.equipe(t) })),
   };
 }
 

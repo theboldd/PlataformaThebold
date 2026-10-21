@@ -26,6 +26,7 @@ const NAV = [
     { to: '/torre', label: 'Torre de Controle', icon: I.tower, mod: 'torre' },
     { to: '/processos', label: 'Processos', icon: I.flow, mod: 'processos' },
     { to: '/pendencias', label: 'Pendências', icon: I.alert, team: true },
+    { to: '/atrasos', label: 'Revisão de atrasos', icon: I.history, mod: 'atrasos' },
   ] },
   { group: 'Clientes', items: [
     { to: '/clientes', label: 'Clientes', icon: I.clients, mod: 'clientes' },

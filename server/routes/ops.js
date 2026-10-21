@@ -15,6 +15,7 @@ import { BRAIN_SECTIONS, exportClientBrainMarkdown } from '../ai/memory.js';
 import { integrationStatus } from '../integrations/vault.js';
 import { activeForm, formStatus } from '../services/onboarding.js';
 import { myPendencies } from './pendencias.js';
+import { isInherited } from '../services/delayReview.js';
 
 export const ops = Router();
 ops.use(requireInternal);
@@ -449,7 +450,7 @@ ops.put('/process/settings/:key', requirePerm('automacoes', 'admin'), (req, res)
 });
 
 // ═════════════ TAREFAS ═════════════
-const taskRow = (t) => ({ ...t, content: t.content_id ? one('SELECT number, title, stage, format FROM contents WHERE id=?', t.content_id) : null, client: t.client_id ? one('SELECT name FROM clients WHERE id=?', t.client_id)?.name : null, overdue: !!(t.due_at && t.due_at < now()) });
+const taskRow = (t) => ({ ...t, content: t.content_id ? one('SELECT number, title, stage, format FROM contents WHERE id=?', t.content_id) : null, client: t.client_id ? one('SELECT name FROM clients WHERE id=?', t.client_id)?.name : null, overdue: !!(t.due_at && t.due_at < now() && !isInherited(t)), inherited: !!(t.due_at && t.due_at < now() && isInherited(t)) });
 ops.get('/tasks/mine', (req, res) => {
   res.json(all("SELECT * FROM tasks WHERE assignee_id=? AND status IN ('aberta','em_andamento') ORDER BY due_at IS NULL, due_at", req.user.id).map(taskRow));
 });
@@ -556,7 +557,9 @@ function todayFor(u, mine) {
   const nowIso = now();
   const end = new Date(); end.setHours(23, 59, 59, 999); const endIso = end.toISOString();
   const week = new Date(Date.now() + 7 * 864e5).toISOString();
-  const overdue = mine.filter((t) => t.due_at && t.due_at < nowIso);
+  // Herdado da migração com prazo vencido não é "atrasada": o prazo foi calculado na importação (fica à parte, em revisão)
+  const inherited = mine.filter((t) => t.due_at && t.due_at < nowIso && isInherited(t));
+  const overdue = mine.filter((t) => t.due_at && t.due_at < nowIso && !isInherited(t));
   const today = mine.filter((t) => t.due_at && t.due_at >= nowIso && t.due_at <= endIso);
   const next = mine.filter((t) => t.due_at && t.due_at > endIso && t.due_at <= week);
   const scheduled = one("SELECT COUNT(*) n, MIN(available_at) first FROM tasks WHERE assignee_id=? AND status='agendada'", u.id);
@@ -566,7 +569,7 @@ function todayFor(u, mine) {
   const unread = all("SELECT id, type, title, body, link, count, updated_at FROM notifications WHERE user_id=? AND read_at IS NULL ORDER BY updated_at DESC LIMIT 5", u.id);
   const unreadTotal = one('SELECT COUNT(*) n FROM notifications WHERE user_id=? AND read_at IS NULL', u.id).n;
   // Você está aqui: a tarefa mais urgente com conteúdo → cliente → processo → etapa → próxima ação
-  const focusTask = [...overdue, ...today, ...next, ...mine].find((t) => t.content_id);
+  const focusTask = [...overdue, ...today, ...next, ...inherited, ...mine].find((t) => t.content_id);
   let here = null;
   if (focusTask) {
     const c = one('SELECT * FROM contents WHERE id=?', focusTask.content_id);
@@ -576,9 +579,9 @@ function todayFor(u, mine) {
         steps: FLOW_VIEW.map((k) => ({ key: k, label: STAGES[k].label })), current: c.stage, current_label: STAGES[c.stage].label, next: na.text, next_who: na.who };
     }
   }
-  return { overdue: overdue.length, today: today.length, next7: next.length, no_due: mine.filter((t) => !t.due_at).length, scheduled: scheduled.n, scheduled_first: scheduled.first,
+  return { overdue: overdue.length, inherited: inherited.length, today: today.length, next7: next.length, no_due: mine.filter((t) => !t.due_at).length, scheduled: scheduled.n, scheduled_first: scheduled.first,
     pendencies: pend.length, pendencies_top: pend.slice(0, 4), clients, unread: unreadTotal, unread_items: unread, here,
-    focus: [...overdue, ...today, ...next].slice(0, 6) };
+    focus: [...overdue, ...today, ...next].slice(0, 6).concat(inherited.slice(0, Math.max(0, 6 - overdue.length - today.length - next.length)).map((t) => ({ ...t, inherited: true }))) };
 }
 
 ops.get('/dashboard', (req, res) => {

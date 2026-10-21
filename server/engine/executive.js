@@ -2,9 +2,10 @@
 // Lógica: ESTADO → PROBLEMA → IMPACTO → RESPONSÁVEL → AÇÃO. Tudo derivado do banco; o detalhe completo fica na Torre.
 // Período (hoje | 7d | 30d | custom) define a janela à frente de compromissos e prazos; estados (risco, produção, espera) são sempre "agora".
 import { one, all, now } from '../db.js';
-import { scopeSQL } from '../lib/permissions.js';
+import { scopeSQL, can } from '../lib/permissions.js';
 import { STAGES, STAGE_ORDER } from './process.js';
 import { computePendencies, clientRisk, opsMetrics, stageDistribution, runDetectors, OPERATING } from './intelligence.js';
+import { PERF_SQL } from '../services/delayReview.js';
 import { integrationStatus } from '../integrations/vault.js';
 
 const H = 3600e3, DAY = 864e5;
@@ -65,7 +66,7 @@ export function executiveOverview(user, qs = {}) {
   const pend = computePendencies();
   const critical = pend.filter((p) => p.severity === 'critica');
   const csc = scopeSQL(user, 'c.client_id');
-  const prodLate = one(`SELECT COUNT(DISTINCT c.id) n FROM contents c JOIN tasks tk ON tk.content_id=c.id AND tk.status IN ('aberta','em_andamento') AND tk.due_at < ?
+  const prodLate = one(`SELECT COUNT(DISTINCT c.id) n FROM contents c JOIN tasks tk ON tk.content_id=c.id AND tk.status IN ('aberta','em_andamento') AND tk.due_at < ? AND ${PERF_SQL.equipe('tk')}
     WHERE c.stage IN (${inList(PROD_STAGES)}) AND ${csc.sql}`, nowIso, ...PROD_STAGES, ...csc.params).n;
   const waitOld = one(`SELECT COUNT(*) n FROM contents WHERE stage IN (${inList(WAIT_STAGES)}) AND stage_entered_at < ? AND ${sc.sql}`, ...WAIT_STAGES, new Date(Date.now() - 48 * H).toISOString(), ...sc.params).n;
   const kpis = {
@@ -92,6 +93,10 @@ export function executiveOverview(user, qs = {}) {
       time: late ? `venceu ${new Date(t.due_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'short' })}` : `até ${new Date(t.due_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'short' })}`,
       action: { label: 'Abrir tarefa', to: t.content_id ? `/conteudos/${t.content_id}` : t.client_id ? `/clientes/${t.client_id}` : '/processos' } });
   }
+  // Itens herdados da migração com prazo vencido: decisão da CEO (não contam como atraso de ninguém)
+  const inh = one("SELECT COUNT(*) n, COUNT(DISTINCT d.client_id) clients FROM delay_reviews d JOIN tasks t ON t.id=d.task_id WHERE d.decided_by IS NULL AND t.status IN ('aberta','em_andamento')");
+  if (inh.n && can(user, 'atrasos')) attention.push({ id: 'herdados', level: 'atencao', client: 'Migração', client_id: null, problem: `${inh.n} itens herdados do Notion com prazo vencido aguardando classificação`,
+    context: `${inh.clients} clientes · prazo calculado na importação`, impact: 'Não entram em nenhum indicador de desempenho até serem classificados.', who: 'Você', time: null, action: { label: 'Revisar itens herdados', to: '/atrasos' } });
   const issues = all("SELECT kind, COUNT(*) n, COUNT(DISTINCT client_id) clients FROM migration_issues WHERE status='aberto' GROUP BY kind");
   const byKind = Object.fromEntries(issues.map((i) => [i.kind, i]));
   for (const kind of ['status', 'equipe', 'duplicado', 'escopo']) {

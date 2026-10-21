@@ -17,7 +17,7 @@ const when = (iso) => {
 
 export function Today({ t }) {
   if (!t) return null;
-  const nothing = !t.overdue && !t.today && !t.next7 && !t.pendencies;
+  const nothing = !t.overdue && !t.today && !t.next7 && !t.pendencies && !t.inherited;
   return (
     <section className="td" aria-label="O que eu preciso fazer hoje">
       <div className="td-kpis">
@@ -25,6 +25,7 @@ export function Today({ t }) {
         <Link to="/pendencias" className={`td-k ${t.today ? '' : 'zero'}`}><b>{pad(t.today)}</b><span>Vencem hoje</span></Link>
         <Link to="/calendario" className={`td-k ${t.next7 ? '' : 'zero'}`}><b>{pad(t.next7)}</b><span>Próximos 7 dias</span></Link>
         <Link to="/pendencias" className={`td-k ${t.pendencies ? 'alert-soft' : 'zero'}`}><b>{pad(t.pendencies)}</b><span>Pendências minhas</span></Link>
+        {t.inherited > 0 && <Link to="/pendencias" className="td-k info" title="Prazo calculado pela plataforma na importação do Notion: não conta como atraso de ninguém até ser classificado"><b>{pad(t.inherited)}</b><span>Herdados da migração (em revisão)</span></Link>}
         {t.scheduled > 0 && <div className="td-k info" title="Prontas, mas a etapa ainda não abriu: sem atraso até lá"><b>{pad(t.scheduled)}</b><span>Abrem a partir de {new Date(t.scheduled_first).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' })}</span></div>}
       </div>
 
@@ -59,7 +60,7 @@ export function Today({ t }) {
                 <li key={x.id}>
                   <Link to={x.content_id ? `/conteudos/${x.content_id}` : '/pendencias'}>
                     <span className="t">{x.title}</span>
-                    <span className={`d ${x.overdue ? 'late' : ''}`}>{cleanName(x.client || '')}{x.client ? ' · ' : ''}{when(x.due_at)}</span>
+                    <span className={`d ${x.overdue ? 'late' : ''}`}>{cleanName(x.client || '')}{x.client ? ' · ' : ''}{x.inherited ? 'herdado da migração · prazo calculado na importação' : when(x.due_at)}</span>
                   </Link>
                 </li>
               ))}

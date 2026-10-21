@@ -89,7 +89,7 @@ export default function Torre() {
           <State n={s.operacao.n} label="Itens em operação" onClick={() => go('operacao')} lines={[`${s.operacao.producao} em produção`, `${s.operacao.revisao} em revisão`, `${s.operacao.clientes} com clientes`]} />
           <State n={s.clientes.n} label="Clientes na base" onClick={() => go('clientes')} lines={[`${s.clientes.ativos} ativos · ${s.clientes.a_confirmar} a confirmar`, `${s.clientes.com_operacao} com conteúdo no processo`]} />
           <State n={s.producao.n} label="Em produção" onClick={() => setDrawer({ kind: 'stage', stage: 'producao,analise_producao,ajuste_interno,ajuste_cliente,revisao_ajuste', label: 'Em produção' })} lines={[`${s.producao.bloqueados} bloqueados · ${s.producao.agendados} agendados`, `${s.producao.publicados} publicados no período`]} />
-          <State n={s.prazos.n} label="Tarefas atrasadas" alert={s.prazos.n > 0} onClick={() => setDrawer({ kind: 'prazos' })} lines={[`${s.prazos.hoje} vencem hoje`, `${s.prazos.sem_responsavel} sem responsável`]} />
+          <State n={s.prazos.n} label="Tarefas atrasadas" alert={s.prazos.n > 0} onClick={() => setDrawer({ kind: 'prazos' })} lines={[`${s.prazos.hoje} vencem hoje`, `${s.prazos.sem_responsavel} sem responsável`].concat(s.prazos.herdados ? [`+ ${s.prazos.herdados} herdadas da migração (fora da conta de desempenho)`] : [])} />
           <State n={s.riscos.n} label="Riscos" alert={s.riscos.n > 0} onClick={() => go('riscos')} lines={[`${pl(s.riscos.clientes, 'cliente envolvido', 'clientes envolvidos')}`, s.riscos.criticas != null ? `${pl(s.riscos.criticas, 'pendência crítica', 'pendências críticas')}` : 'pendências: acesso restrito']} />
           <State n={s.pessoas.n} label="Pessoas" onClick={() => go('pessoas')} lines={[`${s.pessoas.abertas} tarefas abertas`, `${s.pessoas.sobrecarga} em sobrecarga · ${s.pessoas.sem_carga} sem carga`]} />
         </div>
@@ -194,7 +194,7 @@ export default function Torre() {
               <button key={p.id} className="tw-tr" role="row" onClick={() => setDrawer({ kind: 'person', id: p.id, label: p.name })} aria-label={`${p.name}: ${p.open} abertas, ${p.late} atrasadas`}>
                 <span className="tw-person" role="cell"><b>{p.name}</b><small>{p.functions.map((f) => FUNCTIONS[f] || f).join(' · ') || 'Sem função operacional'}</small></span>
                 <span className="n" role="cell" data-l="Abertas">{p.open}</span>
-                <span className={`n ${p.late ? 'alert' : ''}`} role="cell" data-l="Atrasadas">{p.late}</span>
+                <span className={`n ${p.late ? 'alert' : ''}`} role="cell" data-l="Atrasadas">{p.late}{p.inherited ? <small title="Prazo calculado na migração; fora de qualquer indicador até ser classificado"> · {p.inherited} herdadas, fora da conta</small> : null}</span>
                 <span className="n" role="cell" data-l="Concluídas">{p.done}{p.done_late ? <small> · {p.done_late} c/ atraso</small> : null}</span>
                 <span className="tw-cap" role="cell" aria-hidden><i style={{ width: `${(p.open / max) * 100}%` }} /><s style={{ left: `${(p.capacity / max) * 100}%` }} /></span>
                 <span className={`tw-sit s-${p.situation}`} role="cell">{SITUATION[p.situation]}</span>

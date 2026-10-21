@@ -43,7 +43,7 @@ export function myPendencies(user) {
 
 export const CAUSES = {
   cliente: 'Cliente', prazo: 'Prazo da equipe', responsavel: 'Responsável', material: 'Material', equipe: 'Equipe',
-  informacao: 'Informação', onboarding: 'Onboarding', financeiro: 'Financeiro',
+  informacao: 'Informação', onboarding: 'Onboarding', financeiro: 'Financeiro', migracao: 'Herdado da migração',
 };
 const teamVisible = (user) => computePendencies().filter((i) => can(user, 'financeiro') || !i.financial);
 // O que esta pessoa pode ver: Equipe (com permissão) ou só as Minhas

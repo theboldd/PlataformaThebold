@@ -1,6 +1,6 @@
 # THE BOLD OS — Regras oficiais do projeto
 
-Decisões tomadas pela CEO (Rebeca) em 21/10/2026. Valem para todo o código, os dados e os próximos blocos.
+Decisões tomadas pela CEO (Rebeca) em 21/10/2026 (regras 1–10) e complementadas no mesmo dia (11–13). Valem para todo o código, os dados e os próximos blocos.
 Quando uma regra daqui conflitar com um pedido antigo, **esta vale**.
 
 ## 1. Hospedagem: Railway
@@ -55,6 +55,42 @@ AUDITAR → IDENTIFICAR O QUE JÁ EXISTE → REAPROVEITAR → IMPLEMENTAR SÓ O 
 
 O relatório de cada bloco traz: **IMPLEMENTADO · REAPROVEITADO · DADOS UTILIZADOS · TESTES · PENDÊNCIAS · PRÓXIMO BLOCO**.
 Nunca se avança sobre uma decisão que ainda depende da CEO.
+
+## 11. Fonte de verdade
+| Momento | Fonte |
+|---|---|
+| Antes da migração | **Notion** = fonte existente |
+| Durante a migração | **Notion → The Bold OS** (só leitura do Notion, por exportação) |
+| Depois da migração | **The Bold OS** = fonte de verdade |
+
+- Não existe sincronização bidirecional com o Notion. Criar uma exige decisão específica da CEO.
+- Uso normal da plataforma não altera nada no Notion. Escrita no Notion só quando a CEO pedir explicitamente. Hoje o código não tem nenhuma escrita no Notion.
+- O calendário e o processo operam sobre o modelo de dados do The Bold OS. O Notion não é segunda fonte.
+
+## 12. Atraso não é culpa: classificação operacional
+- Item atrasado **não** é, por si só, atraso da responsável.
+- Cada item atrasado herdado tem os **fatos** levantados por regra, cada um com a fonte, em **Revisão de atrasos** (`/atrasos`):
+  - origem, cliente, conteúdo e etapa;
+  - responsável atual e como foi definido, e responsável histórico;
+  - data original e prazo (e de onde ele veio);
+  - motivo, dependências, mudanças de responsabilidade e situação real;
+  - evidência para atribuir.
+- A categoria é escolhida por uma **pessoa autorizada** (permissão `atrasos`, só a CEO libera), com evidência escrita. A IA não decide causalidade.
+- Categorias: ATRASO DO CLIENTE · AGUARDANDO CLIENTE · ATRASO DA EQUIPE · ATRASO DO RESPONSÁVEL · PROCESSO ANTIGO · DADO MIGRADO · RESPONSABILIDADE ALTERADA · SEM CONTEXTO · REPROGRAMADO · CANCELADO · OUTRO.
+- Sem evidência, o item fica **SEM CONTEXTO / NÃO ATRIBUÍDO**. Atribuir à pessoa exige a evidência descrita.
+- Nada é alterado ou excluído sem motivo. Toda classificação, reprogramação e cancelamento fica em `activity_logs`, com valor anterior e novo.
+
+## 13. Proteção do histórico de performance
+- Tarefa herdada da migração (`tasks.perf_status = migrado`) e tarefa classificada como não atribuível (`excluido`) **não alimentam**:
+  - score de confiabilidade;
+  - percentual de atraso;
+  - comparação entre profissionais;
+  - ranking;
+  - alertas de performance;
+  - indicadores de risco individual.
+- Nesses casos, também não disparam aviso de "prazo vencido".
+- Só entram em indicador individual as tarefas nascidas na plataforma e as classificadas como ATRASO DO RESPONSÁVEL. ATRASO DA EQUIPE conta só no agregado da equipe.
+- Na operação, esses itens continuam visíveis, à parte, como "herdados da migração".
 
 ## Regras anteriores que continuam valendo
 - Regra determinística decide status, prazos, permissões, tarefas, atribuições, sincronização e **todo cálculo financeiro**. A IA interpreta e sugere, mas não decide estado crítico, valores nem nada sobre pessoas.

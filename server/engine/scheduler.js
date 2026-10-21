@@ -7,6 +7,8 @@ import { automation, isEnabled, onceFor } from './automations.js';
 import { runDetectors } from './intelligence.js';
 import { publishDueContent } from '../integrations/meta.js';
 import { generateReport } from '../services/reports.js';
+import { syncDelayReviews } from '../services/delayReview.js';
+import { runJob } from './jobs.js';
 
 const H = 3600e3;
 const cc = () => all("SELECT id FROM users WHERE active=1 AND role_key IN ('operacoes','ceo')").map((r) => r.id);
@@ -39,11 +41,13 @@ export function reconcileStageWindows() {
 }
 
 export function tick() {
-  activateScheduledTasks();
+  const activated = activateScheduledTasks();
+  syncDelayReviews(); // herdados que venceram hoje entram na Revisão de atrasos
   const t = Date.now();
   const nowIso = now();
   // Prazo próximo (< 24h) e vencido
-  for (const k of all("SELECT t.*, c.number, c.title ctitle FROM tasks t LEFT JOIN contents c ON c.id=t.content_id WHERE t.status IN ('aberta','em_andamento') AND t.due_at IS NOT NULL AND t.assignee_id IS NOT NULL AND t.function<>'cliente'")) {
+  // Herdado da migração ou classificado como não atribuível não recebe aviso de prazo: o prazo foi calculado na importação, não combinado.
+  for (const k of all("SELECT t.*, c.number, c.title ctitle FROM tasks t LEFT JOIN contents c ON c.id=t.content_id WHERE t.status IN ('aberta','em_andamento') AND t.due_at IS NOT NULL AND t.assignee_id IS NOT NULL AND t.function<>'cliente' AND (t.perf_status IS NULL OR t.perf_status NOT IN ('migrado','excluido'))")) {
     const due = new Date(k.due_at).getTime();
     if (due < t) {
       if (isEnabled('prazo.vencido') && onceFor('prazo.vencido', k.id, k.due_at)) {
@@ -127,13 +131,16 @@ export function tick() {
       notify(fin, { level: 'info', type: 'financeiro', title: 'Vencimentos nos próximos 3 dias', body: `${i.cname} — ${i.description}`, link: '/financeiro', groupKey: 'fin:venc' });
     }
   }
+  return { activated };
 }
 
 let last15 = 0, lastPublish = 0;
 export function startScheduler() {
   const safe = (fn, name) => { try { return fn(); } catch (e) { console.error(`[scheduler] ${name}:`, e.message); } };
   const loop = async () => {
-    safe(tick, 'tick');
+    // mesma trava da rotina externa (/api/cron/tick): nunca rodam ao mesmo tempo; execução ignorada não é registrada a cada minuto
+    const r = await runJob('tick', tick, { trigger: 'processo', record: false });
+    if (r.error) console.error('[scheduler] tick:', r.error);
     if (Date.now() - lastPublish > 60e3) { lastPublish = Date.now(); try { await publishDueContent(); } catch (e) { console.error('[scheduler] meta:', e.message); } }
     if (Date.now() - last15 > 15 * 60e3) {
       last15 = Date.now();
