@@ -173,3 +173,16 @@ export const perfOK = {
 // Prazo vencido que não é atraso de ninguém: herdado sem classificação (migrado) ou classificado como não atribuível (excluido)
 export const NOT_ATTRIB = ['migrado', 'excluido'];
 export const isInherited = (t) => NOT_ATTRIB.includes(t.perf_status);
+
+// BASE DE PERFORMANCE (estrutura preparada, sem score — decisão da CEO no Bloco 5).
+// Evento válido = tarefa concluída que pode ser atribuída: nasceu na plataforma ou foi classificada como do responsável/equipe.
+// Herdado da migração e não atribuível nunca entram. Nada aqui gera nota, ranking ou alerta sobre pessoas.
+export function performanceBase() {
+  const ev = all(`SELECT t.completed_by uid, COUNT(*) n, SUM(t.due_at IS NOT NULL AND t.completed_at <= t.due_at) no_prazo, SUM(t.due_at IS NOT NULL AND t.completed_at > t.due_at) com_atraso
+    FROM tasks t WHERE t.status='concluida' AND t.completed_by IS NOT NULL AND ${PERF_SQL.individual('t')} GROUP BY t.completed_by`);
+  const total = ev.reduce((s, r) => s + r.n, 0);
+  const pending = one("SELECT COUNT(*) n FROM delay_reviews WHERE decided_by IS NULL").n;
+  return { valid_events: total, people_with_events: ev.length, pending_classification: pending, score: null,
+    status: total ? 'em_coleta' : 'dados_insuficientes',
+    note: 'Score individual não implementado. A coleta usa só eventos operacionais válidos e classificados; itens herdados da migração ficam fora.' };
+}

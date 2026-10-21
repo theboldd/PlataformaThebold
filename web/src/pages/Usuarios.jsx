@@ -255,8 +255,8 @@ function ClientAccess({ admin }) {
             <td className="sm">{r.email || <span className="muted">—</span>}
               {r.candidates.map((c) => (
                 <div key={c.id} className="ca-cand">
-                  <span className="xs">Encontrado: <b>{c.email}</b> · {c.source}{c.source_url && <> · <a href={c.source_url} target="_blank" rel="noreferrer">ver no Notion ↗</a></>}</span>
-                  {admin && <span className="row gap-2 mt-2"><Button size="sm" disabled={busy} onClick={() => act(() => api.post(`/client-access/${r.client_id}/candidates/${c.id}`, {}), 'Acesso preparado (convite pendente).')}>Usar como acesso</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => act(() => api.post(`/client-access/${r.client_id}/candidates/${c.id}`, { decision: 'descartar' }), 'Sugestão descartada.')}>Descartar</Button></span>}
+                  <span className="xs"><span className="tag tag-warn">E-mail candidato · aguardando confirmação</span> <b>{c.email}</b> · {c.source}{c.source_url && <> · <a href={c.source_url} target="_blank" rel="noreferrer">ver no Notion ↗</a></>}</span>
+                  {admin && <span className="row gap-2 mt-2"><Button size="sm" disabled={busy} onClick={() => window.confirm(`Confirmar ${c.email} como e-mail OFICIAL de acesso de ${cleanName(r.client)}? O acesso fica preparado; nenhum convite é enviado automaticamente.`) && act(() => api.post(`/client-access/${r.client_id}/candidates/${c.id}`, {}), 'Acesso preparado (convite pendente, nada foi enviado).')}>Confirmar como acesso oficial</Button><Button size="sm" variant="ghost" disabled={busy} onClick={() => act(() => api.post(`/client-access/${r.client_id}/candidates/${c.id}`, { decision: 'descartar' }), 'Sugestão descartada.')}>Descartar</Button></span>}
                 </div>
               ))}
             </td>

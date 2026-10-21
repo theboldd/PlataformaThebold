@@ -1,6 +1,6 @@
 # THE BOLD OS — Regras oficiais do projeto
 
-Decisões tomadas pela CEO (Rebeca) em 21/10/2026 (regras 1–10) e complementadas no mesmo dia (11–13). Valem para todo o código, os dados e os próximos blocos.
+Decisões tomadas pela CEO (Rebeca) em 21/10/2026 (regras 1–10) e complementadas no mesmo dia (11–17). Valem para todo o código, os dados e os próximos blocos.
 Quando uma regra daqui conflitar com um pedido antigo, **esta vale**.
 
 ## 1. Hospedagem: Railway
@@ -91,6 +91,31 @@ Nunca se avança sobre uma decisão que ainda depende da CEO.
 - Nesses casos, também não disparam aviso de "prazo vencido".
 - Só entram em indicador individual as tarefas nascidas na plataforma e as classificadas como ATRASO DO RESPONSÁVEL. ATRASO DA EQUIPE conta só no agregado da equipe.
 - Na operação, esses itens continuam visíveis, à parte, como "herdados da migração".
+
+## 14. Aprovação do cliente
+- Só existe **APROVADO** quando há **registro de aprovação do cliente na plataforma** (`contents.approved_version_id` + linha em `approvals`).
+- Aprovação não registrada aparece como **APROVAÇÃO NÃO REGISTRADA**.
+- Estar em "Para agendar" **não** significa que o cliente aprovou. A aprovação nunca é deduzida de etapa, de coluna antiga do Notion nem de qualquer outro sinal indireto.
+- Os 144 conteúdos herdados de "Para agendamento" continuam **sem aprovação registrada**. Ficam fora das métricas de performance até a classificação (regras 12 e 13).
+
+## 15. CR EDITORIAL do Notion = histórico somente leitura
+- Os calendários "CR EDITORIAL" do Notion entram como **HISTÓRICO DO NOTION · SOMENTE LEITURA**, com a origem e o link de cada item.
+- Eles **não**:
+  - geram pendência, atraso, cobrança ou tarefa;
+  - alteram etapas;
+  - viram calendário editorial ativo;
+  - substituem o calendário do The Bold OS.
+- O calendário editorial oficial e operacional é o do The Bold OS. Não existe sincronização com esses calendários históricos.
+
+## 16. THE BOLD = cliente interno
+- "THE BOLD" continua na base, classificada como **CLIENTE INTERNO** (`clients.kind = interno`).
+- Pode ter conteúdos, processos e histórico próprios, para a operação institucional da agência.
+- **Não** aparece para clientes externos.
+- **Não** conta como cliente externo em métricas comerciais, de carteira, de retenção, de receita ou de performance de clientes.
+
+## 17. Dreams Brand
+- `dreamsbrand.pi@gmail.com` é **E-MAIL CANDIDATO / AGUARDANDO CONFIRMAÇÃO**.
+- Não é e-mail oficial de acesso: não se cria login e não se envia convite até a confirmação explícita da CEO.
 
 ## Regras anteriores que continuam valendo
 - Regra determinística decide status, prazos, permissões, tarefas, atribuições, sincronização e **todo cálculo financeiro**. A IA interpreta e sugere, mas não decide estado crítico, valores nem nada sobre pessoas.

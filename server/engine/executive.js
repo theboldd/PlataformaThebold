@@ -4,7 +4,7 @@
 import { one, all, now } from '../db.js';
 import { scopeSQL, can } from '../lib/permissions.js';
 import { STAGES, STAGE_ORDER } from './process.js';
-import { computePendencies, clientRisk, opsMetrics, stageDistribution, runDetectors, OPERATING } from './intelligence.js';
+import { computePendencies, clientRisk, opsMetrics, stageDistribution, runDetectors, explain, OPERATING } from './intelligence.js';
 import { PERF_SQL } from '../services/delayReview.js';
 import { integrationStatus } from '../integrations/vault.js';
 
@@ -55,12 +55,12 @@ export function executiveOverview(user, qs = {}) {
 
   // ── Base real ──
   const base = one(`SELECT COUNT(*) total, SUM(status='ativo') ativos, SUM(status='a_confirmar') a_confirmar, SUM(status='onboarding') onboarding
-    FROM clients WHERE status IN (${inList(OPERATING)}) AND ${cScope.sql}`, ...OPERATING, ...cScope.params);
+    FROM clients WHERE status IN (${inList(OPERATING)}) AND kind<>'interno' AND ${cScope.sql}`, ...OPERATING, ...cScope.params);
   for (const k of Object.keys(base)) base[k] = base[k] || 0;
   base.com_conteudo = one(`SELECT COUNT(DISTINCT client_id) n FROM contents WHERE stage NOT IN ('cancelado','publicado') AND ${sc.sql}`, ...sc.params).n;
 
   // ── Indicadores (estado atual) ──
-  const risks = all(`SELECT * FROM clients WHERE status IN (${inList(OPERATING)}) AND ${cScope.sql}`, ...OPERATING, ...cScope.params)
+  const risks = all(`SELECT * FROM clients WHERE status IN (${inList(OPERATING)}) AND kind<>'interno' AND ${cScope.sql}`, ...OPERATING, ...cScope.params)
     .map((c) => ({ id: c.id, name: c.name, ...clientRisk(c.id) })).filter((r) => ['alto', 'critico'].includes(r.level))
     .sort((a, b) => (a.level === 'critico' ? 0 : 1) - (b.level === 'critico' ? 0 : 1));
   const pend = computePendencies();
@@ -71,7 +71,8 @@ export function executiveOverview(user, qs = {}) {
   const waitOld = one(`SELECT COUNT(*) n FROM contents WHERE stage IN (${inList(WAIT_STAGES)}) AND stage_entered_at < ? AND ${sc.sql}`, ...WAIT_STAGES, new Date(Date.now() - 48 * H).toISOString(), ...sc.params).n;
   const kpis = {
     risk: { n: risks.length, critico: risks.filter((r) => r.level === 'critico').length },
-    critical: { n: critical.length, vencidas: critical.filter((p) => p.late).length },
+    // vencida = prazo real passado (idade de uma tarefa sem dono não é prazo)
+    critical: { n: critical.length, vencidas: critical.filter((p) => p.due && p.due < nowIso && p.cause !== 'migracao' && p.cause !== 'responsavel').length },
     producao: { n: m.em_producao, atrasados: prodLate, stages: PROD_STAGES },
     aguardando: { n: m.aguardando_cliente, mais_48h: waitOld, stages: WAIT_STAGES },
   };
@@ -134,7 +135,7 @@ export function executiveOverview(user, qs = {}) {
     intel.push({ id: 'agg:sem_responsavel', kind: 'Responsabilidade',
       what: `${pl(byClient.size, 'cliente está', 'clientes estão')} sem responsável em funções essenciais (${Object.entries(fnCount).map(([f, n]) => `${f} ${n}`).join(', ')}).`,
       why: 'Quando o primeiro ciclo começar, as tarefas dessas funções nascem sem dono e a etapa para.',
-      todo: 'Definir os responsáveis na aba Equipe de cada cliente.',
+      todo: 'Definir os responsáveis na aba Equipe de cada cliente.', pattern: null, hypothesis: null, recommendation: 'Definir os responsáveis na aba Equipe de cada cliente.',
       records: [...byClient.entries()].map(([id, c]) => ({ label: c.name, meta: c.fns.join(', '), to: `/clientes/${id}?tab=equipe` })) });
   }
   const nowMs = Date.now();
@@ -143,7 +144,7 @@ export function executiveOverview(user, qs = {}) {
     let records = [];
     if (i.detector === 'gargalo') {
       const st = i.fingerprint.split(':')[1];
-      records = all(`SELECT t.title, t.due_at, t.content_id, c.name client FROM tasks t LEFT JOIN clients c ON c.id=t.client_id WHERE t.status IN ('aberta','em_andamento') AND t.due_at < ? AND t.stage=? ORDER BY t.due_at LIMIT 12`, nowIso, st)
+      records = all(`SELECT t.title, t.due_at, t.content_id, c.name client FROM tasks t LEFT JOIN clients c ON c.id=t.client_id WHERE t.status IN ('aberta','em_andamento') AND t.due_at < ? AND t.stage=? AND ${PERF_SQL.equipe('t')} ORDER BY t.due_at LIMIT 12`, nowIso, st)
         .map((r) => ({ label: r.title, meta: `${r.client || 'Sem cliente'} · venceu há ${pl(Math.max(1, Math.round((nowMs - new Date(r.due_at)) / DAY)), 'dia', 'dias')}`, to: r.content_id ? `/conteudos/${r.content_id}` : '/processos' }));
     } else if (i.detector === 'material') {
       records = all("SELECT c.id, c.number, c.title, cl.name client FROM contents c JOIN clients cl ON cl.id=c.client_id WHERE c.blocked=1 AND c.waiting_on='cliente' AND c.stage NOT IN ('publicado','cancelado') LIMIT 12")
@@ -152,7 +153,7 @@ export function executiveOverview(user, qs = {}) {
       records = [{ label: i.problem, meta: null, to: link }];
     }
     intel.push({ id: i.id, kind: { gargalo: 'Gargalo', carga: 'Capacidade', tempo_aprovacao: 'Tendência', retrabalho: 'Retrabalho', material: 'Dependência', dependencia: 'Dependência' }[i.detector] || 'Padrão',
-      what: i.problem, why: i.impact, todo: i.suggestion, records, link });
+      what: i.problem, why: i.impact, todo: i.suggestion, records, link, ...explain(i) });
   }
 
   // ── Atalhos finais (resumo de uma linha, sempre real) ──
@@ -169,7 +170,23 @@ export function executiveOverview(user, qs = {}) {
   const headline = crit ? `${pl(crit, 'situação crítica pede', 'situações críticas pedem')} sua atenção.`
     : attention.length ? `Nenhum ponto crítico. ${attention.length === 1 ? '1 assunto aguarda' : `${attention.length} assuntos aguardam`} sua decisão.` : 'Operação em dia. Nada exige sua intervenção agora.';
 
+  // ── O que os dados ainda NÃO permitem afirmar (sempre visível; não some atrás das 5 situações) ──
+  const csc2 = scopeSQL(user, 'client_id');
+  const cnt = (sql, ...p) => one(sql.replace('{S}', csc2.sql), ...csc2.params, ...p).n;
+  const inheritedOpen = cnt("SELECT COUNT(*) n FROM delay_reviews WHERE decided_by IS NULL AND {S}");
+  const noDate = cnt("SELECT COUNT(*) n FROM contents WHERE planned_at IS NULL AND scheduled_at IS NULL AND stage NOT IN ('publicado','cancelado') AND {S}");
+  const noApproval = cnt("SELECT COUNT(*) n FROM contents WHERE stage IN ('agendamento','agendado','publicado') AND approved_version_id IS NULL AND {S}");
+  const validEvents = one("SELECT COUNT(*) n FROM tasks WHERE status='concluida' AND completed_by IS NOT NULL AND perf_status IS NULL").n;
+  const data_notes = [
+    inheritedOpen && { text: `${pl(inheritedOpen, 'item herdado da migração aguarda', 'itens herdados da migração aguardam')} classificação de atraso`, note: 'Fora de qualquer indicador de pessoa até você classificar.', to: can(user, 'atrasos') ? '/atrasos' : null },
+    noApproval && { text: `${pl(noApproval, 'conteúdo', 'conteúdos')} em agendamento sem aprovação registrada`, note: 'Não são tratados como aprovados.', to: '/processos' },
+    noDate && { text: `${pl(noDate, 'conteúdo', 'conteúdos')} sem data de publicação`, note: 'Ficam fora do calendário e da prévia do feed.', to: '/conteudos' },
+    { text: validEvents ? `Performance: ${pl(validEvents, 'evento válido', 'eventos válidos')} em coleta` : 'Performance: DADOS INSUFICIENTES', note: 'Nenhuma tarefa concluída na plataforma ainda. Score individual não é calculado.', to: null },
+    !finCount && { text: 'Financeiro: DADOS INSUFICIENTES', note: 'Nenhum contrato ou fatura cadastrado.', to: can(user, 'financeiro') ? '/financeiro' : null },
+  ].filter(Boolean);
+
   return {
+    data_notes,
     window: W, state, headline, base, kpis, risks,
     attention: attention.slice(0, 5), attention_total: attention.length,
     agenda: { items: meetings, google: { status: google.status } },

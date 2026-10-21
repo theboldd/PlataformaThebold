@@ -48,7 +48,7 @@ export default function Clientes() {
       {loading && !data ? <Loading rows={6} /> : !sorted.length ? <Empty title="Nenhum cliente encontrado." /> : (
         <div className="ct-grid">
           {sorted.map((c) => (
-            <ClientTile key={c.id} to={`/clientes/${c.id}`} name={c.name} segment={c.segment} status={{ key: c.status, label: STATUS[c.status] }}
+            <ClientTile key={c.id} to={`/clientes/${c.id}`} name={c.name} segment={c.segment} status={{ key: c.status, label: c.kind === 'interno' ? `Cliente interno · ${STATUS[c.status]}` : STATUS[c.status] }}
               chips={[
                 { label: 'Rascunho', n: c.counts.rascunho, tone: 'neutral' },
                 { label: 'Ajuste', n: c.counts.ajuste, tone: 'adjust' },

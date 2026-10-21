@@ -44,7 +44,8 @@ export function createClientLogin(client, email, { source, source_url = null, ac
 // Varredura das fontes reais. Idempotente: não duplica usuário nem candidato.
 export function prepareClientAccess({ dir = process.env.BOLD_MIGRATION_DIR || path.resolve('storage/migration/notion') } = {}) {
   const report = { created: [], candidates: [], sem_email: [] };
-  const clients = all('SELECT id, name FROM clients ORDER BY name');
+  // cliente interno (a própria The Bold) não tem acesso de cliente (regra oficial 16)
+  const clients = all("SELECT id, name FROM clients WHERE kind<>'interno' ORDER BY name");
   const byName = new Map(clients.map((c) => [c.name, c]));
   // 1) e-mail informado pelo próprio cliente em formulário (cadastro) — já na plataforma, vindo do Notion
   for (const c of clients) {
@@ -78,7 +79,7 @@ export function prepareClientAccess({ dir = process.env.BOLD_MIGRATION_DIR || pa
 }
 
 export function accessList() {
-  return all('SELECT id, name, status FROM clients ORDER BY name').map((c) => {
+  return all("SELECT id, name, status FROM clients WHERE kind<>'interno' ORDER BY name").map((c) => {
     const u = clientUser(c.id);
     const st = accessStatus(u);
     return {

@@ -32,8 +32,10 @@ export const LANES = [
 export const STAGE_ORDER = Object.keys(STAGES);
 
 // Status público (linguagem do feed do cliente / status visual)
+// Regra oficial 14: "aprovado" só com registro de aprovação do cliente (approved_version_id). Etapa não prova aprovação.
 export function publicStatus(c) {
   if (c.blocked) return 'bloqueado';
+  if (c.stage === 'agendamento' && !c.approved_version_id) return 'aprovacao_nao_registrada';
   return ({ cronograma: 'rascunho', analise_cronograma: 'rascunho', ajuste_cronograma: 'rascunho', aprovacao_tema: 'aguardando_cliente',
     producao: 'em_producao', analise_producao: 'revisao_interna', ajuste_interno: 'em_ajuste', aprovacao_cliente: 'aguardando_cliente',
     ajuste_cliente: 'ajuste_solicitado', revisao_ajuste: 'em_ajuste', agendamento: 'aprovado', agendado: 'agendado', publicado: 'publicado', cancelado: 'cancelado' })[c.stage];

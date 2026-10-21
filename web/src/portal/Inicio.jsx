@@ -61,7 +61,7 @@ export default function Inicio() {
           {!me.upcoming?.length ? <p className="sm muted">{me.in_preparation ? `${me.in_preparation} conteúdo(s) em preparação pela equipe.` : 'Nenhum conteúdo programado.'}</p> : (
             <ul className="p-list">{me.upcoming.map((c) => (
               <li key={c.id}><span className="p-list-date">{fmtDate(c.date)}</span><span className="grow">{c.title}<small>{FORMATS[c.format]}</small></span>
-                <span className={`p-mini s-${c.status}`}>{c.status === 'aguardando_cliente' ? '♡ aprovar' : c.status === 'agendado' ? '♥ agendado' : '♥ aprovado'}</span></li>
+                <span className={`p-mini s-${c.status}`}>{c.status === 'aguardando_cliente' ? '♡ aprovar' : c.status === 'agendado' ? 'agendado' : c.status === 'aprovado' ? '♥ aprovado' : c.status === 'publicado' ? 'publicado' : 'em preparação'}</span></li>
             ))}</ul>
           )}
         </section>

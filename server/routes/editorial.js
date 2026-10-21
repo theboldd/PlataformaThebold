@@ -66,3 +66,11 @@ editorial.get('/clients/:id/editorial', requireInternal, requirePerm('conteudos'
     months: [...new Set(items.filter((i) => i.date).map((i) => i.date.slice(0, 7)))].sort(),
   });
 });
+
+// HISTÓRICO DO NOTION · SOMENTE LEITURA (regra oficial 15). Só GET: nada aqui é editável, nem vira tarefa/pendência/atraso.
+editorial.get('/clients/:id/notion-history', requireInternal, requirePerm('conteudos', 'view'), (req, res) => {
+  assertClient(req.user, req.params.id);
+  const rows = all('SELECT * FROM notion_history WHERE client_id=? ORDER BY date_start IS NULL, date_start DESC, title', req.params.id)
+    .map((r) => ({ ...r, properties: parseJSON(r.properties, {}) }));
+  res.json({ read_only: true, items: rows, sources: [...new Set(rows.map((r) => r.source_db_url).filter(Boolean))], extracted_at: rows[0]?.extracted_at || null });
+});

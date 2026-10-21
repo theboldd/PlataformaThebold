@@ -86,6 +86,14 @@ export default function Executive() {
         <span className="ex-base">{pl(e.base.total, 'cliente na base', 'clientes na base')}{e.base.a_confirmar ? ` · ${e.base.a_confirmar} com status a confirmar` : ''} · {e.base.com_conteudo ? pl(e.base.com_conteudo, 'com conteúdo em andamento', 'com conteúdo em andamento') : 'nenhum com conteúdo em andamento'}</span>
       </p>
 
+      {/* O QUE OS DADOS AINDA NÃO PERMITEM AFIRMAR */}
+      {e.data_notes?.length > 0 && (
+        <section className="ex-notes" aria-label="Limites dos dados">
+          <span className="ex-notes-k">O que os dados ainda não permitem afirmar</span>
+          <ul>{e.data_notes.map((n, i) => <li key={i}>{n.to ? <Link to={n.to}>{n.text}</Link> : <b>{n.text}</b>}<small>{n.note}</small></li>)}</ul>
+        </section>
+      )}
+
       {/* INDICADORES */}
       <section className="ex-kpis" aria-label="Indicadores executivos">
         <Kpi n={k.risk.n} label="Clientes em risco" alert={k.risk.n > 0} onClick={() => setDrawer({ kind: 'risk' })}
@@ -180,8 +188,10 @@ export default function Executive() {
             <article key={x.id} className="ex-in">
               <span className="ex-in-k">{x.kind}</span>
               <p className="ex-in-t">{x.what}</p>
-              {x.why && <p className="ex-in-p"><b>Por que importa</b>{x.why}</p>}
-              {x.todo && <p className="ex-in-p"><b>O que fazer</b>{x.todo}</p>}
+              {x.pattern && <p className="ex-in-p"><b>Padrão observado</b>{x.pattern}</p>}
+              {x.hypothesis && <p className="ex-in-p"><b>Hipótese (não verificada)</b>{x.hypothesis.text}</p>}
+              {(x.recommendation || x.todo) && <p className="ex-in-p"><b>Recomendação</b>{x.recommendation || x.todo}</p>}
+              {x.why && <p className="ex-in-p"><b>Impacto esperado</b>{x.why}</p>}
               {x.records?.length ? (
                 <button className="ex-more" onClick={() => setDrawer({ kind: 'records', title: x.kind, intro: x.what, records: x.records })}>{x.records.length === 1 ? 'Ver o registro' : `Ver os ${x.records.length} registros`} <I.arrow size={13} /></button>
               ) : x.link ? <Link className="ex-more" to={x.link}>Investigar <I.arrow size={13} /></Link> : null}

@@ -15,9 +15,9 @@ import '../styles/tower.css';
 import { restoredOverlay } from '../lib/nav.jsx';
 
 const PERIODS = [{ value: 'hoje', label: 'Hoje' }, { value: '7d', label: '7 dias' }, { value: '30d', label: '30 dias' }, { value: 'custom', label: 'Personalizado' }];
-const FILTERS = ['client_id', 'assignee_id', 'stage', 'format', 'priority'];
+const FILTERS = ['client_id', 'assignee_id', 'stage', 'format', 'priority', 'status', 'kind', 'origin'];
 const PRIO = { baixa: 'Baixa', media: 'Média', alta: 'Alta', critica: 'Crítica' };
-const SITUATION = { sobrecarga: 'Sobrecarga', alta: 'Alta', normal: 'Normal', sem_carga: 'Sem carga' };
+const SITUATION = { sobrecarga: 'Sobrecarga', alta: 'Alta', normal: 'Normal', sem_carga: 'Sem carga', so_herdada: 'Dados insuficientes' };
 const RISK = { critico: 'Crítico', alto: 'Alto', medio: 'Médio', baixo: 'Baixo' };
 const STATUS = { ativo: 'Ativo', onboarding: 'Onboarding', a_confirmar: 'A confirmar' };
 const LEGACY = { pessoas: 'pessoas', riscos: 'riscos', clientes: 'clientes', operacao: 'operacao', producao: 'operacao', ia: 'inteligencia' };
@@ -78,6 +78,9 @@ export default function Torre() {
           {d.filters.stages.length > 0 && <Select label="Etapa" value={params.get('stage')} onChange={(v) => set({ stage: v })} options={d.filters.stages.map((x) => [x.key, x.label])} />}
           {d.filters.formats.length > 0 && <Select label="Formato" value={params.get('format')} onChange={(v) => set({ format: v })} options={d.filters.formats.map((f) => [f, FORMATS[f] || f])} />}
           {d.filters.priorities.length > 1 && <Select label="Prioridade" value={params.get('priority')} onChange={(v) => set({ priority: v })} options={d.filters.priorities.map((p) => [p, PRIO[p] || p])} />}
+          {d.filters.statuses.length > 0 && <Select label="Status" value={params.get('status')} onChange={(v) => set({ status: v })} options={d.filters.statuses.map((x) => [x.key, x.label])} />}
+          {d.filters.kinds.length > 0 && <Select label="Tipo de tarefa" value={params.get('kind')} onChange={(v) => set({ kind: v })} options={d.filters.kinds.map((x) => [x.key, x.label])} />}
+          <Select label="Origem" value={params.get('origin')} onChange={(v) => set({ origin: v })} options={d.filters.origins.map((x) => [x.key, x.label])} />
           {activeFilters.length > 0 && <button className="tw-clear" onClick={() => set(Object.fromEntries(FILTERS.map((k) => [k, ''])))}>Limpar filtros</button>}
         </div>
       </div>
@@ -89,7 +92,7 @@ export default function Torre() {
           <State n={s.operacao.n} label="Itens em operação" onClick={() => go('operacao')} lines={[`${s.operacao.producao} em produção`, `${s.operacao.revisao} em revisão`, `${s.operacao.clientes} com clientes`]} />
           <State n={s.clientes.n} label="Clientes na base" onClick={() => go('clientes')} lines={[`${s.clientes.ativos} ativos · ${s.clientes.a_confirmar} a confirmar`, `${s.clientes.com_operacao} com conteúdo no processo`]} />
           <State n={s.producao.n} label="Em produção" onClick={() => setDrawer({ kind: 'stage', stage: 'producao,analise_producao,ajuste_interno,ajuste_cliente,revisao_ajuste', label: 'Em produção' })} lines={[`${s.producao.bloqueados} bloqueados · ${s.producao.agendados} agendados`, `${s.producao.publicados} publicados no período`]} />
-          <State n={s.prazos.n} label="Tarefas atrasadas" alert={s.prazos.n > 0} onClick={() => setDrawer({ kind: 'prazos' })} lines={[`${s.prazos.hoje} vencem hoje`, `${s.prazos.sem_responsavel} sem responsável`].concat(s.prazos.herdados ? [`+ ${s.prazos.herdados} herdadas da migração (fora da conta de desempenho)`] : [])} />
+          <State n={s.prazos.n} label="Tarefas atrasadas" alert={s.prazos.n > 0} onClick={() => setDrawer({ kind: 'prazos' })} lines={[`${s.prazos.hoje} vencem hoje${s.prazos.hoje_herdados ? ` (+ ${s.prazos.hoje_herdados} herdadas)` : ''}`, `${s.prazos.sem_responsavel} sem responsável`].concat(s.prazos.herdados ? [`+ ${s.prazos.herdados} herdadas da migração (fora da conta de desempenho)`] : [])} />
           <State n={s.riscos.n} label="Riscos" alert={s.riscos.n > 0} onClick={() => go('riscos')} lines={[`${pl(s.riscos.clientes, 'cliente envolvido', 'clientes envolvidos')}`, s.riscos.criticas != null ? `${pl(s.riscos.criticas, 'pendência crítica', 'pendências críticas')}` : 'pendências: acesso restrito']} />
           <State n={s.pessoas.n} label="Pessoas" onClick={() => go('pessoas')} lines={[`${s.pessoas.abertas} tarefas abertas`, `${s.pessoas.sobrecarga} em sobrecarga · ${s.pessoas.sem_carga} sem carga`]} />
         </div>
@@ -168,6 +171,34 @@ export default function Torre() {
         <Accumulation stages={d.stages} open={(x) => setDrawer({ kind: 'stage', stage: x.stage, label: x.label })} />
       </section>
 
+      {/* PESSOAS */}
+      <section id="pessoas" className="tw-sec">
+        <h2 className="tw-h2">Capacidade da equipe</h2>
+        {d.people_insights.length > 0 && (
+          <ul className="tw-pins">{d.people_insights.map((p, i) => <li key={i}><span className="tw-label">{p.kind}</span><span>{p.text}</span><Link className="tw-more" to={p.link}>Ver <I.arrow size={13} /></Link></li>)}</ul>
+        )}
+        <p className="tw-lead">Carga, alertas e situação usam só tarefas nascidas na plataforma. Tarefas herdadas da migração aparecem à parte e não pesam contra ninguém. Capacidade = valor configurado no cadastro, não medido.</p>
+        <div className="tw-table tw-cap-table" role="table" aria-label="Capacidade por pessoa">
+          <div className="tw-tr tw-th" role="row"><span role="columnheader">Pessoa</span><span role="columnheader">Abertas</span><span role="columnheader">Herdadas</span><span role="columnheader">Atrasadas</span><span role="columnheader">Próx. 7 dias</span><span role="columnheader">Carga × capacidade</span><span role="columnheader">Situação</span></div>
+          {d.people.map((p) => {
+            const max = Math.max(p.capacity, p.open_real, 1);
+            return (
+              <button key={p.id} className="tw-tr" role="row" onClick={() => setDrawer({ kind: 'person', id: p.id, label: p.name })} aria-label={`${p.name}: ${p.open_real} abertas da plataforma, ${p.open_inherited} herdadas, ${p.late} atrasadas`}>
+                <span className="tw-person" role="cell"><b>{p.name}</b><small>{p.functions.map((f) => FUNCTIONS[f] || f).join(' · ') || 'Sem função operacional'}</small></span>
+                <span className="n" role="cell" data-l="Abertas">{p.open_real}</span>
+                <span className="n muted" role="cell" data-l="Herdadas" title="Herdadas da migração: fora de alertas e indicadores">{p.open_inherited}{p.inherited ? <small> · {p.inherited} c/ prazo de migração vencido</small> : null}</span>
+                <span className={`n ${p.late ? 'alert' : ''}`} role="cell" data-l="Atrasadas">{p.late}</span>
+                <span className="n" role="cell" data-l="Próx. 7 dias">{p.next7}{p.next7_inherited ? <small>+ {p.next7_inherited} herdadas</small> : null}</span>
+                <span className="tw-cap" role="cell" title={`${p.open_real} de ${p.capacity}/semana (${p.capacity_source})`}><i style={{ width: `${(p.open_real / max) * 100}%` }} /><s style={{ left: `${(p.capacity / max) * 100}%` }} /></span>
+                <span className={`tw-sit s-${p.situation}`} role="cell">{SITUATION[p.situation]}</span>
+              </button>
+            );
+          })}
+        </div>
+        {d.performance_base && <p className="tw-lead mt-4"><b>Base de performance:</b> {d.performance_base.valid_events ? `${d.performance_base.valid_events} evento(s) operacional(is) válido(s) registrado(s)` : 'DADOS INSUFICIENTES — nenhuma tarefa concluída nascida na plataforma ainda'}{d.performance_base.pending_classification ? ` · ${d.performance_base.pending_classification} item(ns) herdado(s) aguardando classificação, fora da base` : ''}. Score individual não é calculado.</p>}
+        {d.fn_load.length > 0 && <p className="tw-lead mt-4">Por função: {d.fn_load.map((f) => `${FUNCTIONS[f.fn] || f.fn} — ${pl(f.open, 'aberta', 'abertas')} para ${pl(f.people, 'pessoa', 'pessoas')}`).join(' · ')}</p>}
+      </section>
+
       {/* CLIENTES + RESPONSABILIDADES */}
       <div className="tw-two">
         <section id="clientes" className="tw-sec">
@@ -180,53 +211,32 @@ export default function Torre() {
         </section>
       </div>
 
-      {/* PESSOAS */}
-      <section id="pessoas" className="tw-sec">
-        <h2 className="tw-h2">Capacidade da equipe</h2>
-        {d.people_insights.length > 0 && (
-          <ul className="tw-pins">{d.people_insights.map((p, i) => <li key={i}><span className="tw-label">{p.kind}</span><span>{p.text}</span><Link className="tw-more" to={p.link}>Ver <I.arrow size={13} /></Link></li>)}</ul>
-        )}
-        <div className="tw-table" role="table" aria-label="Capacidade por pessoa">
-          <div className="tw-tr tw-th" role="row"><span role="columnheader">Pessoa</span><span role="columnheader">Abertas</span><span role="columnheader">Atrasadas</span><span role="columnheader">Concluídas no período</span><span role="columnheader">Carga × capacidade</span><span role="columnheader">Situação</span></div>
-          {d.people.map((p) => {
-            const max = Math.max(p.capacity, p.open, 1);
-            return (
-              <button key={p.id} className="tw-tr" role="row" onClick={() => setDrawer({ kind: 'person', id: p.id, label: p.name })} aria-label={`${p.name}: ${p.open} abertas, ${p.late} atrasadas`}>
-                <span className="tw-person" role="cell"><b>{p.name}</b><small>{p.functions.map((f) => FUNCTIONS[f] || f).join(' · ') || 'Sem função operacional'}</small></span>
-                <span className="n" role="cell" data-l="Abertas">{p.open}</span>
-                <span className={`n ${p.late ? 'alert' : ''}`} role="cell" data-l="Atrasadas">{p.late}{p.inherited ? <small title="Prazo calculado na migração; fora de qualquer indicador até ser classificado"> · {p.inherited} herdadas, fora da conta</small> : null}</span>
-                <span className="n" role="cell" data-l="Concluídas">{p.done}{p.done_late ? <small> · {p.done_late} c/ atraso</small> : null}</span>
-                <span className="tw-cap" role="cell" aria-hidden><i style={{ width: `${(p.open / max) * 100}%` }} /><s style={{ left: `${(p.capacity / max) * 100}%` }} /></span>
-                <span className={`tw-sit s-${p.situation}`} role="cell">{SITUATION[p.situation]}</span>
-              </button>
-            );
-          })}
-        </div>
-        {d.fn_load.length > 0 && <p className="tw-lead mt-4">Por função: {d.fn_load.map((f) => `${FUNCTIONS[f.fn] || f.fn} — ${pl(f.open, 'aberta', 'abertas')} para ${pl(f.people, 'pessoa', 'pessoas')}`).join(' · ')}</p>}
+      {/* PERÍODO */}
+      <section id="periodo" className="tw-sec">
+        <div className="tw-sec-head"><h2 className="tw-h2">Desempenho do período</h2><span className="tw-period-l">{d.period.label}</span></div>
+        <Performance p={d.performance} />
       </section>
 
       {/* INTELIGÊNCIA */}
       <section id="inteligencia" className="tw-sec">
         <div className="tw-sec-head"><h2 className="tw-h2">Inteligência The Bold</h2><Link className="tw-more" to="/insights">Todos os insights <I.arrow size={13} /></Link></div>
-        <p className="tw-lead">Leituras automáticas sobre os dados da plataforma. Cada uma mostra a evidência — nada é diagnóstico sem dado.</p>
+        <p className="tw-lead">Leituras automáticas sobre os dados da plataforma, separadas em fato, padrão observado, hipótese e recomendação. Correlação não é causa: a hipótese nunca aponta uma pessoa ou um cliente como culpado.</p>
         {!d.intel.length ? <p className="tw-empty">Nenhum padrão relevante nos dados atuais.</p> : (
           <div className="tw-intel">{d.intel.map((x) => (
             <article key={x.id} className="tw-in">
               <div className="tw-label">{x.kind}</div>
-              <h3 className="tw-in-t">{x.what}</h3>
-              {x.why && <p><b>Por que importa</b> {x.why}</p>}
-              {x.evidence?.length > 0 && <div className="tw-ev"><b>Evidência</b><ul>{x.evidence.map((e, i) => <li key={i}>{e}</li>)}</ul></div>}
-              {x.suggestion && <p><b>Ação sugerida</b> {x.suggestion}</p>}
+              <h3 className="tw-in-t">{x.fact || x.what}</h3>
+              <dl className="tw-rc">
+                <div><dt>Fato</dt><dd>{x.evidence?.length > 0 ? <ul>{x.evidence.map((e, i) => <li key={i}>{e}</li>)}</ul> : 'Medido na base agora.'}</dd></div>
+                <div><dt>Padrão observado</dt><dd>{x.pattern || <span className="muted">Nenhum padrão além do fato com os dados atuais.</span>}</dd></div>
+                <div><dt>Hipótese <small>não verificada</small></dt><dd>{x.hypothesis?.text || <span className="muted">Sem hipótese registrada.</span>}</dd></div>
+                <div><dt>Recomendação</dt><dd>{x.recommendation || x.suggestion || '—'}</dd></div>
+                {x.why && <div><dt>Impacto esperado</dt><dd>{x.why}</dd></div>}
+              </dl>
               {x.action.to.startsWith('#') ? <button className="tw-more" onClick={() => go(x.action.to.slice(1))}>{x.action.label} <I.arrow size={13} /></button> : <Link className="tw-more" to={x.action.to}>{x.action.label} <I.arrow size={13} /></Link>}
             </article>
           ))}</div>
         )}
-      </section>
-
-      {/* PERÍODO */}
-      <section id="periodo" className="tw-sec">
-        <div className="tw-sec-head"><h2 className="tw-h2">Desempenho do período</h2><span className="tw-period-l">{d.period.label}</span></div>
-        <Performance p={d.performance} />
       </section>
 
       {/* DETALHAMENTO */}
@@ -446,7 +456,7 @@ function TowerDrawer({ drawer, d, params, onClose }) {
       {drawer.kind === 'prazos' && (d.deadlines.length ? d.deadlines.map((t) => (
         <Link key={t.id} to={t.content_id ? `/conteudos/${t.content_id}` : t.client_id ? `/clientes/${t.client_id}` : '/processos'} className="erow link" style={{ gridTemplateColumns: '84px minmax(0,1fr)' }}>
           <div className="ed" style={{ fontSize: 22, color: t.overdue ? 'var(--err)' : undefined }}>{fmtDate(t.due_at)}</div>
-          <div><div className="t">{t.title}</div><div className="s">{cleanName(t.client || '')}{t.assignee ? ` · ${t.assignee}` : ' · sem responsável'} · {t.overdue ? 'vencido' : ago(t.due_at)}</div></div>
+          <div><div className="t">{t.title}</div><div className="s">{cleanName(t.client || '')}{t.assignee ? ` · ${t.assignee}` : ' · sem responsável'} · {t.overdue ? 'vencido' : ago(t.due_at)}{t.inherited ? ' · herdada da migração' : ''}</div></div>
         </Link>
       )) : <Empty title="Nenhuma tarefa aberta com prazo." />)}
       {drawer.kind === 'automacoes' && <Runs params={params} />}

@@ -45,6 +45,7 @@ export default function ClienteDetalhe() {
           <div className="row wrap gap-4 mt-4">
             {auth.can('carteira', 'edit') ? <StatusControl c={c} reload={reload} />
               : <span className={`tag ${c.status === 'onboarding' ? 'tag-bordo' : c.status === 'ativo' ? 'tag-ok' : ''}`}>{c.status === 'a_confirmar' ? 'status a confirmar' : c.status}</span>}
+            {c.kind === 'interno' && <span className="tag tag-bordo" title="A própria The Bold: fica fora das métricas de carteira, comerciais e de clientes externos">Cliente interno</span>}
             <Risk level={c.risk.level} />{['baixo', 'nenhum'].includes(c.risk.level) && <span className="xs muted">sem riscos identificados</span>}
             <span className="sm muted">{c.services.join(' · ')}</span>
           </div>

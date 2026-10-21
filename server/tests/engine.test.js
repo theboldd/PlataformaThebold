@@ -206,3 +206,28 @@ test('comentário vira ajuste: só onde a equipe está com o conteúdo, uma vez,
   assert.throws(() => P.commentToAdjustment(cx.id, U.out), /Sem permissão/);
   assert.ok(one("SELECT 1 FROM activity_logs WHERE action='comentario.virou_ajuste' AND entity_id=?", cm.id));
 });
+
+test('regra 14: "aprovado" só com registro de aprovação; etapa não prova aprovação', () => {
+  const c = P.createContent({ client_id: client.id, title: 'Sem registro', format: 'estatico', stage: 'agendamento' }, U.est);
+  assert.equal(P.publicStatus(one('SELECT * FROM contents WHERE id=?', c.id)), 'aprovacao_nao_registrada');
+  run('UPDATE contents SET approved_version_id=? WHERE id=?', 'v_fake', c.id);
+  assert.equal(P.publicStatus(one('SELECT * FROM contents WHERE id=?', c.id)), 'aprovado');
+});
+
+test('causa raiz: fato, padrão, hipótese marcada como não verificada; carga ignora herdados', async () => {
+  const I = await import('../engine/intelligence.js');
+  const before = all("SELECT fingerprint FROM ai_insights WHERE detector='carga' AND status='aberto'").length;
+  run("UPDATE tasks SET perf_status='migrado' WHERE assignee_id=?", U.des.id);
+  for (let i = 0; i < 12; i++) insert('tasks', { id: uid('t_'), title: `Herdada ${i}`, client_id: client.id, assignee_id: U.des.id, status: 'aberta', kind: 'etapa', function: 'design', perf_status: 'migrado', created_at: now() });
+  I.runDetectors();
+  assert.ok(!one("SELECT 1 FROM ai_insights WHERE fingerprint=? AND status='aberto'", `carga:${U.des.id}`), 'herdadas não geram alerta de carga');
+  for (const i of all("SELECT * FROM ai_insights WHERE status='aberto'")) {
+    const e = I.explain(i);
+    assert.ok(e.fact);
+    if (e.hypothesis) {
+      assert.equal(e.hypothesis.verified, false);
+      for (const u of all("SELECT name FROM users WHERE role_key<>'cliente'")) assert.ok(!e.hypothesis.text.includes(u.name), 'hipótese não aponta pessoa');
+    }
+  }
+  assert.ok(before >= 0);
+});

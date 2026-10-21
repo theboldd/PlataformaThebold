@@ -5,8 +5,8 @@
 import { one, all, now, parseJSON } from '../db.js';
 import { scopeSQL, can } from '../lib/permissions.js';
 import { STAGES, STAGE_ORDER } from './process.js';
-import { computePendencies, clientRisk, teamLoad, runDetectors, OPERATING } from './intelligence.js';
-import { PERF_SQL, perfOK, isInherited } from '../services/delayReview.js';
+import { computePendencies, clientRisk, teamLoad, runDetectors, explain, OPERATING } from './intelligence.js';
+import { PERF_SQL, perfOK, isInherited, performanceBase } from '../services/delayReview.js';
 import { CATALOG } from './automations.js';
 
 const DAY = 864e5;
@@ -37,10 +37,24 @@ export function periodOf(qs) {
   return { key, label, start: start.toISOString(), end: end.toISOString(), prev_start: new Date(start - len).toISOString(), prev_end: start.toISOString() };
 }
 
+// Status (linguagem pública, regra oficial 14 incluída) → condição SQL sobre o conteúdo
+const inS = (a, list) => `${a}.stage IN (${list.map((s) => `'${s}'`).join(',')})`;
+const STATUS_SQL = {
+  rascunho: (a) => inS(a, ['cronograma', 'analise_cronograma', 'ajuste_cronograma']),
+  aguardando_cliente: (a) => inS(a, ['aprovacao_tema', 'aprovacao_cliente']),
+  em_producao: (a) => inS(a, ['producao', 'analise_producao', 'ajuste_interno', 'ajuste_cliente', 'revisao_ajuste']),
+  aprovado: (a) => `${a}.approved_version_id IS NOT NULL AND ${inS(a, ['agendamento', 'agendado', 'publicado'])}`,
+  aprovacao_nao_registrada: (a) => `${a}.approved_version_id IS NULL AND ${inS(a, ['agendamento', 'agendado', 'publicado'])}`,
+  agendado: (a) => inS(a, ['agendado']), publicado: (a) => inS(a, ['publicado']), bloqueado: (a) => `${a}.blocked=1`,
+};
+const STATUS_LABEL = { rascunho: 'Rascunho', aguardando_cliente: 'Aguardando cliente', em_producao: 'Em produção', aprovado: 'Aprovado (registrado)', aprovacao_nao_registrada: 'Aprovação não registrada', agendado: 'Agendado', publicado: 'Publicado', bloqueado: 'Bloqueado' };
+const KIND_LABEL = { etapa: 'Etapa do processo', ajuste: 'Ajuste', follow_up: 'Follow-up', onboarding: 'Onboarding', reuniao: 'Reunião', manual: 'Manual', agendamento: 'Agendamento' };
+
 export function tower(user, qs = {}) {
   const P = periodOf(qs);
   const nowIso = now();
-  const F = { client_id: qs.client_id || null, assignee_id: qs.assignee_id || null, format: qs.format || null, stage: qs.stage || null, priority: qs.priority || null };
+  const F = { client_id: qs.client_id || null, assignee_id: qs.assignee_id || null, format: qs.format || null, stage: qs.stage || null, priority: qs.priority || null,
+    status: STATUS_SQL[qs.status] ? qs.status : null, kind: qs.kind || null, origin: ['migrado', 'plataforma'].includes(qs.origin) ? qs.origin : null };
   const scC = scopeSQL(user, 'c.client_id');
   // filtro de conteúdos (alias c)
   const cw = (alias = 'c') => {
@@ -50,6 +64,9 @@ export function tower(user, qs = {}) {
     if (F.priority) { w.push(`${alias}.priority=?`); p.push(F.priority); }
     if (F.stage) { w.push(`${alias}.stage=?`); p.push(F.stage); }
     if (F.assignee_id) { w.push(`EXISTS (SELECT 1 FROM tasks ft WHERE ft.content_id=${alias}.id AND ft.assignee_id=? AND ft.status IN ('aberta','em_andamento'))`); p.push(F.assignee_id); }
+    if (F.status) w.push(STATUS_SQL[F.status](alias));
+    if (F.origin) w.push(`${alias}.strategy_tags ${F.origin === 'migrado' ? '' : 'NOT '}LIKE '%importado-notion%'`);
+    if (F.kind) { w.push(`EXISTS (SELECT 1 FROM tasks fk WHERE fk.content_id=${alias}.id AND fk.kind=?)`); p.push(F.kind); }
     return { sql: w.join(' AND '), p };
   };
   // filtro de tarefas (alias t)
@@ -61,12 +78,17 @@ export function tower(user, qs = {}) {
     if (F.priority) { w.push(`${alias}.priority=?`); p.push(F.priority); }
     if (F.stage) { w.push(`${alias}.stage=?`); p.push(F.stage); }
     if (F.format) { w.push(`(${alias}.content_id IS NULL OR EXISTS (SELECT 1 FROM contents fc WHERE fc.id=${alias}.content_id AND fc.format=?))`); p.push(F.format); }
+    if (F.kind) { w.push(`${alias}.kind=?`); p.push(F.kind); }
+    // origem: tarefa herdada da migração (perf_status preenchido) × evento operacional real nascido na plataforma
+    if (F.origin) w.push(`${alias}.perf_status IS ${F.origin === 'migrado' ? 'NOT ' : ''}NULL`);
+    if (F.status) w.push(`EXISTS (SELECT 1 FROM contents fs WHERE fs.id=${alias}.content_id AND ${STATUS_SQL[F.status]('fs')})`);
     return { sql: w.join(' AND '), p };
   };
 
   // ── Base ──
   const clientScope = scopeSQL(user, 'id');
-  const clients = all(`SELECT * FROM clients WHERE status IN (${q(OPERATING)}) AND ${clientScope.sql} ${F.client_id ? 'AND id=?' : ''} ORDER BY name`, ...OPERATING, ...clientScope.params, ...(F.client_id ? [F.client_id] : []));
+  // carteira = clientes externos (a The Bold, cliente interno, fica fora: regra oficial 16)
+  const clients = all(`SELECT * FROM clients WHERE status IN (${q(OPERATING)}) AND kind<>'interno' AND ${clientScope.sql} ${F.client_id ? 'AND id=?' : ''} ORDER BY name`, ...OPERATING, ...clientScope.params, ...(F.client_id ? [F.client_id] : []));
   const C = cw();
   const content = all(`SELECT c.*, cl.name client FROM contents c JOIN clients cl ON cl.id=c.client_id WHERE c.stage<>'cancelado' AND ${C.sql}`, ...C.p);
   const T = tw();
@@ -150,25 +172,34 @@ export function tower(user, qs = {}) {
 
   // ── Pessoas ──
   const done = Object.fromEntries(all(`SELECT completed_by id, COUNT(*) n, SUM(due_at IS NOT NULL AND completed_at > due_at AND ${PERF_SQL.individual('tasks')}) late FROM tasks WHERE status='concluida' AND completed_at BETWEEN ? AND ? GROUP BY completed_by`, P.start, P.end).map((r) => [r.id, r]));
+  // CAPACIDADE: carga e alertas só com eventos operacionais reais (tarefa nascida na plataforma).
+  // Tarefa herdada da migração aparece à parte ("carga herdada") e nunca vira alerta sobre a pessoa.
+  const week = new Date(Date.now() + 7 * 864e5).toISOString();
+  const real = (t) => !t.perf_status;
   const people = teamLoad().filter((u) => !F.assignee_id || u.id === F.assignee_id).map((u) => {
     const open = openTasks.filter((t) => t.assignee_id === u.id);
+    const op = open.filter(real);
     const late = open.filter((t) => t.due_at && t.due_at < nowIso && perfOK.individual(t)).length;
     const inherited = open.filter((t) => t.due_at && t.due_at < nowIso && isInherited(t)).length;
-    const ratio = u.capacity ? open.length / u.capacity : 0;
-    return { id: u.id, name: u.name, functions: parseJSON(u.functions, []), capacity: u.capacity, open: open.length, late, inherited, done: done[u.id]?.n || 0, done_late: done[u.id]?.late || 0,
-      situation: open.length > u.capacity ? 'sobrecarga' : ratio >= 0.8 ? 'alta' : open.length === 0 ? 'sem_carga' : 'normal' };
+    const ratio = u.capacity ? op.length / u.capacity : 0;
+    return { id: u.id, name: u.name, functions: parseJSON(u.functions, []), capacity: u.capacity, capacity_source: 'configurada no cadastro (não medida)',
+      open: open.length, open_real: op.length, open_inherited: open.length - op.length, late, inherited,
+      next7: op.filter((t) => t.due_at && t.due_at >= nowIso && t.due_at <= week).length, next7_inherited: open.filter((t) => !real(t) && t.due_at && t.due_at >= nowIso && t.due_at <= week).length, done: done[u.id]?.n || 0, done_late: done[u.id]?.late || 0,
+      situation: !op.length && open.length ? 'so_herdada' : op.length > u.capacity ? 'sobrecarga' : ratio >= 0.8 ? 'alta' : op.length === 0 ? 'sem_carga' : 'normal' };
   });
   const totalOpen = openTasks.length;
+  const realOpen = openTasks.filter(real).length;
   const peopleInsights = [];
-  if (totalOpen >= 5) {
-    const top = [...people].sort((a, b) => b.open - a.open)[0];
-    if (top && top.open / totalOpen >= 0.4) peopleInsights.push({ kind: 'Concentração', text: `${top.name} concentra ${Math.round((top.open / totalOpen) * 100)}% das tarefas abertas da operação (${top.open} de ${totalOpen}).`, link: `/processos?assignee_id=${top.id}`, person: top.id });
+  if (realOpen >= 5) {
+    const top = [...people].sort((a, b) => b.open_real - a.open_real)[0];
+    if (top && top.open_real / realOpen >= 0.4) peopleInsights.push({ kind: 'Concentração', text: `${top.name} concentra ${Math.round((top.open_real / realOpen) * 100)}% das tarefas abertas nascidas na plataforma (${top.open_real} de ${realOpen}).`, link: `/processos?assignee_id=${top.id}`, person: top.id });
   }
   const busy = people.filter((p) => ['alta', 'sobrecarga'].includes(p.situation));
   const idle = people.filter((p) => p.situation === 'sem_carga' && p.functions.length);
   if (busy.length && idle.length) peopleInsights.push({ kind: 'Subutilização', text: `${pl(idle.length, 'pessoa com função operacional está', 'pessoas com função operacional estão')} sem tarefas (${idle.map((p) => p.name).join(', ')}) enquanto ${busy.map((p) => p.name).join(', ')} ${busy.length === 1 ? 'está' : 'estão'} com carga alta.`, link: '/processos' });
-  for (const p of people.filter((x) => x.situation === 'sobrecarga')) peopleInsights.push({ kind: 'Sobrecarga', text: `${p.name}: ${p.open} tarefas abertas para capacidade de ${p.capacity}/semana${p.late ? `, ${pl(p.late, 'atrasada', 'atrasadas')}` : ''}.`, link: `/processos?assignee_id=${p.id}`, person: p.id });
+  for (const p of people.filter((x) => x.situation === 'sobrecarga')) peopleInsights.push({ kind: 'Sobrecarga', text: `${p.name}: ${p.open_real} tarefas abertas nascidas na plataforma para capacidade configurada de ${p.capacity}/semana${p.late ? `, ${pl(p.late, 'atrasada', 'atrasadas')}` : ''}.`, link: `/processos?assignee_id=${p.id}`, person: p.id });
   if (unassigned.length) peopleInsights.push({ kind: 'Sem responsável', text: `${pl(unassigned.length, 'tarefa aberta sem responsável', 'tarefas abertas sem responsável')} — ninguém foi notificado.`, link: '/pendencias' });
+  if (!realOpen && totalOpen) peopleInsights.push({ kind: 'Dados insuficientes', text: `Todas as ${totalOpen} tarefas abertas são herdadas da migração. Sobrecarga, concentração e subutilização só são calculadas com tarefas nascidas na plataforma.`, link: '/processos' });
   const byFn = {};
   for (const t of openTasks) if (t.function) byFn[t.function] = (byFn[t.function] || 0) + 1;
   const fnLoad = Object.entries(byFn).map(([fn, n]) => ({ fn, open: n, people: people.filter((p) => p.functions.includes(fn)).length })).sort((a, b) => b.open - a.open);
@@ -215,6 +246,8 @@ export function tower(user, qs = {}) {
     intel.push({ id: 'agg:sem_responsavel', kind: 'Responsabilidade', severity: 'alta', what: `${pl(list.length, 'cliente', 'clientes')} sem pessoa vinculada em funções essenciais do processo.`,
       why: 'Tarefas dessas funções nascem sem responsável: ninguém é notificado e a etapa para.',
       evidence: list.slice(0, 6).map(([n, fns]) => `${n}: ${fns.join(', ')}`).concat(list.length > 6 ? [`+ ${list.length - 6} cliente(s)`] : []),
+      fact: `${pl(list.length, 'cliente', 'clientes')} sem pessoa vinculada em funções essenciais do processo.`, pattern: null, hypothesis: null,
+      recommendation: 'Vincular os responsáveis na aba Equipe de cada cliente (Divisão).',
       action: { label: 'Ver responsabilidades', to: '#responsabilidades' } });
   }
   for (const i of ins.filter((x) => x.detector !== 'sem_responsavel')) {
@@ -228,9 +261,10 @@ export function tower(user, qs = {}) {
     } else if (i.detector === 'tempo_aprovacao') ev.push(`Média de ${String(i.metric).replace('.', ',')} ${i.metric === 1 ? 'dia' : 'dias'} entre envio e aprovação nos últimos 60 dias.`);
     else if (i.metric != null) ev.push(`Medida: ${String(i.metric).replace('.', ',')}${i.detector === 'dependencia' ? '% das intervenções manuais' : ''}`);
     intel.push({ id: i.id, kind: { gargalo: 'Gargalo', carga: 'Capacidade', tempo_aprovacao: 'Tendência', retrabalho: 'Retrabalho', material: 'Dependência', dependencia: 'Dependência' }[i.detector] || 'Padrão',
-      severity: i.severity, what: i.problem, why: i.impact, evidence: ev, suggestion: i.suggestion, action: { label: i.action || 'Investigar', to: link } });
+      severity: i.severity, what: i.problem, why: i.impact, evidence: ev, suggestion: i.suggestion, action: { label: i.action || 'Investigar', to: link }, ...explain(i) });
   }
-  for (const pi of peopleInsights.filter((x) => x.kind === 'Concentração')) intel.push({ id: `conc:${pi.person}`, kind: 'Concentração', severity: 'media', what: pi.text, why: 'Uma única pessoa vira ponto de falha do ciclo.', evidence: [`${totalOpen} tarefas abertas na operação`], action: { label: 'Ver tarefas', to: pi.link } });
+  for (const pi of peopleInsights.filter((x) => x.kind === 'Concentração')) intel.push({ id: `conc:${pi.person}`, kind: 'Concentração', severity: 'media', what: pi.text, why: 'Uma única pessoa vira ponto de falha do ciclo.', evidence: [`${totalOpen} tarefas abertas na operação`], action: { label: 'Ver tarefas', to: pi.link },
+    fact: pi.text, pattern: null, hypothesis: null, recommendation: 'Verificar a distribuição por função antes de redistribuir.' });
 
   // ── Detalhamento: financeiro, comercial, automações, relatórios, agenda ──
   const fin = can(user, 'financeiro') ? (() => {
@@ -270,7 +304,7 @@ export function tower(user, qs = {}) {
     operacao: { n: inOp.length, producao: inOp.filter((c) => PROD.includes(c.stage) && !REVIEW.includes(c.stage)).length, revisao: inOp.filter((c) => REVIEW.includes(c.stage)).length, clientes: inOp.filter((c) => WAIT.includes(c.stage)).length },
     clientes: { n: clients.length, ativos: clients.filter((c) => c.status === 'ativo').length, a_confirmar: clients.filter((c) => c.status === 'a_confirmar').length, com_operacao: new Set(inOp.map((c) => c.client_id)).size, em_risco: riskLevels.filter((r) => ['alto', 'critico'].includes(r)).length },
     producao: { n: content.filter((c) => PROD.includes(c.stage)).length, bloqueados: blocks.length, agendados: content.filter((c) => c.stage === 'agendado').length, publicados: cur.publicados },
-    prazos: { n: lateTasks.length, herdados: inheritedLate.length, hoje: openTasks.filter((t) => t.due_at && t.due_at >= nowIso && t.due_at <= endToday).length, sem_responsavel: unassigned.length },
+    prazos: { n: lateTasks.length, herdados: inheritedLate.length, hoje: openTasks.filter((t) => !t.perf_status && t.due_at && t.due_at >= nowIso && t.due_at <= endToday).length, hoje_herdados: openTasks.filter((t) => t.perf_status && t.due_at && t.due_at >= nowIso && t.due_at <= endToday).length, sem_responsavel: unassigned.length },
     riscos: { n: risks.length, criticas: pend ? critical.length : null, clientes: new Set(risks.map((r) => r.client_id).filter(Boolean)).size },
     pessoas: { n: people.length, sobrecarga: people.filter((p) => p.situation === 'sobrecarga').length, sem_carga: people.filter((p) => p.situation === 'sem_carga').length, abertas: totalOpen },
   };
@@ -289,6 +323,9 @@ export function tower(user, qs = {}) {
     stages: all(`SELECT DISTINCT stage FROM contents c WHERE stage<>'cancelado' AND ${scC.sql}`, ...scC.params).map((r) => r.stage).sort((a, b) => STAGE_ORDER.indexOf(a) - STAGE_ORDER.indexOf(b)).map((s) => ({ key: s, label: STAGES[s].label })),
     formats: all(`SELECT DISTINCT format FROM contents c WHERE ${scC.sql}`, ...scC.params).map((r) => r.format),
     priorities: all(`SELECT DISTINCT priority FROM contents c WHERE ${scC.sql}`, ...scC.params).map((r) => r.priority),
+    statuses: Object.keys(STATUS_SQL).filter((k) => one(`SELECT 1 FROM contents c WHERE c.stage<>'cancelado' AND ${STATUS_SQL[k]('c')} AND ${scC.sql} LIMIT 1`, ...scC.params)).map((k) => ({ key: k, label: STATUS_LABEL[k] })),
+    kinds: all("SELECT DISTINCT kind FROM tasks WHERE status IN ('aberta','em_andamento','agendada')").map((r) => ({ key: r.kind, label: KIND_LABEL[r.kind] || r.kind })),
+    origins: [{ key: 'migrado', label: 'Dado migrado do Notion' }, { key: 'plataforma', label: 'Evento real da plataforma' }],
   };
 
   return {
@@ -296,12 +333,12 @@ export function tower(user, qs = {}) {
     risks: risks.slice(0, 12), bottlenecks, blocks,
     stages, lanes,
     health, responsibilities: { no_owner: noOwner, unassigned, team_conflicts: teamConflicts },
-    people, people_insights: peopleInsights, fn_load: fnLoad,
+    people, people_insights: peopleInsights, fn_load: fnLoad, performance_base: performanceBase(),
     performance: { current: cur, previous: prev, comparable, first_event: firstEvent, moves, moves_n: movesN, pendencias_abertas: pend ? pend.length : null },
     intel, finance: fin, crm, automations: autos, report, meetings,
     // herdados vencidos ficam fora desta lista: estão na Revisão de atrasos
     deadlines: openTasks.filter((t) => t.due_at && !(isInherited(t) && t.due_at < nowIso)).sort((a, b) => a.due_at.localeCompare(b.due_at)).slice(0, 25)
-      .map((t) => ({ id: t.id, title: t.title, client: t.client, assignee: t.assignee, due_at: t.due_at, content_id: t.content_id, client_id: t.client_id, overdue: t.due_at < nowIso && perfOK.equipe(t) })),
+      .map((t) => ({ id: t.id, title: t.title, client: t.client, assignee: t.assignee, due_at: t.due_at, content_id: t.content_id, client_id: t.client_id, overdue: t.due_at < nowIso && perfOK.equipe(t), inherited: !!t.perf_status })),
   };
 }
 

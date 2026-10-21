@@ -40,7 +40,7 @@ function feedItem(c, client) {
   // Histórico de versões que o cliente já viu (nunca rascunhos internos)
   const versions = c.stage === 'aprovacao_tema' ? [] : all("SELECT * FROM content_versions WHERE content_id=? AND (sent_to_client_at IS NOT NULL OR status='aprovada') ORDER BY number DESC", c.id)
     .map((x) => ({ number: x.number, caption: x.caption, approved: x.status === 'aprovada', current: x.id === v?.id, sent_at: x.sent_to_client_at, approved_at: x.approved_at, media: versionMedia(x.id).map(fileDTO) }));
-  const liked = ['agendamento', 'agendado', 'publicado'].includes(c.stage) || (c.stage === 'producao' && lastClient?.kind === 'tema' && lastClient.decision === 'aprovado');
+  const liked = (['agendamento', 'agendado', 'publicado'].includes(c.stage) && !!c.approved_version_id) || (c.stage === 'producao' && lastClient?.kind === 'tema' && lastClient.decision === 'aprovado');
   const hrs = lastClient ? (Date.now() - new Date(lastClient.created_at).getTime()) / 3600e3 : 99;
   const canUnlike = lastClient?.decision === 'aprovado' && hrs <= 24 && ((c.stage === 'agendamento' && !c.scheduled_at && lastClient.kind === 'cliente') || (c.stage === 'producao' && lastClient.kind === 'tema' && !c.current_version_id));
   const adjustState = openAdj.length || c.stage === 'revisao_ajuste' ? 'solicitado' : c.stage === 'aprovacao_cliente' && c.client_adjust_rounds > 0 ? 'concluido' : null;
@@ -86,7 +86,7 @@ function projectTrack(clientId) {
 portal.get('/me', (req, res) => {
   const c = myClient(req);
   const team = all("SELECT DISTINCT u.id, u.name, cm.function FROM client_members cm JOIN users u ON u.id=cm.user_id WHERE cm.client_id=? AND cm.function IN ('estrategia','atendimento','design','edicao','copy','revisao') AND u.active=1", c.id);
-  const counts = one(`SELECT SUM(stage IN ('aprovacao_tema','aprovacao_cliente')) aguardando, SUM(stage='ajuste_cliente') em_ajuste, SUM(stage IN ('agendamento','agendado')) aprovados, SUM(stage='publicado') publicados FROM contents WHERE client_id=?`, c.id);
+  const counts = one(`SELECT SUM(stage IN ('aprovacao_tema','aprovacao_cliente')) aguardando, SUM(stage='ajuste_cliente') em_ajuste, SUM(stage IN ('agendamento','agendado') AND approved_version_id IS NOT NULL) aprovados, SUM(stage='publicado') publicados FROM contents WHERE client_id=?`, c.id);
   const next = one("SELECT * FROM meetings WHERE client_id=? AND status='agendada' AND starts_at > ? ORDER BY starts_at LIMIT 1", c.id, now());
   const ob = one('SELECT * FROM onboarding WHERE client_id=?', c.id);
   const timeline = all("SELECT created_at, summary FROM activity_logs WHERE client_id=? AND visibility='client' ORDER BY created_at DESC LIMIT 25", c.id);
@@ -112,6 +112,7 @@ portal.get('/feed', (req, res) => {
   const f = req.query.filter;
   const map = { aguardando: ['aprovacao_tema', 'aprovacao_cliente'], aprovados: ['agendamento', 'agendado', 'publicado'], ajuste: ['ajuste_cliente'], agendados: ['agendado'], publicados: ['publicado'] };
   if (map[f]) { where.push(`stage IN (${map[f].map(() => '?').join(',')})`); p.push(...map[f]); }
+  if (f === 'aprovados') where.push('approved_version_id IS NOT NULL'); // só com aprovação registrada (regra oficial 14)
   if (req.query.month) { where.push('substr(planned_at,1,7)=?'); p.push(req.query.month); }
   if (req.query.format) { where.push('format=?'); p.push(req.query.format); }
   const rows = all(`SELECT * FROM contents WHERE ${where.join(' AND ')} ORDER BY CASE WHEN stage IN ('aprovacao_tema','aprovacao_cliente') THEN 0 ELSE 1 END, planned_at`, ...p);

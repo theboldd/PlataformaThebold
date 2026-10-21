@@ -14,10 +14,11 @@
     "seed": "node --no-warnings=ExperimentalWarning server/seed.js",
     "test": "node --no-warnings=ExperimentalWarning --test server/tests/*.test.js",
     "migrar:notion": "node --no-warnings=ExperimentalWarning server/migration/import-notion.js",
-    "base:real": "BOLD_SEED=equipe node --no-warnings=ExperimentalWarning server/seed.js && npm run migrar:notion && npm run migrar:quadros && npm run acessos:clientes && npm run revisar:herdados",
+    "base:real": "BOLD_SEED=equipe node --no-warnings=ExperimentalWarning server/seed.js && npm run migrar:notion && npm run migrar:quadros && npm run acessos:clientes && npm run migrar:cr-editorial && npm run revisar:herdados",
     "migrar:quadros": "node --no-warnings=ExperimentalWarning server/migration/import-notion-quadro.js outubro && node --no-warnings=ExperimentalWarning server/migration/import-notion-quadro.js novembro",
     "acessos:clientes": "node --no-warnings=ExperimentalWarning server/migration/client-access.js",
-    "revisar:herdados": "node --no-warnings server/migration/revisar-herdados.js"
+    "revisar:herdados": "node --no-warnings server/migration/revisar-herdados.js",
+    "migrar:cr-editorial": "node --no-warnings server/migration/import-cr-editorial.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

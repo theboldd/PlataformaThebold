@@ -7,7 +7,7 @@ import { log, notify, parseMentions, recordMentions, userName, businessDaysFrom 
 import { STAGES, LANES, STAGE_ORDER, publicStatus, productionTracks, createContent, completeTask, reviewDecision, clientDecision, schedule, confirmPublished,
   blockContent, unblockContent, cancelContent, returnToStage, movePreview, moveContent, MOVE_KINDS, commentToAdjustment, COMMENT_ADJ_STAGES, nextAction, contentRisk, editableVersion, currentVersion, versionMedia, resolveAssignee, ensureCycle, setting, DEFAULT_SETTINGS, buildMilestones } from '../engine/process.js';
 import { automation, automationStats } from '../engine/automations.js';
-import { computePendencies, clientSummary, clientRisk, runDetectors, opsMetrics, stageDistribution, teamLoad, OPERATING } from '../engine/intelligence.js';
+import { computePendencies, clientSummary, clientRisk, runDetectors, opsMetrics, stageDistribution, teamLoad, explain, OPERATING } from '../engine/intelligence.js';
 import { executiveOverview } from '../engine/executive.js';
 import { tower, automationRuns, personTasks } from '../engine/tower.js';
 import { ingest, fileDTO, TMP_DIR } from '../services/media.js';
@@ -645,8 +645,8 @@ ops.get('/dashboard', (req, res) => {
 // ═════════════ INSIGHTS + AUTOMAÇÕES ═════════════
 ops.get('/insights', requirePerm('insights', 'view'), (req, res) => {
   const st = req.query.status || 'aberto';
-  res.json(all('SELECT * FROM ai_insights WHERE status=? ORDER BY CASE severity WHEN \'alta\' THEN 0 WHEN \'media\' THEN 1 ELSE 2 END, updated_at DESC', st).map((i) => ({ ...i, action_payload: parseJSON(i.action_payload) }))
-    .filter((i) => !i.client_id || canAccessClient(req.user, i.client_id)));
+  res.json(all('SELECT * FROM ai_insights WHERE status=? ORDER BY CASE severity WHEN \'alta\' THEN 0 WHEN \'media\' THEN 1 ELSE 2 END, updated_at DESC', st).filter((i) => !i.client_id || canAccessClient(req.user, i.client_id))
+    .map((i) => ({ ...i, action_payload: parseJSON(i.action_payload), ...(st === 'aberto' ? explain(i) : { pattern: null, hypothesis: i.cause ? { text: i.cause, verified: false } : null }) })));
 });
 ops.post('/insights/run', requirePerm('insights', 'view'), (_req, res) => { runDetectors(); res.json({ ok: true }); });
 ops.post('/insights/:id/status', requirePerm('insights', 'edit'), (req, res) => {

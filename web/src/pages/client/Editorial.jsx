@@ -41,7 +41,7 @@ export default function Editorial({ clientId }) {
         {k.cancelados > 0 && <span className="muted">{k.cancelados} cancelado(s) fora da lista</span>}
       </div>
       <div className="ed-bar">
-        <Seg label="Visualização" value={view} onChange={setView} options={[{ value: 'fases', label: 'Fases' }, { value: 'mes', label: 'Mês' }, { value: 'feed', label: 'Prévia do feed' }]} />
+        <Seg label="Visualização" value={view} onChange={setView} options={[{ value: 'fases', label: 'Fases' }, { value: 'mes', label: 'Mês' }, { value: 'feed', label: 'Prévia do feed' }, { value: 'notion', label: 'Histórico do Notion' }]} />
         <div className="ed-flags" role="group" aria-label="Filtrar">
           {FLAGS.map(([key, label, f]) => {
             const n = (data.items || []).filter(f).length;
@@ -53,6 +53,7 @@ export default function Editorial({ clientId }) {
       {view === 'fases' && <Phases phases={data.phases} items={items} />}
       {view === 'mes' && <Month month={m} setMonth={setMonth} items={items} clientId={clientId} />}
       {view === 'feed' && <Feed items={items} />}
+      {view === 'notion' && <NotionHistory clientId={clientId} />}
     </div>
   );
 }
@@ -146,5 +147,34 @@ function Feed({ items }) {
         ))}
       </div>
     </>
+  );
+}
+
+// HISTÓRICO DO NOTION · SOMENTE LEITURA: o que existia no "CR EDITORIAL" antes da plataforma. Não é o calendário ativo.
+const val = (v) => (v == null ? '' : Array.isArray(v) ? v.join(', ') : typeof v === 'object' ? (v.start ? `${v.start}${v.end ? ` → ${v.end}` : ''}` : JSON.stringify(v)) : String(v));
+function NotionHistory({ clientId }) {
+  const { data, error, loading } = useApi(`/clients/${clientId}/notion-history`, [clientId], { live: false });
+  if (error) return <ErrorBox error={error} />;
+  if (loading || !data) return <Loading rows={4} />;
+  return (
+    <section className="ed-hist" aria-label="Histórico do Notion">
+      <div className="ed-hist-banner"><b>Histórico do Notion · somente leitura</b><span>Itens do calendário “CR EDITORIAL”, guardados como contexto. Não geram tarefa, pendência, atraso nem cobrança e não substituem o calendário editorial da plataforma.{data.extracted_at ? ` Extraído em ${fmtDate(data.extracted_at)}.` : ''}</span></div>
+      {!data.items.length ? <Empty title="Nenhum item do CR EDITORIAL para este cliente." /> : (
+        <div className="table-wrap"><table className="table ed-hist-t">
+          <thead><tr><th>Data</th><th>Título</th><th>Informações do Notion</th><th /></tr></thead>
+          <tbody>{data.items.map((r) => {
+            const extra = Object.entries(r.properties).filter(([k, v]) => k !== r.date_property && val(v) && val(v) !== r.title);
+            return (
+              <tr key={r.id}>
+                <td className="sm">{r.date_start ? fmtDate(`${r.date_start.slice(0, 10)}T12:00:00-03:00`) : <span className="muted">sem data</span>}</td>
+                <td className="sm strong">{r.title || <span className="muted">sem título</span>}</td>
+                <td className="xs">{extra.map(([k, v]) => <span key={k} className="ed-hist-p"><b>{k}:</b> {val(v)}</span>)}</td>
+                <td>{r.notion_url && <a className="xs" href={r.notion_url} target="_blank" rel="noreferrer">abrir no Notion ↗</a>}</td>
+              </tr>
+            );
+          })}</tbody>
+        </table></div>
+      )}
+    </section>
   );
 }
