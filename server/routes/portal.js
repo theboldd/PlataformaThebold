@@ -59,9 +59,10 @@ function feedItem(c, client) {
   const versions = c.stage === 'aprovacao_tema' ? [] : all("SELECT * FROM content_versions WHERE content_id=? AND (sent_to_client_at IS NOT NULL OR approved_at IS NOT NULL) ORDER BY number DESC", c.id)
     .map((x) => {
       const current = x.id === v?.id;
-      const approvedNow = x.id === c.approved_version_id;
+      // "aprovada" só com aprovação registrada do cliente para ESTA versão; liberada pela equipe nunca aparece como aprovada
+      const approvedNow = x.id === c.approved_version_id && x.status === 'aprovada';
       return { number: x.number, caption: x.caption, current, approved: approvedNow, was_approved: !!x.approved_at, approved_at: x.approved_at,
-        state: approvedNow ? 'aprovada' : current ? 'atual' : 'substituida', reason: x.notes && !/editada pelo cliente/i.test(x.notes) ? x.notes : x.notes ? 'Legenda editada por você' : null, sent_at: x.sent_to_client_at || x.created_at,
+        state: approvedNow ? 'aprovada' : x.status === 'liberada' ? 'liberada' : current ? 'atual' : 'substituida', reason: x.notes && !/editada pelo cliente/i.test(x.notes) ? x.notes : x.notes ? 'Legenda editada por você' : null, sent_at: x.sent_to_client_at || x.created_at,
         adjustments_done: adjustments.filter((a) => a.resolved_in === x.number).map((a) => a.description), media: versionMedia(x.id).map(fileDTO) };
     });
   const liked = ['agendamento', 'agendado', 'publicado'].includes(c.stage) || (c.stage === 'producao' && lastClient?.kind === 'tema' && lastClient.decision === 'aprovado');
@@ -73,7 +74,7 @@ function feedItem(c, client) {
     id: c.id, number: c.number, title: c.title, format: c.format, planned_at: c.planned_at, scheduled_at: c.scheduled_at, status: publicStatus(c), stage: c.stage,
     is_theme: c.stage === 'aprovacao_tema' || c.stage === 'producao', theme: c.theme, objective: c.objective, reference: c.reference,
     brand: { name: client.name, handle: client.handle },
-    version: v ? { number: v.number, caption: v.caption, approved: v.id === c.approved_version_id, media: versionMedia(v.id).map(fileDTO) } : null,
+    version: v ? { number: v.number, caption: v.caption, approved: v.id === c.approved_version_id && v.status === 'aprovada', media: versionMedia(v.id).map(fileDTO) } : null,
     versions, liked, can_like: canDecide, can_unlike: !!canUnlike, can_decide: canDecide, adjust_state: adjustState,
     can_request_adjust: !['publicado'].includes(c.stage), can_ask: true,
     deadline: clientDeadline(c), next_step: canDecide ? (c.stage === 'aprovacao_tema' ? 'Com o tema aprovado, a produção começa.' : 'Com a sua aprovação, esta versão é congelada e segue para agendamento.') : null,
@@ -241,6 +242,27 @@ portal.post('/contents/:id/comments', upload.single('file'), async (req, res) =>
     notify(team, { level: 'atencao', type: 'comentario_publicado', title: 'Pedido do cliente em conteúdo já publicado', body: `#${c.number} ${c.title}: ${body.slice(0, 120)}`, link: `/conteudos/${c.id}`, content: c.id, client: c.client_id });
   }
   res.json({ item: contentFor(c.id, clientOf(c)), action });
+});
+// Converter um comentário (já enviado) em pedido de ajuste — uma única vez por comentário
+portal.post('/contents/:id/comments/:cid/convert', (req, res) => {
+  const c = getMyContent(req);
+  const cm = one("SELECT * FROM comments WHERE id=? AND content_id=? AND visibility='client'", req.params.cid, c.id);
+  if (!cm || cm.author_id !== req.user.id) throw new HttpError(404, 'Comentário não encontrado.');
+  if (cm.adjustment_id) throw new HttpError(409, 'Este comentário já virou um pedido de ajuste.');
+  if (cm.parent_id) throw new HttpError(422, 'Respostas não podem virar ajuste. Peça o ajuste no conteúdo.');
+  const anchor = parseJSON(cm.anchor, {}) || {};
+  const aspect = ADJUST_ASPECTS[req.body?.aspect] ? req.body.aspect : null;
+  const r = tx(() => {
+    const fresh = one('SELECT adjustment_id FROM comments WHERE id=?', cm.id);
+    if (fresh.adjustment_id) throw new HttpError(409, 'Este comentário já virou um pedido de ajuste.');
+    const out = clientAdjustmentRequest(c.id, req.user, { note: cm.body, carousel_page: anchor.page || null, video_timestamp: anchor.t ?? null, aspect, region: anchor.region || null }, req);
+    const adj = out.adjustment || one("SELECT * FROM adjustments WHERE content_id=? AND origin='cliente' ORDER BY created_at DESC LIMIT 1", c.id);
+    update('comments', { id: cm.id }, { adjustment_id: adj.id, kind: 'ajuste' });
+    update('adjustments', { id: adj.id }, { comment_id: cm.id });
+    return { ...out, adjustment: adj };
+  });
+  log({ actor: req.user.id, action: 'comentario.convertido_ajuste', entity: 'adjustment', id: r.adjustment.id, client: c.client_id, content: c.id, visibility: 'client', summary: 'Você transformou um comentário em pedido de ajuste' });
+  res.json({ item: contentFor(c.id, clientOf(c)), mode: r.mode, adjustment_id: r.adjustment.id });
 });
 portal.post('/intent', (req, res) => res.json(detectAdjustment(req.body?.body)));
 // CALENDÁRIO — o cliente visualiza, abre, comenta e aprova; nunca move datas nem edita o planejamento (só leitura aqui)

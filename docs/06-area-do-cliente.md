@@ -61,3 +61,20 @@ Ambos rodam num **banco temporário** com equipe e cliente de teste descartávei
 2. **Transcrição do Meet:** a conta Google é Gmail (sem Workspace). A plataforma detecta a transcrição anexada ao evento quando ela existe, mas o escopo atual não lê documentos do Drive: a equipe cola o texto. Com Workspace + escopo `drive.readonly`, a leitura vira automática.
 3. **IA:** sem `ANTHROPIC_API_KEY`, os resumos são escritos à mão (o fluxo de aprovação é o mesmo). Nada é simulado.
 4. **Migração do Notion:** o importador (`npm run migrar:notion`) já preserva procedência e registra conflitos; o levantamento (`storage/migration/notion`) fica fora do git. A tela de onboarding agora mostra ao cliente migrado exatamente o que já existe e o que falta.
+
+## 6. Validação real (TESTE_E2E_BLOCO_4)
+`npm run e2e:bloco4` (precisa de `BOLD_SNAPSHOT_KEY`) roda o fluxo completo sobre uma **cópia isolada** da base real:
+- bloqueia toda chamada de rede externa;
+- marca tudo com `TESTE_E2E_BLOCO_4`;
+- age com as pessoas reais que o engine atribui;
+- remove o que foi criado e reverte o que foi alterado;
+- prova o antes = depois tabela por tabela.
+
+Registros sem origem comprovada não são apagados: aparecem no relatório como “incertos”. O relatório sai em `relatorio.json`, com as capturas de celular e desktop.
+
+Correções feitas durante a preparação:
+- a V2 que resolve o ajuste do cliente volta para o cliente aprovar;
+- versão liberada sem o cliente nunca aparece como aprovada;
+- comentário → ajuste só uma vez;
+- mensagem do chat não vira o mesmo registro duas vezes;
+- notificação de aprovação ligada ao conteúdo.

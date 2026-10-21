@@ -120,6 +120,9 @@ comms.post('/chat/messages/:id/convert', requireInternal, (req, res) => {
   if (clientId) assertClient(req.user, clientId);
   const text = title?.trim() || m.body.slice(0, 160);
   const author = userName(m.author_id);
+  // Idempotência: a mesma mensagem não vira o mesmo tipo de registro duas vezes (ex.: ajuste duplicado)
+  const already = parseJSON(m.converted_to, []).find((x) => x.type === type);
+  if (already) throw new HttpError(409, `Esta mensagem já foi transformada em ${type} (${already.by}, ${new Date(already.at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' })}).`);
   let result;
   tx(() => {
     if (type === 'tarefa' || type === 'pendencia') {

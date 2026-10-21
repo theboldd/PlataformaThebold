@@ -292,7 +292,7 @@ function Post({ it, team, onUpdate }) {
 // VERSIONAMENTO — V3 · ATUAL / V2 · SUBSTITUÍDA / V3 · APROVADA. Nunca uma versão antiga aparece como aprovada depois de uma nova.
 function Versions({ it, vnum, setVnum }) {
   const [open, setOpen] = useState(false);
-  const label = (v) => (v.state === 'aprovada' ? 'Aprovada' : v.state === 'atual' ? 'Atual' : 'Substituída');
+  const label = (v) => (v.state === 'aprovada' ? 'Aprovada' : v.state === 'liberada' ? 'Liberada pela The Bold' : v.state === 'atual' ? 'Atual' : 'Substituída');
   const cur = it.versions.find((v) => v.current) || it.versions[0];
   return (
     <div className="p-vers">
@@ -396,6 +396,10 @@ function Comments({ it, team, onUpdate, inputRef, mode, setMode, onAdjust }) {
   const replies = (id) => it.comments.filter((c) => c.parent_id === id);
   const q = body.match(/@([\p{L}]*)$/u)?.[1];
   const suggestions = q != null ? team.filter((x) => x.name.toLowerCase().startsWith(q.toLowerCase())).filter((x, i, a) => a.findIndex((y) => y.id === x.id) === i).slice(0, 5) : [];
+  const convert = async (c) => {
+    if (!window.confirm('Transformar este comentário em pedido de ajuste? A equipe passa a tratá-lo como ajuste.')) return;
+    try { const r = await api.post(`/portal/contents/${it.id}/comments/${c.id}/convert`); onUpdate(r.item); toast('Comentário transformado em pedido de ajuste.'); } catch (x) { toast(x.message, 'err'); }
+  };
   const send = async (e) => {
     e.preventDefault();
     if (!body.trim()) return;
@@ -417,7 +421,7 @@ function Comments({ it, team, onUpdate, inputRef, mode, setMode, onAdjust }) {
       {roots.length > 3 && !showAll && <button className="p-link xs" onClick={() => setShowAll(true)}>ver os {roots.length} comentários</button>}
       {visible.map((c) => (
         <div key={c.id}>
-          <Bubble c={c} onReply={() => { setReply(c); inputRef.current?.focus(); }} />
+          <Bubble c={c} onReply={() => { setReply(c); inputRef.current?.focus(); }} onConvert={c.is_client && !c.is_adjustment && !c.is_question && it.can_request_adjust && !it.is_theme ? () => convert(c) : null} />
           {replies(c.id).map((r) => <div key={r.id} className="p-reply"><Bubble c={r} /></div>)}
         </div>
       ))}
@@ -449,13 +453,13 @@ function Comments({ it, team, onUpdate, inputRef, mode, setMode, onAdjust }) {
   );
 }
 
-function Bubble({ c, onReply }) {
+function Bubble({ c, onReply, onConvert }) {
   return (
     <div className="p-bubble">
       <span className={`p-c-avatar ${c.is_client ? 'me' : ''}`} aria-hidden>{initials(c.author_name)}</span>
       <div className="grow">
         <div className="sm"><b>{c.author_name}</b>{!c.is_client && <span className="p-team">The Bold</span>}{c.is_question && <span className="p-anchor">{c.answered ? 'pergunta · respondida' : 'pergunta'}</span>}{c.is_adjustment && <span className="p-anchor">✎ ajuste</span>} {c.anchor?.page ? <span className="p-anchor">pág. {c.anchor.page}</span> : null}{c.anchor?.t != null ? <span className="p-anchor">{fmtT(c.anchor.t)}</span> : null} {c.body}</div>
-        <div className="xs faint">{ago(c.created_at)}{c.version_number ? ` · V${c.version_number}` : ''}{onReply && <> · <button className="p-link xs" onClick={onReply}>responder</button></>}</div>
+        <div className="xs faint">{ago(c.created_at)}{c.version_number ? ` · V${c.version_number}` : ''}{onReply && <> · <button className="p-link xs" onClick={onReply}>responder</button></>}{onConvert && <> · <button className="p-link xs" onClick={onConvert}>transformar em ajuste</button></>}</div>
       </div>
     </div>
   );

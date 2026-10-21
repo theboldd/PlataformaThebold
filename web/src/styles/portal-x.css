@@ -225,3 +225,5 @@ a.p-ev.meeting { color: var(--ink-2); }
 .p-ob-n { color: var(--muted); font-variant-numeric: tabular-nums; }
 /* Celular: os filtros rolam com a página (fixos, cobririam a imagem que o cliente está revisando) */
 @media (max-width: 860px) { .p-filters { position: static; } }
+/* No visualizador em tela cheia, o contador de páginas desce para não ficar sob o botão de fechar */
+.p-overlay .mv-count { top: 64px; }

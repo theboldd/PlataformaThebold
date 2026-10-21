@@ -194,7 +194,7 @@ CREATE INDEX IF NOT EXISTS ix_contents_client ON contents(client_id, stage);
 CREATE TABLE IF NOT EXISTS content_versions (
   id TEXT PRIMARY KEY, content_id TEXT NOT NULL REFERENCES contents(id) ON DELETE CASCADE,
   number INTEGER NOT NULL, caption TEXT NOT NULL DEFAULT '', notes TEXT,
-  status TEXT NOT NULL DEFAULT 'rascunho', -- rascunho | em_revisao | enviada_cliente | aprovada | substituida
+  status TEXT NOT NULL DEFAULT 'rascunho', -- rascunho | em_revisao | enviada_cliente | aprovada | liberada (pela equipe, sem aprovação do cliente) | substituida
   locked INTEGER NOT NULL DEFAULT 0, created_by TEXT, created_at TEXT NOT NULL,
   sent_to_client_at TEXT, approved_by TEXT, approved_at TEXT, UNIQUE (content_id, number)
 );

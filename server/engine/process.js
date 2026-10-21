@@ -54,7 +54,7 @@ export const DEFAULT_SETTINGS = {
     tudo_pronto: [27, 27], cliente_aprova_final: [27, 28], ajustes_cliente: [29, 30], agendamento: [29, 30],
   },
   analise_cronograma_ativa: true,      // PDF: "em breve não teremos essa fase" → desligável
-  reenviar_cliente_apos_ajuste: false, // definido pela The Bold: após o ajuste do cliente (conferido pela estrategista) vai direto para agendamento
+  reenviar_cliente_apos_ajuste: true,  // decisão The Bold (21/10): a versão que resolve o ajuste do cliente VOLTA para o cliente aprovar — aprovação nunca é inferida pela etapa
   revisores_padrao_roles: ['qualidade', 'ceo'], // Rebeca + Raísa
   cc_roles: ['operacoes'],             // Vitória recebe cópia das etapas-chave
   agendamento_roles: ['gestao'],       // Vivian agenda
@@ -255,7 +255,7 @@ function enterStage(content, stage, actor, ctx = {}) {
       notify(clientUsers(content.client_id), { level: 'atencao', type: 'aprovacao', title: updated ? 'O conteúdo atualizado está disponível para revisão.' : stage === 'aprovacao_tema' ? 'Novos temas disponíveis para aprovação.' : 'Novo conteúdo disponível para aprovação.',
         // o que aconteceu · por que importa · o que fazer
         body: `${updated ? `${content.title} — nova versão com o ajuste que você pediu. ` : ''}${due ? `Precisamos da sua aprovação até ${new Date(due).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' })}${content.planned_at ? ` para manter a publicação prevista para ${new Date(content.planned_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' })}` : ''}.` : 'Com a sua aprovação, seguimos para a próxima etapa.'}`,
-        cta: 'Revisar agora', link: updated ? `/portal/conteudos?c=${content.id}` : '/portal/conteudos?filtro=aguardando', groupKey: `aprovacao:${content.client_id}:${stage}:${updated ? 'u' : 'n'}`, client: content.client_id });
+        cta: 'Revisar agora', link: updated ? `/portal/conteudos?c=${content.id}` : '/portal/conteudos?filtro=aguardando', groupKey: `aprovacao:${content.client_id}:${stage}:${updated ? 'u' : 'n'}`, client: content.client_id, content: content.id });
       automation('cliente.notificado_aprovacao', { entity: 'content', id: content.id, client: content.client_id });
       break;
     }
@@ -379,10 +379,11 @@ function roundNeedsReapproval(contentId) {
   const last = one("SELECT version_id FROM adjustments WHERE content_id=? AND origin='cliente' ORDER BY created_at DESC LIMIT 1", contentId);
   return !!(last && one("SELECT 1 FROM adjustments WHERE content_id=? AND origin='cliente' AND reapproval=1 AND version_id IS ?", contentId, last.version_id));
 }
+// Só usado se a configuração voltar a "não reenviar": a versão é LIBERADA pela equipe, nunca marcada como aprovada pelo cliente
 function releaseAfterClientAdjust(c, actor, reason) {
   const v = currentVersion(c.id);
   if (v) {
-    update('content_versions', { id: v.id }, { status: 'aprovada', locked: 1, approved_by: actor?.id || null, approved_at: now() });
+    update('content_versions', { id: v.id }, { status: 'liberada', locked: 1 });
     update('contents', { id: c.id }, { approved_version_id: v.id });
   }
   log({ actor: actor?.id, action: 'versao.liberada', entity: 'content', id: c.id, client: c.client_id, content: c.id, visibility: 'client',
