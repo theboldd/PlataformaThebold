@@ -126,16 +126,16 @@ export function performanceReport(_user, query = {}) {
     ].sort((a, b) => b.days_late - a.days_late).slice(0, 5);
     return {
       id: u.id, name: u.name, title: u.title || null, functions: parseJSON(u.functions, []),
-      capacity_configured: u.capacity ?? null, capacity_source: 'configurada no cadastro (users.capacity) — não medida',
+      capacity_configured: u.capacity ?? null, capacity_source: 'configurada no cadastro — não medida',
       open_tasks: open.length, inherited_open: mineOpen.length - open.length,
       done_in_period: done.length, done_on_time: onTime.length, done_late: late.length, done_without_due: done.length - withDue.length,
       overdue_open: overdue.length,
-      reopened: { value: reopenedBy[u.id] || 0, reason: null, source: 'stage_moves (retorno/reabertura) + devoluções de etapa registradas, sobre entregas da pessoa na plataforma' },
-      returned: { value: returnedBy[u.id] || 0, reason: null, source: 'approvals (revisão interna pediu ajuste) sobre a entrega mais recente da pessoa' },
-      blocked: { value: blocked.length, reason: null, source: 'contents.blocked com tarefa aberta da pessoa', items: blocked.slice(0, 5).map((t) => ({ id: t.id, title: t.title, client: t.client, waiting_on: t.waiting_on, reason: t.block_reason || null, content_id: t.content_id })) },
+      reopened: { value: reopenedBy[u.id] || 0, reason: null, source: 'Vezes que algo que a pessoa já tinha entregue voltou de etapa' },
+      returned: { value: returnedBy[u.id] || 0, reason: null, source: 'Vezes que a revisão interna pediu ajuste numa entrega da pessoa' },
+      blocked: { value: blocked.length, reason: null, source: 'Conteúdos bloqueados em que a pessoa tem tarefa aberta', items: blocked.slice(0, 5).map((t) => ({ id: t.id, title: t.title, client: t.client, waiting_on: t.waiting_on, reason: t.block_reason || null, content_id: t.content_id })) },
       reprogrammed: dueChangeRecorded
-        ? { value: reprogBy[u.id] || 0, reason: null, source: "activity_logs 'tarefa.prazo_alterado'" }
-        : { value: null, reason: 'A plataforma ainda não registra alteração de prazo de tarefa (nenhum evento “tarefa.prazo_alterado” na base). Reprogramações de itens legados não contam contra ninguém (regra 22).' },
+        ? { value: reprogBy[u.id] || 0, reason: null, source: 'Mudanças de prazo registradas nas tarefas da pessoa' }
+        : { value: null, reason: 'A plataforma ainda não registra mudança de prazo de tarefa, então não há como contar reprogramações. Reprogramar item legado nunca conta contra ninguém.' },
       trend,
       late_context: lateCtx,
       recent_deliveries: done.slice(0, 5).map((t) => ({ id: t.id, title: t.title, client: t.client, stage: STAGES[t.stage]?.label || t.stage, completed_at: t.completed_at, due_at: t.due_at, on_time: t.due_at ? t.completed_at <= t.due_at : null, content_id: t.content_id })),

@@ -103,7 +103,7 @@ business.get('/finance/production', requirePerm('financeiro', 'view'), (_req, re
   const month = start.slice(0, 7);
   const people = all(`SELECT u.id, u.name, u.role_key, COUNT(*) n, COUNT(DISTINCT t.client_id) clients
     FROM tasks t JOIN users u ON u.id=t.completed_by JOIN clients c ON c.id=t.client_id
-    WHERE t.status='concluida' AND t.data_origin='plataforma' AND t.completed_at >= ? AND c.kind<>'interno'
+    WHERE t.status='concluida' AND t.data_origin='plataforma' AND t.completed_at >= ? AND c.kind<>'interno' AND u.role_key<>'cliente'
     GROUP BY u.id ORDER BY n DESC, u.name`, start);
   res.json({ month, rules_defined: false, people, total: people.reduce((a, p) => a + p.n, 0) });
 });

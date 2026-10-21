@@ -93,7 +93,7 @@ function Mapa({ status, reloadStatus }) {
             <td className="auto-main" data-label="Evento"><div className="strong">{a.event}</div><code className="xs faint">{a.key}</code></td>
             <td className="sm" data-label="Condição">{a.condition}</td>
             <td className="sm" data-label="Ação">{a.action}</td>
-            <td className="sm" data-label="Responsável"><div>{a.owner}</div><div className="xs muted">Aviso: {a.notification}</div><div className="xs muted">Prazo: {a.deadline}</div></td>
+            <td className="sm" data-label="Responsável"><div><div>{a.owner}</div><div className="xs muted">Aviso: {a.notification}</div><div className="xs muted">Prazo: {a.deadline}</div></div></td>
             <td data-label="Motor"><div><span className={`engine ${a.engine}`}>{ENGINE[a.engine]}</span><div className="xs faint mt-2">{a.class} · {CLASS[a.class]}</div></div></td>
             <td data-label="Fase"><span><Tag tone={a.phase === 'MVP' ? 'bordo' : ''}>{a.phase}</Tag></span></td>
             <td data-label="Estado"><div>{s ? <Badge s={s.state} /> : <span className="faint">—</span>}{s?.reason && s.state !== 'ativo' && <div className="xs muted mt-2">{s.reason}</div>}</div></td>
