@@ -9,6 +9,8 @@ import { ago, bytes, cleanName, fmtDate, fmtDateTime, fmtMonth, money } from '..
 import { FUNCTIONS } from '../lib/status.js';
 import Ficha, { SECTION_LABEL } from './client/Ficha.jsx';
 import { RequestsTab, DecisionsTab, HealthTab, PulseTab } from './client/PortalTabs.jsx';
+import { PendenciesTab, CommunicationTab } from './client/ClientExtraTabs.jsx';
+import '../styles/pend.css';
 import Editorial from './client/Editorial.jsx';
 import { ClientOnboardingCard } from './client/OnboardingCards.jsx';
 import '../styles/production.css';
@@ -34,6 +36,7 @@ export default function ClienteDetalhe() {
     { key: 'visao', label: 'Visão geral' }, { key: 'ficha', label: 'Ficha' }, { key: 'brain', label: 'Resumo do Brain' },
     { key: 'onboarding', label: 'Onboarding', count: ob && ob.status !== 'concluido' ? missing.length : 0 },
     { key: 'conteudos', label: 'Calendário editorial', count: data.contents.length }, { key: 'reunioes', label: 'Reuniões', count: data.meetings.length },
+    { key: 'pendencias', label: 'Pendências' }, { key: 'comunicacao', label: 'Comunicação' },
     { key: 'solicitacoes', label: 'Solicitações', count: data.open_requests || 0 }, { key: 'decisoes', label: 'Decisões' }, { key: 'marca', label: 'Marca & Pulso' }, { key: 'saude', label: 'Saúde' },
     { key: 'equipe', label: 'Equipe' }, { key: 'arquivos', label: 'Arquivos', count: data.files.length },
     ...(data.finance ? [{ key: 'financeiro', label: 'Financeiro' }] : []), { key: 'historico', label: 'Histórico' },
@@ -70,6 +73,8 @@ export default function ClienteDetalhe() {
         ))}</ul>
       ))}
       {tab === 'equipe' && <TeamTab data={data} reload={reload} />}
+      {tab === 'pendencias' && <PendenciesTab clientId={c.id} />}
+      {tab === 'comunicacao' && <CommunicationTab clientId={c.id} />}
       {tab === 'solicitacoes' && <RequestsTab clientId={c.id} team={data.team.filter((t, i, a) => t.role_key !== 'cliente' && a.findIndex((x) => x.id === t.id) === i)} />}
       {tab === 'decisoes' && <DecisionsTab clientId={c.id} canEdit={data.can_edit} sections={Object.keys(SECTION_LABEL)} />}
       {tab === 'marca' && <PulseTab clientId={c.id} canEdit={data.can_edit} />}

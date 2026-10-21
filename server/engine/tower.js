@@ -276,9 +276,9 @@ export function tower(user, qs = {}) {
     return { has_data: n > 0,
       recebido: one('SELECT COALESCE(SUM(paid_amount),0) v FROM invoices WHERE paid_at BETWEEN ? AND ?', P.start, P.end).v,
       em_aberto: one("SELECT COALESCE(SUM(amount),0) v FROM invoices WHERE status='aberta'").v,
-      atrasado: one("SELECT COALESCE(SUM(amount),0) v FROM invoices WHERE status='atrasada'").v,
+      atrasado: one("SELECT COALESCE(SUM(amount),0) v FROM invoices WHERE (status='atrasada' OR (status='aberta' AND due_at < strftime('%Y-%m-%dT%H:%M:%fZ','now')))").v,
       a_receber_30d: one("SELECT COALESCE(SUM(amount),0) v FROM invoices WHERE status='aberta' AND due_at BETWEEN ? AND ?", nowIso, new Date(Date.now() + 30 * DAY).toISOString()).v,
-      inadimplentes: one("SELECT COUNT(DISTINCT client_id) n FROM invoices WHERE status='atrasada'").n };
+      inadimplentes: one("SELECT COUNT(DISTINCT client_id) n FROM invoices WHERE (status='atrasada' OR (status='aberta' AND due_at < strftime('%Y-%m-%dT%H:%M:%fZ','now')))").n };
   })() : null;
   const crm = can(user, 'crm') ? (() => {
     const n = one('SELECT COUNT(*) n FROM deals').n;
@@ -332,7 +332,17 @@ export function tower(user, qs = {}) {
     origins: [{ key: 'migrado', label: 'Dado migrado do Notion' }, { key: 'plataforma', label: 'Evento real da plataforma' }],
   };
 
+  // ── Dependências: o que está parado esperando outra parte (cliente, informação, equipe) ou uma decisão do cliente ──
+  const waitingDecision = content.filter((c) => ['aprovacao_tema', 'aprovacao_cliente'].includes(c.stage));
+  const dependencies = {
+    by: Object.entries(blocks.reduce((m, b) => ({ ...m, [b.by]: (m[b.by] || 0) + 1 }), {})).map(([by, n]) => ({ by, n })).sort((a, b) => b.n - a.n),
+    blocked: blocks.slice(0, 8),
+    waiting_client_decision: waitingDecision.length,
+    waiting_client_items: waitingDecision.slice(0, 6).map((c) => ({ id: c.id, title: `#${c.number} ${c.title}`, client: c.client, since: c.stage_entered_at, link: `/conteudos/${c.id}` })),
+  };
+
   return {
+    dependencies,
     period: P, applied: F, filters, summary, state,
     risks: risks.slice(0, 12), bottlenecks, blocks,
     stages, lanes,

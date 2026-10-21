@@ -57,23 +57,78 @@ business.patch('/crm/:id', requirePerm('crm', 'edit'), (req, res) => {
 });
 
 // ═════════════ FINANCEIRO (acesso restrito) ═════════════
+// Atraso calculado na leitura (sem gravar): status='atrasada' OU (status='aberta' E vencimento < agora).
+// O agendador que marca 'atrasada' não roda no preview da Vercel — a leitura não pode depender dele.
+const LATE = "(i.status='atrasada' OR (i.status='aberta' AND i.due_at < ?))";
+const effective = (nowIso) => (i) => {
+  const late = i.status === 'atrasada' || (i.status === 'aberta' && i.due_at < nowIso);
+  return { ...i, stored_status: i.status, status: late ? 'atrasada' : i.status };
+};
 business.get('/finance', requirePerm('financeiro', 'view'), (_req, res) => {
-  const m = new Date().toISOString().slice(0, 7);
+  const nowIso = now();
+  const m = nowIso.slice(0, 7);
   const sum = (sql, ...p) => one(sql, ...p).v;
+  const eff = effective(nowIso);
+  const t = Date.parse(nowIso);
+  const overdue = all(`SELECT i.*, c.name client_name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE ${LATE} ORDER BY i.due_at`, nowIso)
+    .map((i) => ({ ...eff(i), days_late: Math.max(0, Math.floor((t - Date.parse(i.due_at)) / 864e5)) }));
+  const cronSecret = !!process.env.CRON_SECRET;
+  const autos = all("SELECT key, enabled, implemented FROM automations WHERE key IN ('financeiro.vencimento','financeiro.atraso')");
   res.json({
     summary: {
       receita_recorrente: sum("SELECT COALESCE(SUM(monthly_value),0) v FROM contracts WHERE status='ativo'"),
-      faturado_mes: sum('SELECT COALESCE(SUM(amount),0) v FROM invoices WHERE substr(due_at,1,7)=?', m),
+      faturado_mes: sum("SELECT COALESCE(SUM(amount),0) v FROM invoices WHERE substr(due_at,1,7)=? AND status<>'cancelada'", m),
       recebido_mes: sum('SELECT COALESCE(SUM(paid_amount),0) v FROM invoices WHERE substr(paid_at,1,7)=?', m),
-      pendente: sum("SELECT COALESCE(SUM(amount),0) v FROM invoices WHERE status='aberta'"),
-      atrasado: sum("SELECT COALESCE(SUM(amount),0) v FROM invoices WHERE status='atrasada'"),
+      pendente: sum("SELECT COALESCE(SUM(amount),0) v FROM invoices WHERE status='aberta' AND due_at >= ?", nowIso),
+      atrasado: sum(`SELECT COALESCE(SUM(i.amount),0) v FROM invoices i WHERE ${LATE}`, nowIso),
     },
-    upcoming: all("SELECT i.*, c.name client_name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.status='aberta' ORDER BY i.due_at LIMIT 20"),
-    overdue: all("SELECT i.*, c.name client_name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.status='atrasada' ORDER BY i.due_at"),
+    upcoming: all("SELECT i.*, c.name client_name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.status='aberta' AND i.due_at >= ? ORDER BY i.due_at LIMIT 20", nowIso),
+    overdue,
+    paid: all("SELECT i.*, c.name client_name FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.status='paga' ORDER BY i.paid_at DESC LIMIT 100"),
     contracts: all('SELECT k.*, c.name client_name FROM contracts k JOIN clients c ON c.id=k.client_id ORDER BY c.name'),
-    invoices: all('SELECT i.*, c.name client_name FROM invoices i JOIN clients c ON c.id=i.client_id ORDER BY i.due_at DESC LIMIT 200'),
+    invoices: all('SELECT i.*, c.name client_name FROM invoices i JOIN clients c ON c.id=i.client_id ORDER BY i.due_at DESC LIMIT 200').map(eff),
     clients: all("SELECT id, name FROM clients WHERE status<>'encerrado' ORDER BY name"),
+    collection: {
+      // A régua automática (financeiro.vencimento / financeiro.atraso) só dispara quando o agendador roda.
+      scheduler_configured: cronSecret,
+      automations: autos.map((a) => ({ key: a.key, enabled: !!a.enabled, implemented: !!a.implemented })),
+    },
   });
+});
+// Produção & Repasses: as regras de repasse ainda PRECISAM DE DECISÃO (checklist §12/§20).
+// Aqui só existem fatos reais da plataforma — nenhum valor em R$.
+business.get('/finance/production', requirePerm('financeiro', 'view'), (_req, res) => {
+  const d = new Date();
+  const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString();
+  const month = start.slice(0, 7);
+  const people = all(`SELECT u.id, u.name, u.role_key, COUNT(*) n, COUNT(DISTINCT t.client_id) clients
+    FROM tasks t JOIN users u ON u.id=t.completed_by JOIN clients c ON c.id=t.client_id
+    WHERE t.status='concluida' AND t.data_origin='plataforma' AND t.completed_at >= ? AND c.kind<>'interno'
+    GROUP BY u.id ORDER BY n DESC, u.name`, start);
+  res.json({ month, rules_defined: false, people, total: people.reduce((a, p) => a + p.n, 0) });
+});
+// Rentabilidade: receita real por cliente; custos/repasses sem regra; margem não calculável.
+business.get('/finance/profitability', requirePerm('financeiro', 'view'), (_req, res) => {
+  const nowIso = now();
+  const m = nowIso.slice(0, 7);
+  const since90 = new Date(Date.now() - 90 * 864e5).toISOString();
+  const clients = all(`SELECT c.id, c.name, c.status,
+      (SELECT COALESCE(SUM(i.amount),0) FROM invoices i WHERE i.client_id=c.id AND substr(i.due_at,1,7)=? AND i.status<>'cancelada') receita_mes,
+      (SELECT COALESCE(SUM(i.paid_amount),0) FROM invoices i WHERE i.client_id=c.id AND substr(i.paid_at,1,7)=?) recebido_mes,
+      (SELECT COUNT(*) FROM invoices i WHERE i.client_id=c.id) invoices_n,
+      (SELECT COUNT(*) FROM adjustments a JOIN contents ct ON ct.id=a.content_id WHERE ct.client_id=c.id AND ct.data_origin='plataforma' AND a.created_at >= ?) retrabalho_90d
+    FROM clients c WHERE c.kind<>'interno' AND c.status<>'encerrado' ORDER BY c.name`, m, m, since90);
+  const months = [];
+  const d = new Date();
+  for (let k = 5; k >= 0; k--) months.push(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - k, 1)).toISOString().slice(0, 7));
+  const ext = "JOIN clients c ON c.id=i.client_id AND c.kind<>'interno'";
+  const evolution = months.map((mm) => ({
+    month: mm,
+    faturado: one(`SELECT COALESCE(SUM(i.amount),0) v FROM invoices i ${ext} WHERE substr(i.due_at,1,7)=? AND i.status<>'cancelada'`, mm).v,
+    recebido: one(`SELECT COALESCE(SUM(i.paid_amount),0) v FROM invoices i ${ext} WHERE substr(i.paid_at,1,7)=?`, mm).v,
+  }));
+  const hasInvoices = one(`SELECT COUNT(*) n FROM invoices i ${ext}`).n > 0;
+  res.json({ month: m, clients, evolution, has_invoices: hasInvoices, cost_rules_defined: false, repasse_rules_defined: false });
 });
 business.post('/finance/contracts', requirePerm('financeiro', 'create'), (req, res) => {
   const { client_id, service, monthly_value, starts_at, ends_at, due_day = 10, months = 6 } = req.body || {};

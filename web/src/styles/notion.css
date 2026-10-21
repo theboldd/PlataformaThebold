@@ -1,0 +1,50 @@
+/* NOTION & HISTÓRICO — leitura de tabela, sem alarme visual (nada aqui gera pendência ou métrica) */
+.nh { overflow-x: clip; }
+.nh .section { min-width: 0; }
+.nh-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); font-size: var(--fs-sm); color: var(--ink-2); }
+.nh-stats { margin-bottom: var(--sp-5); }
+.nh-stats .stat .hint { overflow-wrap: anywhere; }
+.nh-ins { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: var(--sp-3); min-width: 0; }
+.nh-ins-l { font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-weight: 700; }
+
+.nh-facts { display: flex; flex-direction: column; margin: 0; border-top: 1px solid var(--line); }
+.nh-facts > div { display: grid; grid-template-columns: minmax(160px, 1fr) 2.6fr; gap: var(--sp-4); padding: 10px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
+.nh-facts dt { font-size: var(--fs-xs); font-weight: 700; color: var(--ink-2); }
+.nh-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+
+.nh-block { margin-bottom: var(--sp-5); }
+.nh-h3 { font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-weight: 700; margin: 0 0 var(--sp-3); color: var(--muted); }
+.nh-src { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: var(--sp-3); }
+.nh-src li { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.nh-src-h { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.nh-src-h b { font-weight: 600; font-size: var(--fs-sm); min-width: 0; overflow-wrap: anywhere; }
+.nh-src p { margin: 6px 0 0; font-size: var(--fs-xs); color: var(--muted); }
+
+.nh-legacy { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-4); margin-bottom: var(--sp-3); }
+.nh-legacy > div { display: flex; flex-direction: column; gap: 4px; border-top: 2px solid var(--line); padding-top: var(--sp-3); }
+.nh-legacy b { font-family: var(--font-editorial); font-weight: 400; font-size: clamp(28px, 3vw, 42px); line-height: .9; font-variant-numeric: tabular-nums; }
+.nh-legacy span { font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-weight: 700; }
+.nh-link { display: inline-block; margin-top: var(--sp-2); font-weight: 600; font-size: var(--fs-sm); }
+.nh-note { margin: 0 0 var(--sp-3); }
+
+.nh-table { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.nh-tr { display: grid; grid-template-columns: minmax(0, 2.2fr) repeat(4, minmax(0, .8fr)) minmax(0, 1.2fr); gap: var(--sp-4); align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.nh-th { font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-weight: 700; color: var(--muted); }
+.nh-tr small { display: block; color: var(--muted); font-size: var(--fs-xs); }
+.nh-name { min-width: 0; }
+.nh-name a { font-weight: 600; overflow-wrap: anywhere; }
+.nh-tr a { color: inherit; }
+.nh-tr a:hover { text-decoration: underline; }
+
+@media (max-width: 900px) {
+  .nh-legacy { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .nh-facts > div { grid-template-columns: 1fr; gap: 2px; }
+  .nh-table { border-top: 0; gap: var(--sp-3); }
+  .nh-th { display: none; }
+  .nh-tr { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px var(--sp-3); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .nh-name { grid-column: 1 / -1; font-size: var(--fs-md); }
+  .nh-tr [data-l]::before { content: attr(data-l); display: block; font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-weight: 700; color: var(--muted); }
+  .nh-tr [data-l="Notion"] { grid-column: 1 / -1; }
+}

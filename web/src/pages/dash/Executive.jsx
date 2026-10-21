@@ -10,6 +10,7 @@ import { ContentRows } from '../intel/parts.jsx';
 import { cleanName, fmtDate, fmtWeekday, greeting, firstName, money } from '../../lib/format.js';
 import '../../styles/exec.css';
 import { restoredOverlay } from '../../lib/nav.jsx';
+import { StateBadge } from '../../components/State.jsx';
 
 const pad = (n) => String(n).padStart(2, '0');
 const pl = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -201,6 +202,33 @@ export default function Executive() {
         </section>
       </div>
 
+      {/* FINANCEIRO · CAPACIDADE · MINHAS PENDÊNCIAS — sempre visíveis; sem dado, dizem que não há dado */}
+      <div className="ex-trio">
+        <section className="ex-mini" aria-labelledby="ex-fin-t">
+          <div className="ex-sh"><h2 id="ex-fin-t" className="ex-title sm">Financeiro</h2>{e.finance ? (e.finance.has_data ? <StateBadge s="ativo" /> : <StateBadge s="dados_insuficientes" />) : <StateBadge s="bloqueado" label="Acesso restrito" />}</div>
+          {!e.finance ? <p className="ex-empty-sm">Sem permissão para o financeiro.</p> : e.finance.has_data ? (
+            <dl className="ex-kv">
+              <div><dt>Receita recorrente</dt><dd>{money(e.finance.recorrente)}</dd></div>
+              <div><dt>Recebido no mês</dt><dd>{money(e.finance.recebido_mes)}</dd></div>
+              <div><dt>Em aberto</dt><dd>{money(e.finance.pendente)}</dd></div>
+              <div><dt>Em atraso</dt><dd className={e.finance.atrasado ? 'late' : ''}>{money(e.finance.atrasado)}</dd></div>
+            </dl>
+          ) : <p className="ex-empty-sm">Nenhum contrato ou parcela cadastrado. Repasses e rentabilidade aguardam a definição das regras financeiras.</p>}
+          <div className="ex-foot"><Link className="ex-more" to="/financeiro">Abrir financeiro <I.arrow size={13} /></Link></div>
+        </section>
+        <section className="ex-mini" aria-labelledby="ex-cap-t">
+          <div className="ex-sh"><h2 id="ex-cap-t" className="ex-title sm">Capacidade</h2>{e.capacity.open ? <StateBadge s="ativo" /> : <StateBadge s="dados_insuficientes" />}</div>
+          <dl className="ex-kv">
+            <div><dt>Tarefas abertas (plataforma)</dt><dd>{e.capacity.open}</dd></div>
+            <div><dt>Capacidade configurada</dt><dd>{e.capacity.configured ?? '—'}</dd></div>
+            <div><dt>Pessoas acima da capacidade</dt><dd className={e.capacity.acima ? 'late' : ''}>{e.capacity.acima}</dd></div>
+          </dl>
+          <p className="ex-note">Capacidade configurada no cadastro, não medida. Tarefas herdadas do Notion não contam.</p>
+          <div className="ex-foot"><Link className="ex-more" to="/performance">Equipe & performance <I.arrow size={13} /></Link></div>
+        </section>
+        <MyPendencies />
+      </div>
+
       {/* ATALHOS — o detalhe mora em outros módulos */}
       <nav className="ex-links" aria-label="Aprofundar">
         <Link to="/torre"><span>Torre de Controle</span><small>Operação inteira, gargalos e investigação</small><I.arrow size={14} /></Link>
@@ -239,4 +267,19 @@ function StageItems({ stage }) {
   const { data, loading } = useApi(`/process/board?${key}`, [key], { live: false });
   if (loading || !data) return <Loading rows={4} />;
   return <><ContentRows items={data.lanes.flatMap((l) => l.cards)} empty="Nenhum conteúdo aqui agora." /><Link className="btn btn-primary mt-5" to={`/processos?stage=${stage}`}>Abrir em Processos (filtrado)</Link></>;
+}
+
+// MINHAS PENDÊNCIAS — o que depende da própria CEO (a visão da equipe fica em "Precisa da sua atenção")
+function MyPendencies() {
+  const { data } = useApi('/pendencias?escopo=minhas');
+  const items = data?.items || [];
+  return (
+    <section className="ex-mini" aria-labelledby="ex-my-t">
+      <div className="ex-sh"><h2 id="ex-my-t" className="ex-title sm">Minhas pendências</h2>{data && <span className="ex-count">{pl(items.length, 'item', 'itens')}</span>}</div>
+      {!data ? <p className="ex-empty-sm">Carregando…</p> : !items.length ? <p className="ex-empty-sm">Nada depende de você agora.</p> : (
+        <ul className="ex-mylist">{items.slice(0, 4).map((p) => <li key={p.id}><Link to={`/pendencias?p=${encodeURIComponent(p.id)}`}><b>{p.problem || p.title}</b><small>{cleanName(p.client || 'The Bold')}{p.late ? ` · há ${p.late}` : ''}</small></Link></li>)}</ul>
+      )}
+      <div className="ex-foot"><Link className="ex-more" to="/pendencias">Abrir minhas pendências <I.arrow size={13} /></Link></div>
+    </section>
+  );
 }

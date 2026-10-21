@@ -70,6 +70,13 @@ pendencias.get('/pendencias', ...guard, (req, res) => {
   });
 });
 
+// Por cliente (aba "Pendências" do dossiê): o mesmo radar, filtrado pelo cliente e respeitando o que a pessoa pode ver
+pendencias.get('/pendencias/cliente/:clientId', ...guard, (req, res) => {
+  assertClient(req.user, req.params.clientId);
+  const items = visible(req.user).filter((i) => i.client_id === req.params.clientId);
+  res.json({ items: items.map((i) => ({ ...i, cause_label: CAUSES[i.cause] || i.cause })), scope: canTeam(req.user) ? 'equipe' : 'minhas' });
+});
+
 // Detalhe: a pendência + a origem + histórico + comentários + o que esta pessoa pode fazer
 pendencias.get('/pendencias/item', ...guard, (req, res) => {
   const p = visible(req.user).find((i) => i.id === req.query.id);

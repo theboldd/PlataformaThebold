@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { StateBadge, StateNotice } from '../components/State.jsx';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApi } from '../lib/hooks.js';
 import { useCrumbs } from '../components/Shell.jsx';
@@ -72,10 +73,15 @@ export default function Calendario() {
           <span className="gstatus">
             {g?.status === 'conectado' ? <Tag tone="ok">Google Calendar conectado · {g.items} eventos</Tag>
               : g?.status === 'erro' ? <Tag tone="err">Google Calendar com erro: {g.error}</Tag>
-              : <><Tag>Google Calendar desconectado</Tag><Link to="/integracoes" className="xs bordo">conectar →</Link></>}
+              : <StateBadge s="aguardando_conexao" label="Google Calendar · aguardando conexão" />}
           </span>
         </div>
       </div>
+      {g && g.status !== 'conectado' && (
+        <div className="mb-4"><StateNotice s={g.status === 'erro' ? 'erro' : 'aguardando_conexao'} title="Google Calendar" action="Configurar em Integrações" to="/integracoes" compact>
+          {g.status === 'erro' ? `A conexão falhou: ${g.error}.` : 'O calendário abaixo já mostra conteúdos, prazos, ciclos e reuniões da plataforma. Os compromissos da sua agenda Google entram aqui quando a conexão for feita.'}
+        </StateNotice></div>
+      )}
       <div className="row wrap between mb-5">
         <div className="row wrap gap-2">
           <select className="select" style={{ maxWidth: 240, minHeight: 34, padding: '6px 10px' }} value={client} onChange={(e) => setClient(e.target.value)} aria-label="Cliente"><option value="">Todos os clientes</option>{(clients || []).map((c) => <option key={c.id} value={c.id}>{cleanName(c.name)}</option>)}</select>

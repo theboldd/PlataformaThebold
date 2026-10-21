@@ -38,7 +38,7 @@ export function generateReport(kind, start, end) {
   if (kind === 'financeiro' || kind === 'operacao') {
     data.financeiro = {
       recebido: one("SELECT COALESCE(SUM(paid_amount),0) v FROM invoices WHERE paid_at BETWEEN ? AND ?", ...p).v,
-      atrasado: one("SELECT COALESCE(SUM(amount),0) v FROM invoices WHERE status='atrasada'").v,
+      atrasado: one("SELECT COALESCE(SUM(amount),0) v FROM invoices WHERE (status='atrasada' OR (status='aberta' AND due_at < strftime('%Y-%m-%dT%H:%M:%fZ','now')))").v,
     };
   }
   return insert('reports', { id: uid('rp_'), kind, period_start: start, period_end: end, data: JSON.stringify(data), narrative: null, generated_by: 'sistema', created_at: now() });

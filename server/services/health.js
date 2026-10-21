@@ -61,7 +61,7 @@ export function clientHealth(clientId, viewer = null) {
   if (!planned) s.push(sig('evolucao', 'Entregas', 'sem_dados', ['Nenhum conteúdo previsto nos últimos 30 dias.']));
   else s.push(sig('evolucao', 'Entregas', delivered / planned < 0.5 ? 'risco' : delivered / planned < 0.8 ? 'atencao' : 'ok', [`${delivered} de ${planned} conteúdos previstos nos últimos 30 dias foram agendados ou publicados (pacote: ${cl?.monthly_posts ?? '?'}/mês).`]));
   // 10. Pagamentos — detalhe só para quem tem acesso ao financeiro
-  const inv = one("SELECT COUNT(*) n, MIN(due_at) first FROM invoices WHERE client_id=? AND status='atrasada'", clientId);
+  const inv = one("SELECT COUNT(*) n, MIN(due_at) first FROM invoices WHERE client_id=? AND (status='atrasada' OR (status='aberta' AND due_at < strftime('%Y-%m-%dT%H:%M:%fZ','now')))", clientId);
   const finOk = !viewer || can(viewer, 'financeiro');
   if (!one('SELECT 1 FROM invoices WHERE client_id=?', clientId)) s.push(sig('pagamentos', 'Pagamentos', 'sem_dados', ['Nenhuma parcela registrada no financeiro da plataforma.']));
   else s.push(sig('pagamentos', 'Pagamentos', inv.n >= 2 ? 'risco' : inv.n ? 'atencao' : 'ok', finOk ? [inv.n ? `${inv.n} parcela(s) em atraso desde ${fmtDay(inv.first)}.` : 'Sem parcelas em atraso.'] : [inv.n ? 'Há pendência financeira (detalhe restrito ao financeiro).' : 'Sem pendências financeiras.']));

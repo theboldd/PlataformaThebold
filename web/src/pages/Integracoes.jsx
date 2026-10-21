@@ -1,25 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import '../styles/admin.css';
+import '../styles/automations.css';
 import { LoadError } from './admin/Guard.jsx';
 import { api } from '../lib/api.js';
 import { useApi, useAuth, useToast } from '../lib/hooks.js';
 import { useCrumbs } from '../components/Shell.jsx';
-import { Button, ErrorBox, Field, Loading, PageHead } from '../components/ui.jsx';
+import { Button, Field, Loading, PageHead } from '../components/ui.jsx';
+import { StateBadge, StateNotice } from '../components/State.jsx';
 import { ago, cleanName } from '../lib/format.js';
 
-const PILL = { conectado: 'Conectado', desconectado: 'Desconectado', erro: 'Erro', token_expirado: 'Token expirado', planejado: 'Especificado' };
-const NOTES = {
-  google_calendar: 'Reuniões criadas na plataforma viram eventos com convidados; a reserva de horário verifica conflitos (free/busy). Eventos externos aparecem no Calendário.',
-  meta: 'A API oficial do Instagram não oferece agendamento nativo: a The Bold OS guarda o horário e publica no momento certo (imagem, carrossel até 10 itens, reels). A Meta busca a mídia por link público temporário — requer PUBLIC_BASE_URL. Sem conexão, use “marcar como agendado externamente”.',
-  slack: 'Ponte de transição: espelha avisos-chave (ex.: #aprovações) enquanto a comunicação migra para o THE BOLD CHAT.',
-  google_drive: 'Especificação pronta em docs/integracoes/google-drive.md — implementação aguardando a decisão Workspace × Gmail (define o escopo OAuth).',
-  anthropic: 'Usada pelo The Bold Brain e agentes. A chave fica só no servidor; sem ela, a IA aparece como “não configurada” — nada é simulado.',
-};
+// Ordem do resumo: o que funciona → o que precisa de ação → o que depende de decisão
+const ORDER = ['conectada', 'ativo', 'somente_leitura', 'erro', 'nao_conectada', 'aguardando_configuracao', 'aguardando_decisao', 'em_desenvolvimento'];
 
 export default function Integracoes() {
   useCrumbs('Integrações');
-  const { data, error, loading, reload } = useApi('/integrations');
+  const { data, error, loading, reload } = useApi('/status/integrations');
   const [sp, setSp] = useSearchParams();
   const toast = useToast();
   useEffect(() => {
@@ -28,11 +24,20 @@ export default function Integracoes() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (loading && !data) return <div className="page"><Loading /></div>;
   if (error) return <LoadError error={error} />;
+  const integ = data.items.filter((i) => i.group !== 'infraestrutura');
+  const infra = data.items.filter((i) => i.group === 'infraestrutura');
+  const states = ORDER.filter((s) => data.summary[s]);
   return (
     <div className="page">
-      <PageHead kicker="Sistema" title="Integrações" sub="Conexões reais via OAuth. Status honesto: nada aparece como conectado sem estar. Tokens ficam criptografados no servidor e nunca são exibidos." />
-      {!data.public_base_url && <p className="note mb-5">PUBLIC_BASE_URL não está configurado no servidor: callbacks OAuth usam localhost e a publicação via Meta fica indisponível.</p>}
-      <div className="integ">{data.providers.map((p) => <Card key={p.provider} p={p} clients={data.clients} reload={reload} />)}</div>
+      <PageHead kicker="Sistema" title="Integrações" sub="Estado real de cada conexão. Nada aparece como conectado sem estar. Tokens ficam criptografados no servidor e nunca são exibidos; aqui só aparecem os nomes do que falta configurar." />
+      <div className="stx-summary mb-5" aria-label="Resumo por estado">
+        {states.map((s) => <div key={s} className="stx-sum"><span className="stx-sum-n tnum">{data.summary[s]}</span><StateBadge s={s} /></div>)}
+      </div>
+      {!data.public_base_url && <div className="mb-5"><StateNotice s="aguardando_configuracao" title="Endereço público (PUBLIC_BASE_URL)" compact>Os retornos de login (Google, Meta, Slack) usam localhost e a publicação via Meta fica indisponível até o endereço público ser definido no servidor.</StateNotice></div>}
+      <h2 className="caps mb-4">Integrações</h2>
+      <div className="stx-grid mb-5">{integ.map((p) => <Card key={p.key} p={p} clients={data.clients} reload={reload} />)}</div>
+      <h2 className="caps mb-4">Infraestrutura e hospedagem</h2>
+      <div className="stx-grid">{infra.map((p) => <Card key={p.key} p={p} clients={data.clients} reload={reload} />)}</div>
     </div>
   );
 }
@@ -42,30 +47,47 @@ function Card({ p, clients, reload }) {
   const toast = useToast();
   const admin = auth.can('integracoes', 'admin');
   const [busy, setBusy] = useState(false);
-  const status = p.provider === 'google_drive' && p.status === 'desconectado' ? 'planejado' : p.status;
-  const oauth = ['google_calendar', 'meta', 'slack'].includes(p.provider);
   const connect = async () => {
     setBusy(true);
     try { const r = await api.post(`/integrations/${p.provider}/connect`); window.location.href = r.url; }
-    catch (e) { toast(e.status === 412 ? `Servidor sem credenciais: defina ${p.env.join(', ')}` : e.message, 'err'); setBusy(false); }
+    catch (e) { toast(e.status === 412 ? `Servidor sem credenciais: ${p.missing.join(', ')}` : e.message, 'err'); setBusy(false); }
   };
-  const disconnect = async () => { if (!confirm(`Desconectar ${p.label}?`)) return; try { await api.post(`/integrations/${p.provider}/disconnect`); toast('Desconectado'); reload(); } catch (e) { toast(e.message, 'err'); } };
+  const disconnect = async () => { if (!confirm(`Desconectar ${p.name}?`)) return; try { await api.post(`/integrations/${p.provider}/disconnect`); toast('Desconectado'); reload(); } catch (e) { toast(e.message, 'err'); } };
   return (
-    <article className="integ-card">
-      <div className="row between"><h2 className="ed-md">{p.label}</h2><span className={`pill ${status}`}>{PILL[status] || status}</span></div>
+    <article className={`stx-card stx-${p.state}`}>
+      <div className="stx-card-h">
+        <h3 className="stx-card-t">{p.name}</h3>
+        <StateBadge s={p.state} />
+      </div>
+      <p className="sm muted stx-p">{p.purpose}</p>
+      {p.detail && <p className="sm stx-p">{p.detail}</p>}
       {p.account && <div className="sm"><span className="muted">Conta:</span> {p.account}</div>}
       {p.updated_at && <div className="xs faint">Atualizado {ago(p.updated_at)}</div>}
-      {p.last_error && <div className="sm" style={{ color: 'var(--err)' }}>Último erro: {p.last_error}</div>}
-      <p className="sm muted" style={{ margin: 0 }}>{NOTES[p.provider]}</p>
-      <div><div className="caps mb-2">Credenciais no servidor</div><div className="envs">{p.env.map((e) => <code key={e} className={p.configured ? 'ok' : ''}>{p.configured ? '✓' : '○'} {e}</code>)}</div>{!p.configured && <div className="xs faint mt-2">Não configurado — {p.docs}</div>}</div>
-      {admin && oauth && (
-        <div className="row wrap">
-          {p.status === 'conectado' ? <Button size="sm" variant="danger" onClick={disconnect}>Desconectar</Button> : <Button size="sm" variant="primary" disabled={busy} onClick={connect}>{p.status === 'token_expirado' || p.status === 'erro' ? 'Reconectar' : 'Conectar'}</Button>}
+      {p.state === 'erro' && p.last_error && <div className="sm" style={{ color: 'var(--err)' }}>Último erro: {p.last_error}</div>}
+      {p.counts && (
+        <div className="stx-counts">
+          {Object.entries(p.counts).filter(([, v]) => v != null).map(([k, v]) => <div key={k}><span className="tnum strong">{v}</span><span className="xs muted">{k === 'historico' ? 'registros de histórico' : k === 'conteudos' ? 'conteúdos migrados' : k === 'tarefas' ? 'tarefas migradas' : 'clientes com página'}</span></div>)}
         </div>
       )}
-      {admin && p.provider === 'meta' && p.status === 'conectado' && <MetaMap p={p} clients={clients} reload={reload} />}
-      {admin && p.provider === 'slack' && p.status === 'conectado' && <ConfigInput p={p} k="mirror_channel" label="Canal de espelho (ID do Slack)" placeholder="C0123456789" reload={reload} />}
-      {admin && p.provider === 'google_calendar' && p.status === 'conectado' && <ConfigInput p={p} k="calendar_id" label="Agenda (ID)" placeholder="primary" reload={reload} />}
+      {p.missing?.length > 0 && (
+        <div><div className="caps xs mb-2">O que falta</div><ul className="stx-list">{p.missing.map((m) => <li key={m}>{m}</li>)}</ul></div>
+      )}
+      {p.used_by?.length > 0 && (
+        <div><div className="caps xs mb-2">Usado em</div><div className="stx-chips">{p.used_by.map((u) => <span key={u} className="stx-chip">{u}</span>)}</div></div>
+      )}
+      {p.depends_on?.length > 0 && <div className="xs faint">Depende de: {p.depends_on.join(' · ')}</div>}
+      {admin && p.provider && (p.action === 'connect' || p.connected) && (
+        <div className="row wrap stx-actions">
+          {p.connected
+            ? <Button size="sm" variant="danger" onClick={disconnect}>Desconectar</Button>
+            : <Button size="sm" variant="primary" disabled={busy || !p.can_connect} onClick={connect} title={!p.can_connect ? 'Faltam as credenciais do aplicativo no servidor' : undefined}>{p.state === 'erro' ? 'Reconectar' : 'Conectar'}</Button>}
+          {!p.connected && !p.can_connect && <span className="xs faint">Disponível quando as credenciais estiverem no servidor.</span>}
+        </div>
+      )}
+      {!admin && p.action === 'connect' && <div className="xs faint">Somente administradores conectam integrações.</div>}
+      {admin && p.provider === 'meta' && p.connected && <MetaMap p={p} clients={clients} reload={reload} />}
+      {admin && p.provider === 'slack' && p.connected && <ConfigInput p={p} k="mirror_channel" label="Canal de espelho (ID do Slack)" placeholder="C0123456789" reload={reload} />}
+      {admin && p.provider === 'google_calendar' && p.connected && <ConfigInput p={p} k="calendar_id" label="Agenda (ID)" placeholder="primary" reload={reload} />}
     </article>
   );
 }
@@ -83,14 +105,15 @@ function MetaMap({ p, clients, reload }) {
   const save = async () => { try { await api.put('/integrations/meta/config', { client_map: map }); toast('Contas vinculadas'); reload(); } catch (e) { toast(e.message, 'err'); } };
   return (
     <div>
-      <div className="caps mb-2">Cliente → conta Instagram</div>
+      <div className="caps xs mb-2">Cliente → conta Instagram</div>
       {!accounts.length && <div className="xs muted">Nenhuma conta profissional encontrada nas Páginas autorizadas.</div>}
       {clients.map((c) => (
-        <div key={c.id} className="row mb-2"><span className="grow sm clip">{cleanName(c.name)}</span>
-          <select className="select" style={{ width: 200 }} value={map[c.id] || ''} onChange={(e) => setMap({ ...map, [c.id]: e.target.value || undefined })} aria-label={`Conta de ${c.name}`}><option value="">—</option>{accounts.map((a) => <option key={a.ig_user_id} value={a.ig_user_id}>@{a.username}</option>)}</select>
+        <div key={c.id} className="stx-map-row mb-2"><span className="grow sm clip">{cleanName(c.name)}</span>
+          <select className="select" value={map[c.id] || ''} onChange={(e) => setMap({ ...map, [c.id]: e.target.value || undefined })} aria-label={`Conta de ${c.name}`}><option value="">—</option>{accounts.map((a) => <option key={a.ig_user_id} value={a.ig_user_id}>@{a.username}</option>)}</select>
         </div>
       ))}
       <Button size="sm" variant="ink" onClick={save}>Salvar vínculos</Button>
     </div>
   );
 }
+

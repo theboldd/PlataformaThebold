@@ -3,11 +3,12 @@ import { flushSync } from 'react-dom';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import '../styles/admin.css';
 import { api } from '../lib/api.js';
-import { useAuth, useToast } from '../lib/hooks.js';
+import { useApi, useAuth, useToast } from '../lib/hooks.js';
+import { StateNotice, Insufficient } from '../components/State.jsx';
 import { useCrumbs } from '../components/Shell.jsx';
-import { Avatar, Button, Empty, Field, Loading, Modal, Tag } from '../components/ui.jsx';
+import { Avatar, Button, Empty, ErrorBox, Field, Loading, Modal, Tag } from '../components/ui.jsx';
 import { I } from '../components/Icons.jsx';
-import { fmtTime, cleanName } from '../lib/format.js';
+import { fmtTime, cleanName, ago } from '../lib/format.js';
 
 const TZ = 'America/Sao_Paulo';
 const dayKey = (v) => new Date(v).toLocaleDateString('pt-BR', { timeZone: TZ });
@@ -36,7 +37,8 @@ export default function Comunicacao() {
   useCrumbs('Comunicação', current ? channelTitle(current) : null);
   const loadChannels = () => api.get('/chat/channels').then(setChannels).catch(() => setChannels([]));
   useEffect(() => { loadChannels(); const h = () => loadChannels(); window.addEventListener('bold:message', h); return () => window.removeEventListener('bold:message', h); }, []);
-  useEffect(() => { if (!channelId && channels?.length && window.innerWidth > 720) nav(`/comunicacao/${[...channels].sort((a, b) => String(b.last?.created_at || '').localeCompare(String(a.last?.created_at || '')))[0].id}`, { replace: true }); }, [channelId, channels]); // eslint-disable-line react-hooks/exhaustive-deps
+  const view = sp.get('ver');
+  useEffect(() => { if (!channelId && view !== 'mencoes' && channels?.length && window.innerWidth > 720) nav(`/comunicacao/${[...channels].sort((a, b) => String(b.last?.created_at || '').localeCompare(String(a.last?.created_at || '')))[0].id}`, { replace: true }); }, [channelId, channels]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!channels) return <div className="page"><Loading /></div>;
   const groups = [
@@ -48,6 +50,7 @@ export default function Comunicacao() {
     <div className={`chat ${threadId ? 'with-thread' : ''} ${channelId ? '' : 'show-list'}`}>
       <aside className="chat-side" aria-label="Canais">
         <div className="mb-4"><div className="caps">The Bold</div><div className="ed-lg">Chat</div></div>
+        <button className={`ch-link ${view === 'mencoes' ? 'active' : ''}`} onClick={() => nav('/comunicacao?ver=mencoes')}><span className="hash">@</span><span className="clip">Menções</span></button>
         {groups.map((g) => (
           <div key={g.key}>
             <h4 className="caps">{g.label}{g.key !== 'cliente' && <button className="btn btn-ghost btn-sm btn-icon" aria-label={g.key === 'interno' ? 'Novo canal' : 'Nova conversa direta'} onClick={() => setModal(g.key)}><I.plus size={14} /></button>}</h4>
@@ -62,9 +65,10 @@ export default function Comunicacao() {
             {!channels.some((c) => c.kind === g.key) && <div className="xs faint" style={{ padding: '4px 10px' }}>Nenhuma.</div>}
           </div>
         ))}
-        <p className="xs faint mt-6" style={{ lineHeight: 1.5 }}>Transição do Slack: avisos-chave podem ser espelhados em um canal do Slack — configure em <Link to="/integracoes" className="bordo">Integrações</Link>. Decisões e pedidos importantes devem virar registro oficial (“Transformar em…”).</p>
+        <div className="mt-6"><StateNotice s="aguardando_configuracao" title="Slack" compact action="Integrações" to="/integracoes">Envio de avisos aguarda a conexão; o espelhamento automático ainda não foi construído.</StateNotice></div>
+        <p className="xs faint mt-4" style={{ lineHeight: 1.5 }}>Transição do Slack: avisos-chave podem ser espelhados em um canal do Slack — configure em <Link to="/integracoes" className="bordo">Integrações</Link>. Decisões e pedidos importantes devem virar registro oficial (“Transformar em…”).</p>
       </aside>
-      {channelId ? <Conversation key={channelId} channelId={channelId} channel={current} threadId={threadId} openThread={(id) => setSp(id ? { thread: id } : {})} onRead={loadChannels} /> : <div className="chat-main"><Empty title="Escolha uma conversa." /></div>}
+      {view === 'mencoes' && !channelId ? <Mentions /> : channelId ? <Conversation key={channelId} channelId={channelId} channel={current} threadId={threadId} openThread={(id) => setSp(id ? { thread: id } : {})} onRead={loadChannels} /> : <div className="chat-main"><Empty title="Escolha uma conversa." /></div>}
       {modal === 'interno' && <NewChannel onClose={() => setModal(null)} onDone={(id) => { setModal(null); loadChannels(); nav(`/comunicacao/${id}`); }} />}
       {modal === 'direto' && <NewDirect onClose={() => setModal(null)} onDone={(id) => { setModal(null); loadChannels(); nav(`/comunicacao/${id}`); }} />}
     </div>
@@ -305,5 +309,26 @@ function NewDirect({ onClose, onDone }) {
     <Modal open title="Conversa direta" onClose={onClose}>
       <div className="list">{people.map((p) => <button key={p.id} className="list-item link" style={{ width: '100%', border: 0, borderBottom: '1px solid var(--line)', background: 'none', cursor: 'pointer', textAlign: 'left' }} onClick={() => open(p.id)}><Avatar name={p.name} /><span className="grow">{p.name}</span><span className="xs muted">{p.title || p.role_key}</span></button>)}</div>
     </Modal>
+  );
+}
+
+// MENÇÕES — onde citaram você (chat e comentários de conteúdo)
+function Mentions() {
+  const { data, error } = useApi('/chat/mentions');
+  return (
+    <div className="chat-main" style={{ padding: 'var(--sp-6)', overflow: 'auto' }}>
+      <div className="caps">Bold Chat</div><h2 className="ed-lg" style={{ margin: '4px 0 16px' }}>Menções</h2>
+      {error ? <ErrorBox error={error} /> : !data ? <Loading rows={4} /> : !data.length ? <Insufficient title="Nenhuma menção ainda">Quando alguém escrever @seu nome numa conversa ou num comentário de conteúdo, aparece aqui.</Insufficient> : (
+        <ul className="col gap-3" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+          {data.map((m) => (
+            <li key={m.id} className="panel" style={{ padding: '12px 14px' }}>
+              <div className="xs muted">{m.kind === 'mensagem' ? 'Mensagem' : 'Comentário'} · {m.where} · {m.author} · {ago(m.at)}</div>
+              <div className="sm mt-1" style={{ whiteSpace: 'pre-wrap' }}>{String(m.body || '').slice(0, 400)}</div>
+              <Link className="link xs" to={m.link}>Abrir →</Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

@@ -73,7 +73,7 @@
 .hint-err { color: var(--err); font-size: var(--fs-sm); }
 
 /* ── Abas / segmentos ── */
-.tabs { display: flex; gap: var(--sp-5); border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; margin-bottom: var(--sp-5); }
+.tabs { display: flex; flex-wrap: wrap; column-gap: var(--sp-5); row-gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: var(--sp-5); } /* nunca esconder aba: quebra linha em vez de rolar */
 .tabs::-webkit-scrollbar { display: none; }
 .tab { padding: 12px 0; border: 0; background: none; cursor: pointer; font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--muted); font-weight: 500; position: relative; white-space: nowrap; }
 .tab::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--bordo); transform: scaleX(0); transform-origin: left; transition: transform var(--t-med) var(--ease-out); }

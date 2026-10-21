@@ -1,0 +1,39 @@
+/* Equipe & Performance — cards por pessoa; empilham no celular, sem rolagem horizontal da página. */
+.pf { overflow-x: hidden; }
+.pf-state { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pf-def { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; }
+
+.pf-team { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: var(--sp-5); }
+.pf-team > div { border-top: 1px solid var(--ink); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pf-team b { font-size: 26px; font-weight: 500; color: var(--ink); }
+
+.pf-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+.pf-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--sp-4); min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.pf-card-h { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pf-card-id { min-width: 0; }
+.pf-name { font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+
+.pf-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.pf-m { display: flex; flex-direction: column; gap: 2px; min-width: 0; border-top: 1px solid var(--line); padding-top: 6px; }
+.pf-m-l { font-size: var(--fs-xs); color: var(--muted); letter-spacing: .02em; }
+.pf-m-v { font-size: 20px; color: var(--ink); line-height: 1.2; }
+.pf-m.missing .pf-m-v { color: var(--faint); }
+.pf-m-r { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.pf-m-r .st-badge { font-size: 9.5px; padding: 2px 7px; }
+.pf-m .xs { overflow-wrap: anywhere; }
+.pf-note { margin: 0; }
+
+.pf-sub { display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed var(--line-strong); padding-top: 8px; }
+.pf-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.pf-list li { overflow-wrap: anywhere; }
+.pf-list a, .pf-late a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line-strong); }
+
+.pf-late { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.pf-late li { border-left: 3px solid var(--warn); padding: 6px 0 6px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.pf-late-t { font-weight: 500; }
+
+@media (max-width: 520px) {
+  .pf-metrics { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 10px; }
+  .pf-m-v { font-size: 18px; }
+  .pf-team { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

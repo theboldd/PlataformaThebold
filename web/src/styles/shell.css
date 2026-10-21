@@ -75,3 +75,17 @@
 .theme-toggle { width: 36px; height: 36px; border-radius: 999px; border: 1px solid var(--line); background: none; color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast); }
 .theme-toggle:hover { color: var(--ink); border-color: var(--line-strong); background: rgba(var(--tint-rgb), .04); }
 .theme-toggle:focus-visible { outline: 2px solid var(--primary-text); outline-offset: 2px; }
+
+/* Menu sempre encontrável: a lista rola dentro da barra (barra de rolagem visível e esmaecido no fim),
+   o rodapé com a pessoa fica fixo. Em telas baixas, itens mais compactos. */
+.sidebar { overflow: hidden; }
+.sidebar .nav { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(246,243,240,.28) transparent;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); padding-bottom: 28px; }
+.sidebar .nav::-webkit-scrollbar { width: 6px; }
+.sidebar .nav::-webkit-scrollbar-thumb { background: rgba(246,243,240,.28); border-radius: 6px; }
+@media (max-height: 1000px) {
+  .nav { gap: 10px; }
+  .nav a { padding: 5px 12px; }
+  .nav-group.primary a { padding: 7px 12px; }
+  .brand { padding-bottom: 16px; }
+}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { StateNotice } from '../components/State.jsx';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useApi, useAuth, useToast } from '../lib/hooks.js';
 import { api } from '../lib/api.js';
@@ -66,7 +67,11 @@ function Agenda({ data, onOpen }) {
     <>
       <div className="row wrap gap-4 mb-4">
         {data.google === 'conectado' ? <Tag tone="ok">Google Calendar conectado — eventos e convidados sincronizados</Tag>
-          : <span className="sm muted">Google Calendar desconectado: reuniões ficam registradas na plataforma, sem evento no Google. <Link to="/integracoes" className="bordo">Conectar →</Link></span>}
+          : <div style={{ flex: 1, display: 'grid', gap: 8 }}>
+              <StateNotice s="aguardando_conexao" title="Google Calendar" action="Configurar em Integrações" to="/integracoes" compact>Sem a conexão, as reuniões ficam registradas só na plataforma, sem evento nem convite no Google.</StateNotice>
+              <StateNotice s="aguardando_integracao" title="Google Meet" compact>O link do Meet é criado junto com o evento do Google (código pronto). Até lá, cole o link em “Local / link” ao criar a reunião.</StateNotice>
+              <StateNotice s="aguardando_configuracao" title="Transcrição e resumo por IA" compact>Transcrição: colar à mão funciona hoje; a detecção automática depende do Google. Resumos: escrever à mão funciona hoje; “Gerar com IA” depende do Claude.</StateNotice>
+            </div>}
       </div>
       <div className="cols">
         <div>
@@ -75,7 +80,8 @@ function Agenda({ data, onOpen }) {
         </div>
         <div>
           <Section title="Sala de reunião" kicker="Videochamada dentro da plataforma">
-            <div className="note-v2">
+            <StateNotice s="em_desenvolvimento" title="Videochamada nativa" compact>Especificada em docs/modulos/reunioes.md (V2). Não existe ainda.</StateNotice>
+            <div className="note-v2 mt-2">
               A videochamada nativa (LiveKit), gravação com consentimento, transcrição e resumos gerados pelo Claude estão especificados em <code>docs/modulos/reunioes.md</code> e entram na V2.
               Hoje a reunião acontece no link registrado em “local” (ex.: Google Meet) e a ata estruturada é feita aqui, na aba Inteligência.
             </div>
