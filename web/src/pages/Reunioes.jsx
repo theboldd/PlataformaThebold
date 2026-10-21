@@ -104,6 +104,7 @@ function MeetingDetail({ m, reload }) {
   const { data: people } = useApi('/users/directory', [], { live: false });
   const [summary, setSummary] = useState(m.summary || '');
   const [notes, setNotes] = useState(m.notes || '');
+  const [agenda, setAgenda] = useState(m.agenda || '');
   const [item, setItem] = useState({ kind: 'acao', body: '', owner_id: '', due_at: '' });
   const [resched, setResched] = useState(null);
   const canEdit = auth.can('reunioes', 'edit') || auth.can('reunioes', 'create');
@@ -143,11 +144,13 @@ function MeetingDetail({ m, reload }) {
         </div>
       )}
 
-      <Section title="Resumo e notas" kicker="Ata da reunião">
-        <Field label="Resumo"><textarea className="textarea" value={summary} onChange={(e) => setSummary(e.target.value)} disabled={!canEdit} placeholder="O que foi tratado, em poucas linhas." /></Field>
+      <Section title="Pauta e ata" kicker="A pauta aparece para o cliente; a ata é interna">
+        {m.client_id && <Field label="Pauta (visível ao cliente no portal)"><textarea className="textarea" value={agenda} onChange={(e) => setAgenda(e.target.value)} disabled={!canEdit} placeholder="O que vamos tratar." /></Field>}
+        <div className="mt-4"><Field label="Ata interna"><textarea className="textarea" value={summary} onChange={(e) => setSummary(e.target.value)} disabled={!canEdit} placeholder="O que foi tratado (interno — o cliente vê só o resumo aprovado abaixo)." /></Field></div>
         <div className="mt-4"><Field label="Notas internas"><textarea className="textarea" value={notes} onChange={(e) => setNotes(e.target.value)} disabled={!canEdit} placeholder="Observações da equipe (não visíveis ao cliente)." /></Field></div>
-        {canEdit && <Button size="sm" className="mt-4" onClick={() => patch({ summary, notes }, 'Ata salva.')} disabled={summary === (m.summary || '') && notes === (m.notes || '')}>Salvar ata</Button>}
+        {canEdit && <Button size="sm" className="mt-4" onClick={() => patch({ summary, notes, agenda }, 'Salvo.')} disabled={summary === (m.summary || '') && notes === (m.notes || '') && agenda === (m.agenda || '')}>Salvar</Button>}
       </Section>
+      <PostMeeting m={m} canEdit={canEdit} people={people || []} reload={reload} />
 
       <Section title="Decisões, ações e pendências" kicker="Cada ação vira tarefa com responsável">
         {grouped.length ? grouped.map(([k, list]) => list.map((it) => (
@@ -170,8 +173,73 @@ function MeetingDetail({ m, reload }) {
           </form>
         )}
       </Section>
-      <p className="xs faint mt-5">Extração automática de itens a partir da transcrição (Claude, com confirmação humana) e resumo para o cliente: V2 — ver docs/modulos/reunioes.md.</p>
     </div>
+  );
+}
+
+// PÓS-REUNIÃO — transcrição → dois resumos (CLIENTE e INTERNO). A IA gera rascunhos; uma pessoa revisa.
+// O resumo do cliente só é publicado depois da verificação de vazamento; o interno vira registros item a item.
+const lines = (a) => (a || []).map((x) => (typeof x === 'string' ? x : [x.what, x.who || x.owner_hint, x.when || x.due].filter(Boolean).join(' | '))).join('\n');
+const unlines = (t, struct) => t.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => { if (!struct) return l; const [what, who, when] = l.split('|').map((x) => x.trim()); return struct === 'step' ? { what, who: who || null, when: when || null } : { what, owner_hint: who || null, due: when || null }; });
+function PostMeeting({ m, canEdit, people, reload }) {
+  const toast = useToast();
+  const { data, reload: again } = useApi(`/meetings/${m.id}/post`, [m.id], { live: false });
+  const [tr, setTr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [cs, setCs] = useState(null);
+  const [is, setIs] = useState(null);
+  const [pick, setPick] = useState({});
+  const client = data?.summaries.find((x) => x.audience === 'client');
+  const internal = data?.summaries.find((x) => x.audience === 'internal');
+  useEffect(() => { if (!data) return; const c = client?.content || {}; setCs({ decisions: lines(c.decisions), next_steps: lines(c.next_steps), info: lines(c.info) }); const i = internal?.content || {}; setIs({ decisions: lines(i.decisions), tasks: lines(i.tasks), blockers: lines(i.blockers), risks: lines(i.risks), dependencies: lines(i.dependencies), notes: lines(i.notes) }); }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!data || !cs || !is) return <Section title="Pós-reunião"><Loading /></Section>;
+  const run = async (fn, msg) => { setBusy(true); try { const r = await fn(); if (r?.status && r.status !== 'ok') toast(r.message, 'err'); else if (msg) toast(msg); again(); reload(); } catch (x) { toast(x.message, 'err'); } finally { setBusy(false); } };
+  const saveClient = () => api.put(`/meetings/${m.id}/summaries/client`, { content: { decisions: unlines(cs.decisions), next_steps: unlines(cs.next_steps, 'step'), info: unlines(cs.info) } });
+  const saveInternal = () => api.put(`/meetings/${m.id}/summaries/internal`, { content: { decisions: unlines(is.decisions), tasks: unlines(is.tasks, 'task'), blockers: unlines(is.blockers), risks: unlines(is.risks), dependencies: unlines(is.dependencies), notes: unlines(is.notes) } });
+  const candidates = [...unlines(is.decisions).map((b) => ({ kind: 'decisao', body: b })), ...unlines(is.tasks, 'task').map((t) => ({ kind: 'acao', body: t.what, hint: t.owner_hint, due: t.due })), ...unlines(is.blockers).map((b) => ({ kind: 'pendencia', body: b }))];
+  const detected = data.transcripts.find((t) => t.status === 'detectada_sem_acesso');
+  return (
+    <Section title="Pós-reunião" kicker="Transcrição → resumo do cliente + resumo interno">
+      <div className="col gap-3">
+        <div className="xs muted">{data.transcripts.filter((t) => t.status === 'pronta').length ? `Transcrição registrada (${data.transcripts.filter((t) => t.status === 'pronta').map((t) => `${t.source}, ${fmtDateTime(t.created_at)}`).join(' · ')}).` : 'Nenhuma transcrição registrada.'}</div>
+        {detected && <div className="panel sm" style={{ borderColor: 'var(--warn)' }}>O Google anexou “{detected.source_ref}” ao evento. A integração atual não lê documentos do Drive: abra o arquivo, copie o texto e cole abaixo.</div>}
+        {canEdit && <>
+          <Field label="Colar transcrição ou anotações"><textarea className="textarea" value={tr} onChange={(e) => setTr(e.target.value)} placeholder="Cole aqui a transcrição do Meet (ou anotações completas)." style={{ minHeight: 90 }} /></Field>
+          <div className="row gap-2 wrap">
+            <Button size="sm" disabled={busy || tr.trim().length < 40} onClick={() => run(() => api.post(`/meetings/${m.id}/transcript`, { body: tr }).then(() => setTr('')), 'Transcrição registrada.')}>Registrar transcrição</Button>
+            <Button size="sm" variant="primary" disabled={busy || !data.transcripts.some((t) => t.status === 'pronta')} onClick={() => run(() => api.post(`/meetings/${m.id}/summaries/generate`), 'Rascunhos gerados — revise antes de publicar.')}>Gerar resumos com IA</Button>
+          </div>
+        </>}
+        {m.client_id && (
+          <div className="panel">
+            <div className="row between wrap"><span className="sm strong">Resumo do CLIENTE</span><span className="xs muted">{client ? `${client.status === 'publicado' ? `publicado ${fmtDateTime(client.published_at)}` : 'rascunho'} · V${client.version}${client.generated_by === 'ia' ? ' · gerado por IA' : ''}` : 'não iniciado'}</span></div>
+            <p className="xs muted">Sem problemas internos, custos, prioridades internas ou nomes de outros clientes. Uma linha por item; próximos passos: “o quê | quem | quando”.</p>
+            {[['decisions', 'Decisões'], ['next_steps', 'Próximos passos (o quê | quem | quando)'], ['info', 'Informações relevantes']].map(([k, l]) => <Field key={k} label={l}><textarea className="textarea" value={cs[k]} disabled={!canEdit} onChange={(e) => setCs({ ...cs, [k]: e.target.value })} style={{ minHeight: 60 }} /></Field>)}
+            {client?.leak_check?.length > 0 && <div className="sm mt-2" style={{ color: 'var(--err)' }}>Verificação de vazamento: {client.leak_check.join(' · ')}</div>}
+            {canEdit && <div className="row gap-2 mt-4"><Button size="sm" disabled={busy} onClick={() => run(saveClient, 'Rascunho do cliente salvo.')}>Salvar rascunho</Button><Button size="sm" variant="primary" disabled={busy} onClick={() => run(async () => { await saveClient(); return api.post(`/meetings/${m.id}/summaries/client/publish`); }, 'Resumo publicado no portal — cliente notificado.')}>Aprovar e publicar ao cliente</Button></div>}
+          </div>
+        )}
+        <div className="panel">
+          <div className="row between wrap"><span className="sm strong">Resumo INTERNO</span><span className="xs muted">{internal ? `V${internal.version}${internal.generated_by === 'ia' ? ' · gerado por IA' : ''}${internal.status === 'publicado' ? ' · aplicado' : ''}` : 'não iniciado'}</span></div>
+          {[['decisions', 'Decisões'], ['tasks', 'Tarefas (o quê | responsável | prazo)'], ['blockers', 'Bloqueios'], ['risks', 'Riscos'], ['dependencies', 'Dependências'], ['notes', 'Observações internas']].map(([k, l]) => <Field key={k} label={l}><textarea className="textarea" value={is[k]} disabled={!canEdit} onChange={(e) => setIs({ ...is, [k]: e.target.value })} style={{ minHeight: 50 }} /></Field>)}
+          {canEdit && <Button size="sm" className="mt-2" disabled={busy} onClick={() => run(saveInternal, 'Resumo interno salvo.')}>Salvar resumo interno</Button>}
+          {canEdit && candidates.length > 0 && (
+            <div className="mt-4">
+              <div className="caps mb-2">Transformar em registros (tarefas, decisões, Client Brain)</div>
+              {candidates.map((c, i) => (
+                <label key={i} className="row gap-2 sm" style={{ padding: '6px 0', borderBottom: '1px solid var(--line)' }}>
+                  <input type="checkbox" checked={!!pick[i]} onChange={(e) => setPick({ ...pick, [i]: e.target.checked ? { owner_id: '', due_at: '' } : undefined })} />
+                  <span className="tag">{ITEM_KINDS[c.kind]}</span><span className="grow">{c.body}{c.hint ? <span className="muted"> · sugerido: {c.hint}</span> : null}{c.due ? <span className="muted"> · {c.due}</span> : null}</span>
+                  {pick[i] && c.kind !== 'decisao' && <select className="select" value={pick[i].owner_id} onChange={(e) => setPick({ ...pick, [i]: { ...pick[i], owner_id: e.target.value } })}><option value="">Responsável…</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
+                  {pick[i] && c.kind !== 'decisao' && <input className="input" type="date" value={pick[i].due_at} onChange={(e) => setPick({ ...pick, [i]: { ...pick[i], due_at: e.target.value } })} />}
+                </label>
+              ))}
+              <Button size="sm" variant="primary" className="mt-4" disabled={busy || !Object.values(pick).some(Boolean)} onClick={() => run(async () => { await saveInternal(); const r = await api.post(`/meetings/${m.id}/summaries/internal/apply`, { items: candidates.map((c, i) => pick[i] && { kind: c.kind, body: c.body, owner_id: pick[i].owner_id || null, due_at: pick[i].due_at ? `${pick[i].due_at}T21:00:00-03:00` : null }).filter(Boolean) }); setPick({}); return r; }, 'Registros criados: tarefas atribuídas e decisões no Client Brain.')}>Criar registros selecionados</Button>
+            </div>
+          )}
+        </div>
+      </div>
+    </Section>
   );
 }
 

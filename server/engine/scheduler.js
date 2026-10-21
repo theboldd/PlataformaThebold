@@ -7,14 +7,32 @@ import { automation, isEnabled, onceFor } from './automations.js';
 import { runDetectors } from './intelligence.js';
 import { publishDueContent } from '../integrations/meta.js';
 import { generateReport } from '../services/reports.js';
+import { snapshotHealth, LEVEL_LABEL } from '../services/health.js';
+import { detectTranscripts } from '../services/meeting-summaries.js';
+import { fmtDay } from '../services/client-view.js';
+
+// Lembretes ao cliente nunca em excesso: intervalo mínimo por cliente e limite por etapa (settings configuráveis)
+const reminderGap = () => (setting('lembrete_cliente_intervalo_horas') ?? 24) * H;
+const reminderMax = () => setting('lembrete_cliente_max') ?? 3;
+function remindClient(c, marker, { title, body, cta = 'Revisar agora', link = '/portal/conteudos?filtro=aguardando' }) {
+  const ids = clientUsers(c.client_id);
+  if (!ids.length) return false;
+  const last = one(`SELECT MAX(created_at) t FROM automation_runs WHERE automation_key IN ('cliente.sem_resposta_24h','cliente.prazo_vencido') AND client_id=? AND status='ok'`, c.client_id)?.t;
+  if (last && Date.now() - new Date(last).getTime() < reminderGap()) return false;
+  const sent = one(`SELECT COUNT(*) n FROM automation_runs WHERE automation_key IN ('cliente.sem_resposta_24h','cliente.prazo_vencido') AND entity_id=? AND detail LIKE ? AND status='ok'`, c.id, `${marker}%`).n;
+  if (sent >= reminderMax()) return false;
+  notify(ids, { level: 'atencao', type: 'lembrete', title, body, cta, link, groupKey: `lembrete:${c.client_id}`, client: c.client_id });
+  return true;
+}
 import { runJob } from './jobs.js';
 
 const H = 3600e3;
 const cc = () => all("SELECT id FROM users WHERE active=1 AND role_key IN ('operacoes','ceo')").map((r) => r.id);
 
 // Etapas que abriram hoje: tarefa agendada vira tarefa de verdade (com aviso a quem executa)
-export function activateScheduledTasks() {
-  const due = all("SELECT t.*, c.number, c.title ctitle, cl.name client FROM tasks t LEFT JOIN contents c ON c.id=t.content_id LEFT JOIN clients cl ON cl.id=t.client_id WHERE t.status='agendada' AND t.available_at <= ?", now());
+// onlyIds: restringe a abertura a tarefas específicas (usado pela validação em cópia da base, para não abrir tarefas reais)
+export function activateScheduledTasks(onlyIds = null) {
+  const due = all(`SELECT t.*, c.number, c.title ctitle, cl.name client FROM tasks t LEFT JOIN contents c ON c.id=t.content_id LEFT JOIN clients cl ON cl.id=t.client_id WHERE t.status='agendada' AND t.available_at <= ? ${onlyIds ? `AND t.id IN (${onlyIds.map(() => '?').join(',') || "''"})` : ''}`, now(), ...(onlyIds || []));
   for (const k of due) {
     update('tasks', { id: k.id }, { status: 'aberta' });
     automation('etapa.disponivel', { entity: 'task', id: k.id, client: k.client_id, detail: `${k.title} — disponível desde ${k.available_at.slice(0, 10)}` });
@@ -67,8 +85,8 @@ export function tick() {
     const waited = (t - new Date(c.stage_entered_at).getTime()) / H;
     const marker = `${c.stage}:${c.stage_entered_at}`;
     if (waited >= h1 && isEnabled('cliente.sem_resposta_24h') && onceFor('cliente.sem_resposta_24h', c.id, marker)) {
-      automation('cliente.sem_resposta_24h', { entity: 'content', id: c.id, client: c.client_id, detail: marker });
-      notify(clientUsers(c.client_id), { level: 'atencao', type: 'lembrete', title: 'Você tem conteúdos aguardando aprovação', body: 'Leva poucos minutos: abra o feed e aprove ou comente.', link: '/portal/conteudos', groupKey: `lembrete:${c.client_id}`, client: c.client_id });
+      const sent = remindClient(c, marker, { title: 'Você tem conteúdos aguardando aprovação', body: 'Com a sua aprovação, seguimos para o agendamento. Leva poucos minutos: ♡ aprova, ✎ pede ajuste.' });
+      automation('cliente.sem_resposta_24h', { entity: 'content', id: c.id, client: c.client_id, detail: marker, status: sent ? 'ok' : 'ignorada' });
     }
     if (waited >= h2 && isEnabled('cliente.sem_resposta_48h') && onceFor('cliente.sem_resposta_48h', c.id, marker)) {
       automation('cliente.sem_resposta_48h', { entity: 'content', id: c.id, client: c.client_id, detail: marker });
@@ -87,13 +105,28 @@ export function tick() {
       notify(cc(), { level: 'urgente', type: 'escalada', title: `${c.cname}: 72h sem resposta do cliente`, body: 'Decidir: segue para a próxima semana ou para o próximo mês?', link: '/pendencias?escopo=equipe', groupKey: `esc:${c.client_id}`, client: c.client_id });
     }
   }
+  // Prazo de aprovação do cliente vencido → registrar atraso, lembrar (sem excesso), avisar o atendimento, avaliar impacto, escalar se a publicação estiver em risco
+  for (const k of all("SELECT t.*, c.title ctitle, c.planned_at, c.stage cstage, c.stage_entered_at, c.number, cl.name cname FROM tasks t JOIN contents c ON c.id=t.content_id JOIN clients cl ON cl.id=c.client_id WHERE t.kind='aprovacao' AND t.status IN ('aberta','em_andamento') AND t.due_at < ? AND c.blocked=0", nowIso)) {
+    const marker = `${k.cstage}:${k.stage_entered_at}`;
+    if (!isEnabled('cliente.prazo_vencido') || !onceFor('cliente.prazo_vencido', k.content_id, `${marker}:${k.due_at}`)) continue;
+    const c = { id: k.content_id, client_id: k.client_id };
+    const sent = remindClient(c, marker, { title: 'Precisamos de você', body: `O prazo de aprovação de “${k.ctitle}” passou. Ainda podemos receber sua aprovação, mas a data de publicação poderá precisar ser ajustada.` });
+    automation('cliente.prazo_vencido', { entity: 'content', id: k.content_id, client: k.client_id, detail: `${marker}:${k.due_at}`, status: sent ? 'ok' : 'ignorada' });
+    // Impacto: o agendamento precisa de ~1 dia útil depois da aprovação; perto da publicação, é risco real de mudar a data
+    const hoursToPub = k.planned_at ? (new Date(k.planned_at).getTime() - t) / H : null;
+    const impact = hoursToPub == null ? 'sem data de publicação' : hoursToPub < 0 ? 'a data de publicação já passou' : hoursToPub < 48 ? `publicação em ${Math.round(hoursToPub)}h — data em risco` : `publicação em ${fmtDay(k.planned_at)} — ainda dentro do prazo`;
+    log({ kind: 'sistema', action: 'cliente.prazo_vencido', entity: 'content', id: k.content_id, client: k.client_id, content: k.content_id, summary: `Prazo de aprovação do cliente vencido (${fmtDay(k.due_at)}): #${k.number} ${k.ctitle} · ${impact}${sent ? ' · lembrete enviado' : ' · lembrete não enviado (intervalo/limite)'}` });
+    const atd = resolveAssignee(k.client_id, 'atendimento');
+    notify(atd, { level: 'atencao', type: 'cliente_atraso', title: `${k.cname}: prazo de aprovação passou`, body: `#${k.number} ${k.ctitle} · ${impact}`, link: `/conteudos/${k.content_id}`, groupKey: `cli-atraso:${k.client_id}`, client: k.client_id, content: k.content_id });
+    if (hoursToPub != null && hoursToPub < 48) notify(cc(), { level: 'urgente', type: 'escalada', title: `${k.cname}: publicação em risco`, body: `#${k.number} ${k.ctitle} ainda sem aprovação · ${impact}. Decidir: nova data ou contato direto.`, link: `/conteudos/${k.content_id}`, groupKey: `pub-risco:${k.client_id}`, client: k.client_id });
+  }
   // Lembrete de reunião na véspera (cliente e participantes)
   for (const m of all("SELECT * FROM meetings WHERE status='agendada' AND starts_at BETWEEN ? AND ?", new Date(t + 20 * H).toISOString(), new Date(t + 26 * H).toISOString())) {
     if (onceFor('reuniao.lembrete', m.id, m.starts_at)) {
       insert('automation_runs', { id: uid('ar_'), automation_key: 'reuniao.lembrete', status: 'ok', entity_type: 'meeting', entity_id: m.id, client_id: m.client_id, detail: m.starts_at, created_at: nowIso });
       const hora = new Date(m.starts_at).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
       const people = all('SELECT a.user_id, u.role_key FROM meeting_attendees a JOIN users u ON u.id=a.user_id WHERE a.meeting_id=?', m.id);
-      notify(people.filter((p) => p.role_key === 'cliente').map((p) => p.user_id), { level: 'info', type: 'reuniao', title: 'Sua reunião está confirmada para amanhã.', body: `${hora} · ${m.title}`, link: '/portal/reunioes', client: m.client_id });
+      notify(people.filter((p) => p.role_key === 'cliente').map((p) => p.user_id), { level: 'info', type: 'reuniao', title: 'Sua reunião é amanhã', body: `${hora} · ${m.title}${m.agenda ? ' — veja a pauta' : ''}`, cta: 'Ver reunião', link: `/portal/reunioes?m=${m.id}`, client: m.client_id });
       notify(people.filter((p) => p.role_key !== 'cliente').map((p) => p.user_id), { level: 'info', type: 'reuniao', title: 'Reunião amanhã', body: `${hora} · ${m.title}`, link: '/reunioes', groupKey: `reuniao-amanha:${m.starts_at.slice(0, 10)}`, client: m.client_id });
     }
   }
@@ -131,6 +164,14 @@ export function tick() {
       notify(fin, { level: 'info', type: 'financeiro', title: 'Vencimentos nos próximos 3 dias', body: `${i.cname} — ${i.description}`, link: '/financeiro', groupKey: 'fin:venc' });
     }
   }
+  // Saúde do cliente: uma fotografia por dia (idempotente) — roda também pela rotina externa (/api/cron/tick)
+  if (isEnabled('saude.calcular')) {
+    const ops = all("SELECT id FROM users WHERE active=1 AND role_key IN ('ceo','operacoes')").map((r) => r.id);
+    snapshotHealth((c, h, prev) => {
+      automation('saude.calcular', { entity: 'client', id: c.id, client: c.id, detail: `${prev}→${h.level}` });
+      notify(ops, { level: h.level === 'risco' ? 'urgente' : 'atencao', type: 'saude', title: `${c.name}: saúde do cliente ${LEVEL_LABEL[prev]} → ${LEVEL_LABEL[h.level]}`, body: h.signals.filter((x) => ['risco', 'atencao'].includes(x.level)).map((x) => `${x.label}: ${x.evidence[0]}`).join(' · ').slice(0, 240), link: `/clientes/${c.id}?tab=saude`, client: c.id });
+    });
+  }
   return { activated };
 }
 
@@ -153,6 +194,7 @@ export function startScheduler() {
           generateReport('operacao', new Date(monday.getTime() - 7 * 864e5).toISOString(), monday.toISOString());
         }
       }, 'reports');
+      detectTranscripts().catch((e) => console.error('[scheduler] transcrições:', e.message));
     }
   };
   loop();

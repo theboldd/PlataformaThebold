@@ -38,7 +38,7 @@
 1. **Google:** a The Bold **não usa Workspace** (conta Gmail). O Drive usará o escopo `drive.file` + Google Picker, e uploads novos passam pela plataforma. Não há gravação nativa do Meet, por isso a recomendação de sala própria (LiveKit) se mantém.
 2. **Fonte editorial:** não há arquivo próprio. A **Instrument Serif** é a fonte oficial da plataforma.
 3. **Centro de Pendências:** por padrão, Rebeca e Vitória. A Rebeca pode liberar para outra pessoa em **Usuários → permissões específicas** (não é mais trava fixa no código).
-4. **Ajuste pedido pelo cliente:** depois da conferência da estrategista, o conteúdo **vai direto para agendamento** (`reenviar_cliente_apos_ajuste = false`). A nova versão é congelada como versão liberada.
+4. **Ajuste pedido pelo cliente** (revisto em 21/10/2026): depois da conferência da estrategista, a nova versão **volta para o cliente aprovar** (`reenviar_cliente_apos_ajuste = true`). Aprovação nunca é inferida pela etapa. Se a configuração voltar a “não reenviar”, a versão fica **liberada pela equipe** (status `liberada`), nunca “aprovada”.
 
 ## Pendências de decisão
 1. Acesso ao MindMeister para validar as etapas.

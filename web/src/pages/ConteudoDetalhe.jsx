@@ -176,7 +176,9 @@ function ActionsPanel({ data, myOpen, busy, onComplete, setModal, act }) {
       {t.kind === 'ajuste' ? 'Concluir ajuste' : t.kind === 'agendamento' ? 'Concluir agendamento' : `Concluir: ${t.title.split(' — ')[0]}`}
     </Button>,
   ));
-  if (canReview) {
+  // Pronto ≠ disponível: etapa agendada mostra quando abre e não oferece a ação
+  if (canReview && data.available_at) items.push(<span key="ag" className="tag" title="A etapa abre na data do marco do ciclo">Agendada · disponível em {fmtDate(data.available_at)}</span>);
+  else if (canReview) {
     items.push(<Button key="ap" variant="primary" magnetic disabled={busy} onClick={() => act(() => api.post(`/contents/${c.id}/review`, { decision: 'aprovar' }), c.stage === 'analise_cronograma' ? 'Tema aprovado internamente.' : 'Aprovado — enviado ao cliente.')} icon={<I.check size={14} />} data-cursor="APROVAR">{c.stage === 'revisao_ajuste' ? 'Ajuste conferido' : 'Aprovar'}{c.stage === 'analise_producao' ? ' e enviar ao cliente' : ''}</Button>);
     items.push(<Button key="aj" magnetic disabled={busy} onClick={() => setModal('adjust')}>Solicitar ajuste</Button>);
   }

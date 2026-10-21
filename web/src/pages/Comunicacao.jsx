@@ -102,7 +102,7 @@ function Conversation({ channelId, channel, threadId, openThread, onRead }) {
           {!data.messages.length && <Empty title="Comece a conversa.">{isClient ? 'Tudo que for escrito aqui fica no histórico do cliente.' : 'Use @ para mencionar alguém.'}</Empty>}
           <MessageList messages={data.messages} onThread={openThread} onConvert={setConvert} />
         </div>
-        <Composer channelId={channelId} people={data.people} onSent={load} placeholder={isClient ? `Mensagem para ${channelTitle(channel || ch)} (o cliente vê)` : `Mensagem em ${ch.kind === 'interno' ? '#' + ch.name : 'conversa'}`} />
+        <Composer channelId={channelId} clientId={(channel || ch)?.client_id} people={data.people} onSent={load} placeholder={isClient ? `Mensagem para ${channelTitle(channel || ch)} (o cliente vê)` : `Mensagem em ${ch.kind === 'interno' ? '#' + ch.name : 'conversa'}`} />
       </section>
       {threadId && <Thread tick={tick} channelId={channelId} threadId={threadId} people={data.people} onClose={() => openThread(null)} onConvert={setConvert} />}
       {convert && <ConvertModal msg={convert} channel={ch} onClose={() => setConvert(null)} onDone={() => { setConvert(null); load(); setTick((t) => t + 1); }} />}
@@ -124,7 +124,8 @@ function MessageList({ messages, onThread, onConvert, inThread }) {
           <div className="gutter">{!grouped ? <Avatar name={m.author_name} tone={m.author_role === 'cliente' ? 'ink' : ''} /> : <span className="xs faint" style={{ display: 'block', paddingTop: 4 }}>{fmtTime(m.created_at)}</span>}</div>
           <div className="grow">
             {!grouped && <div className="head"><span className="author">{m.author_name}</span>{m.author_role === 'cliente' && <span className="client-author">cliente</span>}<span className="xs faint">{fmtTime(m.created_at)}</span></div>}
-            <Body text={m.body} />
+            {!['(conteúdo)', '(arquivo)'].includes(m.body) && <Body text={m.body} />}
+            {m.ref && !m.ref.unavailable && <Link className="att" to={`/conteudos/${m.ref.id}`} style={{ display: 'inline-flex', gap: 10, alignItems: 'center' }}>{m.ref.thumb ? <img src={m.ref.thumb} alt="" style={{ width: 44, height: 54, objectFit: 'cover' }} /> : <I.content size={16} />}<span className="sm">#{m.ref.number} {m.ref.title}{m.ref.version ? ` · V${m.ref.version}` : ''}</span></Link>}
             {m.file && (
               <a className="att" href={m.file.urls.original} target="_blank" rel="noreferrer">
                 {m.file.kind === 'image' ? <img src={m.file.urls.thumb || m.file.urls.original} alt={m.file.name} /> : <><I.file size={16} /> {m.file.name}</>}
@@ -143,9 +144,12 @@ function MessageList({ messages, onThread, onConvert, inThread }) {
   });
 }
 
-function Composer({ channelId, parentId, people, onSent, placeholder }) {
+function Composer({ channelId, parentId, people, onSent, placeholder, clientId }) {
   const [text, setText] = useState('');
   const [file, setFile] = useState(null);
+  const [ref, setRef] = useState('');
+  const [contents, setContents] = useState([]);
+  useEffect(() => { if (clientId) api.get(`/contents?client_id=${clientId}`).then(setContents).catch(() => setContents([])); }, [clientId]);
   const [busy, setBusy] = useState(false);
   const [mq, setMq] = useState(null);
   const [sel, setSel] = useState(0);
@@ -171,11 +175,12 @@ function Composer({ channelId, parentId, people, onSent, placeholder }) {
     el.focus(); el.selectionStart = el.selectionEnd = before.length;
   };
   const send = async () => {
-    if ((!text.trim() && !file) || busy) return;
+    if ((!text.trim() && !file && !ref) || busy) return;
     setBusy(true);
     const fd = new FormData();
     fd.append('body', text.trim()); if (parentId) fd.append('parent_id', parentId); if (file) fd.append('file', file);
-    try { await api.form(`/chat/channels/${channelId}/messages`, fd); setText(''); setFile(null); if (ta.current) ta.current.style.height = 'auto'; onSent?.(); }
+    if (ref) { fd.append('ref_type', 'conteudo'); fd.append('ref_id', ref); }
+    try { await api.form(`/chat/channels/${channelId}/messages`, fd); setText(''); setFile(null); setRef(''); if (ta.current) ta.current.style.height = 'auto'; onSent?.(); }
     catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
   };
   const onKey = (e) => {
@@ -194,7 +199,8 @@ function Composer({ channelId, parentId, people, onSent, placeholder }) {
       <div className="composer-box">
         <textarea ref={ta} rows={1} value={text} onChange={onChange} onKeyDown={onKey} placeholder={placeholder} aria-label="Escrever mensagem" />
         <label className="btn btn-ghost btn-sm btn-icon" title="Anexar arquivo" style={{ cursor: 'pointer' }}><I.upload size={15} /><input type="file" hidden onChange={(e) => setFile(e.target.files[0] || null)} /></label>
-        <Button size="sm" variant="primary" onClick={send} disabled={busy || (!text.trim() && !file)} aria-label="Enviar">Enviar</Button>
+        {clientId && contents.length > 0 && <select className="select" style={{ maxWidth: 200 }} value={ref} onChange={(e) => setRef(e.target.value)} aria-label="Incorporar um conteúdo na mensagem" title="Incorporar um conteúdo (o cliente abre direto)"><option value="">+ conteúdo</option>{contents.map((c) => <option key={c.id} value={c.id}>#{c.number} {c.title}</option>)}</select>}
+        <Button size="sm" variant="primary" onClick={send} disabled={busy || (!text.trim() && !file && !ref)} aria-label="Enviar">Enviar</Button>
       </div>
       <div className="xs faint mt-2">Enter envia · Shift+Enter quebra linha · @ menciona</div>
     </div>

@@ -117,7 +117,38 @@ Nunca se avança sobre uma decisão que ainda depende da CEO.
 - `dreamsbrand.pi@gmail.com` é **E-MAIL CANDIDATO / AGUARDANDO CONFIRMAÇÃO**.
 - Não é e-mail oficial de acesso: não se cria login e não se envia convite até a confirmação explícita da CEO.
 
-## 18. Itens legados (os 144 herdados de "Para agendamento")
+## 18. Aprovação do cliente e versões (decisão de 21/10/2026, complementa a regra 14)
+- `V1 → APROVADA PELO CLIENTE` só com registro explícito de aprovação do cliente: usuário, data e hora, IP e **versão exata**.
+- Ajuste do cliente: `V1 → AJUSTE SOLICITADO → V2 → AGUARDANDO APROVAÇÃO DO CLIENTE`. A V2 **sempre volta** para o cliente (`reenviar_cliente_apos_ajuste = true`).
+- Só um novo registro de aprovação do cliente muda a V2 para `APROVADA`. Nunca inferir aprovação:
+  - pela etapa;
+  - pela conferência da estrategista;
+  - pela conclusão do ajuste.
+- Versão tecnicamente pronta sem o cliente: `LIBERADA PELA EQUIPE` (status `liberada`). **Não equivale** a `APROVADA PELO CLIENTE`.
+- Quando nasce uma versão nova, a anterior vira `SUBSTITUÍDA`. Uma versão antiga nunca aparece como aprovada depois disso.
+
+## 19. Conversão em ajuste (idempotente)
+- Uma mesma mensagem ou comentário gera um ajuste **uma única vez**. Uma nova tentativa devolve o ajuste que já existe e não cria outro.
+- O registro preserva:
+  - o comentário original;
+  - o ajuste;
+  - o vínculo entre os dois;
+  - usuário e data;
+  - conteúdo e versão;
+  - página ou timestamp, quando houver.
+
+## 20. Pronto ≠ disponível (estrito)
+- Etapa com janela (`janela_etapas`: análise do cronograma, revisão de produção) fica `AGENDADA` até a data do marco do ciclo.
+- Enquanto está agendada:
+  - **nenhuma ação operacional a executa**: revisar ou concluir a tarefa retorna 409 no Process Engine, para qualquer pessoa, inclusive CEO;
+  - a interface mostra quando a etapa fica disponível e não oferece o botão.
+- Na data do marco, a tarefa abre, o responsável é avisado e então pode agir.
+
+## 21. Onboarding: obrigatórias
+- Hoje **nenhuma pergunta obrigatória está configurada** (`required_keys` vazio, igual ao Notion).
+- A definição das obrigatórias é uma decisão de produto posterior. Não se inventam obrigatoriedades.
+
+## 22. Itens legados (os 144 herdados de "Para agendamento")
 - Ficam como **LEGADO / MIGRADO DO NOTION — NÃO VALIDADO**.
 - **Não** são: pendência, atraso, tarefa ativa, tarefa vencida, carga, sobrecarga, evento de performance, KPI, produtividade, capacidade, notificação, aprovação nem conteúdo operacional atual.
 - Não se presume que foram cancelados, concluídos ou abandonados. Não há classificação em massa.
@@ -126,23 +157,23 @@ Nunca se avança sobre uma decisão que ainda depende da CEO.
   - **ENCERRAR COMO CANCELADO:** ação explícita. Registra motivo, usuário, data, estado anterior e estado posterior.
   - **MANTER COMO HISTÓRICO:** o item fica preservado e totalmente fora da operação.
 
-## 19. Dados migrados não geram nada automaticamente
+## 23. Dados migrados não geram nada automaticamente
 - **DADOS MIGRADOS NÃO GERAM PENDÊNCIA AUTOMATICAMENTE.**
 - Também não geram notificação, alerta, KPI, performance, capacidade nem inteligência, salvo regra explícita escrita aqui.
 - Calendários históricos do Notion (CR EDITORIAL e equivalentes auditados) seguem a regra 15. Linhas vazias ficam guardadas no banco e só aparecem com o filtro "Mostrar registros vazios" (desligado por padrão).
 
-## 20. Origem estrutural: migrado do Notion × nascido na plataforma
+## 24. Origem estrutural: migrado do Notion × nascido na plataforma
 - Toda tarefa e todo conteúdo têm a origem gravada no banco: `data_origin = notion | plataforma`.
 - KPIs, detectores, alertas, performance, capacidade e inteligência usam esse campo e não misturam as duas origens sem regra explícita.
 - Item legado reprogramado passa a ter tarefa nascida na plataforma. O conteúdo continua com origem Notion, e o histórico registra a reabertura.
 
-## 21. Evento válido de performance
+## 25. Evento válido de performance
 - Só conta evento operacional de tarefa com `data_origin = plataforma`, com a definição auditável em `server/services/perfEvents.js`.
 - Eventos migrados nunca entram automaticamente.
 - Sem eventos válidos, a tela mostra **DADOS INSUFICIENTES**. Não há score nem ranking, e não se infere produtividade.
 - Capacidade **configurada** (cadastro) ≠ capacidade **medida** (histórico). A utilização real só é afirmada com histórico suficiente.
 
-## 22. Hospedagem
+## 26. Hospedagem
 - Nada vai para o Railway até a CEO aprovar.
 - A auditoria arquitetural fica em `docs/08-arquitetura-railway.md`, no formato ATUAL → DESTINO → MOTIVO → RISCO → IMPACTO/CUSTO → PLANO → ROLLBACK.
 

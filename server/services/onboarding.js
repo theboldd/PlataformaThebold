@@ -78,8 +78,11 @@ export function formStatus(clientId) {
   const keys = form.sections.flatMap((s) => s.questions.map((q) => q.key));
   const answered = keys.filter((k) => answers[k]?.answer?.trim());
   const missingRequired = form.required_keys.filter((k) => !answers[k]?.answer?.trim());
+  // Perguntas sensíveis (acessos) ficam fora do % do perfil: a The Bold prefere acesso de parceiro pelo Meta Business
+  const sensitiveKeys = form.sections.flatMap((s) => s.questions.filter((q) => q.sensitive || q.key.startsWith('acesso_')).map((q) => q.key));
+  const missingKeys = keys.filter((k) => !sensitiveKeys.includes(k) && !answers[k]?.answer?.trim());
   const ob = one('SELECT form_status, form_submitted_at FROM onboarding WHERE client_id=?', clientId);
-  return { form_id: form.id, version: form.version, total: keys.length, answered: answered.length, missing_required: missingRequired, status: ob?.form_status || 'nao_iniciado', submitted_at: ob?.form_submitted_at || null, answers };
+  return { form_id: form.id, version: form.version, total: keys.length, answered: answered.length, missing_required: missingRequired, status: ob?.form_status || 'nao_iniciado', submitted_at: ob?.form_submitted_at || null, answers, sensitive_total: sensitiveKeys.length, missing_keys: missingKeys };
 }
 
 // Regras oficiais 5 e 6: onboarding de quem já é cliente vem do Notion. Com tudo respondido = concluído;

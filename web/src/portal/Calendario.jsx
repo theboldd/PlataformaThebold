@@ -23,6 +23,7 @@ export default function Calendario() {
   const events = [
     ...data.items.map((i) => ({ ...i, key: dayKey(i.date), kind: 'content' })),
     ...data.meetings.map((mt) => ({ id: mt.id, title: mt.title.replace(/\s*\[DEMO\]/, ''), date: mt.starts_at, key: dayKey(mt.starts_at), kind: 'meeting' })),
+    ...(data.deadlines || []).map((d) => ({ id: `dl-${d.label}`, title: d.label, date: `${d.end}T12:00:00-03:00`, key: d.end, kind: 'deadline' })),
   ].filter((e) => e.key.startsWith(ym)).sort((a, b) => a.date.localeCompare(b.date));
   const byDay = events.reduce((acc, e) => ((acc[e.key] ||= []).push(e), acc), {});
   const first = new Date(y, m - 1, 1);
@@ -31,8 +32,9 @@ export default function Calendario() {
   const cells = Array.from({ length: Math.ceil((offset + daysIn) / 7) * 7 }, (_, i) => { const d = new Date(y, m - 1, i - offset + 1); return { d, key: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`, out: d.getMonth() !== m - 1 }; });
   const todayKey = dayKey(today.toISOString());
   const Ev = ({ e }) => e.kind === 'meeting'
-    ? <span className="p-ev meeting"><I.meeting size={11} /> {fmtTime(e.date)} {e.title}</span>
-    : <Link to={`/portal/conteudos?post=${e.id}`} className={`p-ev s-${e.status}`} title={`${e.title} — ${STATUS[e.status] || e.status}`}><span aria-hidden>{GLYPH[e.status] || '·'}</span> {FORMATS[e.format]} · {e.title}</Link>;
+    ? <Link to={`/portal/reunioes?m=${e.id}`} className="p-ev meeting"><I.meeting size={11} /> {fmtTime(e.date)} {e.title}</Link>
+    : e.kind === 'deadline' ? <span className="p-ev deadline">Prazo · {e.title}</span>
+    : <Link to={`/portal/conteudos?c=${e.id}`} className={`p-ev s-${e.status}`} title={`${e.title} — ${STATUS[e.status] || e.status}`}><span aria-hidden>{GLYPH[e.status] || '·'}</span> {FORMATS[e.format]} · {e.title}</Link>;
 
   return (
     <div className="p-page">
@@ -45,6 +47,7 @@ export default function Calendario() {
         </div>
       </header>
       <div className="row wrap gap-4 xs muted mb-4" aria-label="Legenda">
+        <span>Toque em um conteúdo para ver, comentar ou aprovar. As datas são definidas pela The Bold.</span>
         <span>✓ Aprovado</span><span>→ Agendado</span><span>● Publicado</span><span>⏳ Aguardando você</span><span>✎ Em ajuste</span>
         {data.in_preparation > 0 && <span className="tag tag-bordo">{data.in_preparation} conteúdos em preparação pela equipe</span>}
       </div>

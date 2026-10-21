@@ -3,7 +3,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import fs from 'node:fs';
-import { db, one, run, insert } from './db.js';
+import { db, one, run, insert, uid } from './db.js';
 import { log } from './lib/core.js';
 import { loadUser, csrf } from './lib/auth.js';
 import { ROLE_DEFS, HttpError, can } from './lib/permissions.js';
@@ -22,6 +22,7 @@ import { atrasos } from './routes/atrasos.js';
 import { editorial } from './routes/editorial.js';
 import { markMigratedTasks, markLegacy, syncDelayReviews } from './services/delayReview.js';
 import { review } from './routes/review.js';
+import { clientOps } from './routes/client-ops.js';
 import { reconcileMigratedForms } from './services/onboarding.js';
 
 // Regra oficial 16: a própria The Bold fica na base como CLIENTE INTERNO (decisão da CEO, aplicada uma vez e registrada)
@@ -50,6 +51,16 @@ export function bootstrap() {
     run('INSERT INTO settings (key,value,updated_at) VALUES (?,?,?)', flag, 'true', new Date().toISOString());
   }
   seedAutomations();
+  // Decisão da The Bold (21/10/2026): a versão que resolve o ajuste do cliente volta para o cliente aprovar.
+  // Aplica uma única vez sobre a configuração salva (se alguém tinha gravado "não reenviar") e registra no histórico.
+  if (!one("SELECT 1 FROM settings WHERE key='decisao:v2_volta_cliente'")) {
+    const prev = one("SELECT value FROM settings WHERE key='reenviar_cliente_apos_ajuste'");
+    if (prev && prev.value !== 'true') {
+      run("UPDATE settings SET value='true', updated_at=? WHERE key='reenviar_cliente_apos_ajuste'", new Date().toISOString());
+      insert('activity_logs', { id: uid('log_'), actor_kind: 'sistema', action: 'configuracao.alterada', entity_type: 'settings', entity_id: 'reenviar_cliente_apos_ajuste', summary: 'Regra: a versão que resolve o ajuste do cliente volta para o cliente aprovar (decisão 21/10)', before: prev.value, after: 'true', origin: 'automatica', visibility: 'internal', created_at: new Date().toISOString() });
+    }
+    run("INSERT INTO settings (key,value,updated_at) VALUES ('decisao:v2_volta_cliente','true',?)", new Date().toISOString());
+  }
   reconcileStageWindows(); // regra pronto ≠ disponível aplicada às tarefas que já existiam
   reconcileMigratedForms(); // onboarding migrado parcial não fica como "concluído"
   activateScheduledTasks();
@@ -97,6 +108,7 @@ export function createApp() {
   app.use('/api', ficha);
   app.use('/api', pendencias);
   app.use('/api', divisao);
+  app.use('/api', clientOps);
   app.use('/api', atrasos);
   app.use('/api', editorial);
   app.use('/api', ops);

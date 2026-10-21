@@ -9,6 +9,7 @@ import { automation } from '../engine/automations.js';
 import { ingest, fileDTO } from '../services/media.js';
 import * as gcal from '../integrations/google.js';
 import { upload } from './ops.js';
+import { offerSatisfaction } from '../services/satisfaction.js';
 
 export const comms = Router();
 
@@ -51,7 +52,19 @@ comms.post('/chat/channels', requireInternal, (req, res) => {
   log({ actor: req.user.id, action: 'canal.criado', entity: 'channel', id: ch.id, summary: `Canal #${slug} criado` });
   res.json(ch);
 });
-const msgDTO = (m) => ({ ...m, converted_to: parseJSON(m.converted_to, []), file: m.file_id ? fileDTO(one('SELECT * FROM files WHERE id=?', m.file_id)) : null,
+// Conteúdo incorporado na mensagem ("olha essa versão…"). O cliente só vê o card se o conteúdo estiver visível para ele.
+const CLIENT_VISIBLE = ['aprovacao_tema', 'aprovacao_cliente', 'ajuste_cliente', 'revisao_ajuste', 'agendamento', 'agendado', 'publicado'];
+function refDTO(m, viewer) {
+  if (m.ref_type !== 'conteudo' || !m.ref_id) return null;
+  const c = one('SELECT id, number, title, format, stage, current_version_id, approved_version_id, client_id FROM contents WHERE id=?', m.ref_id);
+  if (!c) return null;
+  const isClient = viewer?.role_key === 'cliente';
+  if (isClient && !CLIENT_VISIBLE.includes(c.stage)) return { type: 'conteudo', id: c.id, unavailable: true };
+  const v = isClient ? one('SELECT id, number FROM content_versions WHERE content_id=? AND (sent_to_client_at IS NOT NULL OR approved_at IS NOT NULL) ORDER BY number DESC LIMIT 1', c.id) : one('SELECT id, number FROM content_versions WHERE id=?', c.current_version_id);
+  const f = v ? one('SELECT f.* FROM version_media vm JOIN files f ON f.id=vm.file_id WHERE vm.version_id=? ORDER BY vm.position LIMIT 1', v.id) : null;
+  return { type: 'conteudo', id: c.id, number: c.number, title: c.title, format: c.format, status: publicStatus(c), version: v?.number || null, thumb: f ? fileDTO(f)?.urls?.thumb : null };
+}
+const msgDTO = (m, viewer) => ({ ...m, ref: refDTO(m, viewer), converted_to: parseJSON(m.converted_to, []), file: m.file_id ? fileDTO(one('SELECT * FROM files WHERE id=?', m.file_id)) : null,
   replies: one('SELECT COUNT(*) n FROM messages WHERE parent_id=?', m.id).n, last_reply_at: one('SELECT MAX(created_at) t FROM messages WHERE parent_id=?', m.id).t });
 comms.get('/chat/channels/:id/messages', requireAuth, (req, res) => {
   const ch = one('SELECT * FROM channels WHERE id=?', req.params.id);
@@ -59,7 +72,7 @@ comms.get('/chat/channels/:id/messages', requireAuth, (req, res) => {
   const parent = req.query.parent || null;
   const rows = all(`SELECT m.*, u.name author_name, u.role_key author_role, u.avatar_color FROM messages m JOIN users u ON u.id=m.author_id WHERE m.channel_id=? AND ${parent ? 'm.parent_id=?' : 'm.parent_id IS NULL'} ORDER BY m.created_at DESC LIMIT 200`, ch.id, ...(parent ? [parent] : []));
   run('INSERT INTO channel_members (channel_id,user_id,last_read_at) VALUES (?,?,?) ON CONFLICT(channel_id,user_id) DO UPDATE SET last_read_at=excluded.last_read_at', ch.id, req.user.id, now());
-  res.json({ channel: ch, messages: rows.reverse().map(msgDTO), parent: parent ? msgDTO(one('SELECT m.*, u.name author_name, u.role_key author_role FROM messages m JOIN users u ON u.id=m.author_id WHERE m.id=?', parent)) : null,
+  res.json({ channel: ch, messages: rows.reverse().map((m) => msgDTO(m, req.user)), parent: parent ? msgDTO(one('SELECT m.*, u.name author_name, u.role_key author_role FROM messages m JOIN users u ON u.id=m.author_id WHERE m.id=?', parent), req.user) : null,
     people: all('SELECT id, name, role_key FROM users WHERE id IN (' + channelMembers(ch).map(() => '?').join(',') + ')', ...channelMembers(ch)) });
 });
 comms.post('/chat/channels/:id/messages', requireAuth, upload.single('file'), async (req, res) => {
@@ -70,7 +83,15 @@ comms.post('/chat/channels/:id/messages', requireAuth, upload.single('file'), as
   let file = null;
   if (req.file) file = await ingest(req.file.path, { originalName: Buffer.from(req.file.originalname, 'latin1').toString('utf8'), mime: req.file.mimetype, clientId: ch.client_id, userId: req.user.id, visibility: ch.kind === 'cliente' ? 'client' : 'internal' });
   const parent_id = req.body.parent_id || null;
-  const m = insert('messages', { id: uid('msg_'), channel_id: ch.id, parent_id, author_id: req.user.id, body: body || '(arquivo)', file_id: file?.id || null, created_at: now() });
+  // Contexto da mensagem: geral, ou vinculada a um conteúdo do mesmo cliente (incorporado como card)
+  let ref = null;
+  if (req.body.ref_type === 'conteudo' && req.body.ref_id) {
+    const c = one('SELECT id, client_id, stage FROM contents WHERE id=?', req.body.ref_id);
+    const ok = c && (ch.kind !== 'cliente' || c.client_id === ch.client_id) && canAccessClient(req.user, c.client_id) && (req.user.role_key !== 'cliente' || CLIENT_VISIBLE.includes(c.stage));
+    if (!ok) throw new HttpError(404, 'Conteúdo não encontrado.');
+    ref = { ref_type: 'conteudo', ref_id: c.id };
+  }
+  const m = insert('messages', { id: uid('msg_'), channel_id: ch.id, parent_id, author_id: req.user.id, body: body || (ref ? '(conteúdo)' : '(arquivo)'), file_id: file?.id || null, ...(ref || {}), created_at: now() });
   const members = channelMembers(ch);
   const people = all(`SELECT id, name FROM users WHERE active=1 AND id IN (${members.map(() => '?').join(',') || "''"})`, ...members);
   const mentioned = parseMentions(body, people, ch.client_id).filter((id) => id !== req.user.id);
@@ -82,9 +103,13 @@ comms.post('/chat/channels/:id/messages', requireAuth, upload.single('file'), as
   if (ch.kind === 'cliente' && req.user.role_key === 'cliente') {
     notify(members.filter((id) => id !== req.user.id && !mentioned.includes(id)), { level: 'info', type: 'mensagem_cliente', title: `Mensagem de ${req.user.name}`, body: body.slice(0, 140), link: `/comunicacao/${ch.id}`, groupKey: `cliente-msg:${ch.id}`, client: ch.client_id });
   }
+  if (ch.kind === 'cliente' && req.user.role_key !== 'cliente') {
+    const clientIds = all("SELECT user_id FROM client_members WHERE client_id=? AND function='cliente'", ch.client_id).map((r) => r.user_id).filter((id) => !mentioned.includes(id));
+    notify(clientIds, { level: 'info', type: 'mensagem', title: 'Nova mensagem da The Bold', body: body.slice(0, 140), cta: 'Abrir conversa', link: '/portal/comunicacao', groupKey: `bold-msg:${ch.id}`, client: ch.client_id });
+  }
   if (ch.kind === 'direto') notify(members.filter((id) => id !== req.user.id), { level: 'info', type: 'direta', title: `Mensagem de ${req.user.name}`, body: body.slice(0, 140), link: `/comunicacao/${ch.id}`, groupKey: `dm:${ch.id}` });
   bus.emit('message', { channel_id: ch.id, id: m.id, client_id: ch.client_id, members });
-  res.json(msgDTO({ ...m, author_name: req.user.name, author_role: req.user.role_key }));
+  res.json(msgDTO({ ...m, author_name: req.user.name, author_role: req.user.role_key }, req.user));
 });
 // Transformar mensagem em registro oficial: tarefa | pendencia | decisao | ajuste | evento
 comms.post('/chat/messages/:id/convert', requireInternal, (req, res) => {
@@ -96,6 +121,9 @@ comms.post('/chat/messages/:id/convert', requireInternal, (req, res) => {
   if (clientId) assertClient(req.user, clientId);
   const text = title?.trim() || m.body.slice(0, 160);
   const author = userName(m.author_id);
+  // Idempotência: a mesma mensagem não vira o mesmo tipo de registro duas vezes (ex.: ajuste duplicado)
+  const already = parseJSON(m.converted_to, []).find((x) => x.type === type);
+  if (already) return res.json({ ...msgDTO({ ...m, author_name: userName(m.author_id) }, req.user), result: already, already: true });
   let result;
   tx(() => {
     if (type === 'tarefa' || type === 'pendencia') {
@@ -194,7 +222,7 @@ async function syncToGoogle(meetingId) {
   try {
     const att = all('SELECT u.email FROM meeting_attendees a JOIN users u ON u.id=a.user_id WHERE a.meeting_id=?', m.id).map((r) => r.email).filter((e) => !e.endsWith('.demo'));
     const ev = await gcal.createEvent({ title: m.title, description: `${m.summary || ''}\n\nReunião registrada na THE BOLD OS.`, start: m.starts_at, end: m.ends_at, attendees: att, location: m.location });
-    update('meetings', { id: m.id }, { gcal_event_id: ev.id, gcal_sync: 'sincronizado' });
+    update('meetings', { id: m.id }, { gcal_event_id: ev.id, gcal_sync: 'sincronizado', ...(ev.hangoutLink && !m.location ? { location: ev.hangoutLink } : {}) });
     return 'sincronizado';
   } catch (e) { update('meetings', { id: m.id }, { gcal_sync: 'erro' }); log({ kind: 'integracao', action: 'gcal.erro', entity: 'meeting', id: m.id, client: m.client_id, summary: `Google Calendar: ${e.message}` }); return 'erro'; }
 }
@@ -243,9 +271,10 @@ comms.patch('/meetings/:id', requireInternal, async (req, res) => {
   const m = one('SELECT * FROM meetings WHERE id=?', req.params.id);
   if (!m) throw new HttpError(404, 'Reunião não encontrada.');
   if (m.client_id) assertClient(req.user, m.client_id);
-  const { status, starts_at, ends_at, summary, notes } = req.body || {};
+  const { status, starts_at, ends_at, summary, notes, agenda } = req.body || {};
   const patch = {};
   if (summary !== undefined) patch.summary = summary;
+  if (agenda !== undefined) patch.agenda = String(agenda || '').trim() || null; // pauta: visível ao cliente
   if (notes !== undefined) patch.notes = notes;
   if (status) patch.status = status;
   if (starts_at && ends_at) {
@@ -263,29 +292,33 @@ comms.patch('/meetings/:id', requireInternal, async (req, res) => {
   const people = all('SELECT user_id FROM meeting_attendees WHERE meeting_id=?', m.id).map((r) => r.user_id).filter((id) => id !== req.user.id);
   if (status === 'cancelada' || patch.starts_at) notify(people, { level: 'atencao', type: 'reuniao', title: status === 'cancelada' ? `Reunião cancelada: ${m.title}` : `Reunião alterada: ${m.title}`, body: patch.starts_at ? new Date(patch.starts_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : null, link: '/reunioes', client: m.client_id });
   log({ actor: req.user.id, action: 'reuniao.alterada', entity: 'meeting', id: m.id, client: m.client_id, summary: `Reunião “${m.title}”: ${Object.keys(patch).join(', ')}`, before: JSON.stringify({ starts_at: m.starts_at, status: m.status }), after: JSON.stringify({ starts_at: patch.starts_at || m.starts_at, status: patch.status || m.status }), visibility: status === 'cancelada' || patch.starts_at ? 'client' : 'internal' });
+  if (status === 'realizada' && m.status !== 'realizada' && m.client_id) offerSatisfaction(m.client_id, 'reuniao', m.id, 'a reunião de ' + new Date(m.starts_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' }));
   res.json(meetingDTO(one('SELECT * FROM meetings WHERE id=?', m.id)));
 });
 // Ata estruturada: decisões, ações (viram tarefas), pendências, mudanças de estratégia, solicitações
+// Ata estruturada: decisões, ações (viram tarefas), pendências, mudanças de estratégia, solicitações
+export function addMeetingItem(m, actor, { kind, body, owner_id, due_at, origin = 'manual' }) {
+  if (!['decisao', 'acao', 'pendencia', 'mudanca_estrategia', 'solicitacao', 'informacao'].includes(kind) || !body?.trim()) throw new HttpError(422, 'Tipo e descrição obrigatórios.');
+  const item = tx(() => {
+    const it = insert('meeting_items', { id: uid('mi_'), meeting_id: m.id, kind, body: body.trim(), owner_id: owner_id || null, due_at: due_at ? new Date(due_at).toISOString() : null, origin, confirmed: 1, created_at: now() });
+    if (['acao', 'pendencia', 'solicitacao'].includes(kind)) {
+      const t = insert('tasks', { id: uid('t_'), title: body.trim().slice(0, 160), description: `Origem: reunião “${m.title}” (${new Date(m.starts_at).toLocaleDateString('pt-BR')})`, client_id: m.client_id, assignee_id: owner_id || null, status: 'aberta', kind: 'reuniao', origin: 'reuniao', source_type: 'meeting', source_id: m.id, priority: kind === 'pendencia' ? 'alta' : 'media', due_at: it.due_at, created_by: actor.id, created_at: now() });
+      update('meeting_items', { id: it.id }, { task_id: t.id });
+      if (owner_id) notify(owner_id, { level: 'info', type: 'tarefa', title: 'Nova tarefa da reunião', body: body.slice(0, 140), link: '/', client: m.client_id });
+      automation('reuniao.itens', { entity: 'meeting_item', id: it.id, client: m.client_id, detail: kind });
+    }
+    if (m.client_id && ['decisao', 'mudanca_estrategia'].includes(kind)) insert('client_memories', { id: uid('cm_'), client_id: m.client_id, kind: 'decisao', body: body.trim(), source_type: 'meeting', source_id: m.id, created_by: actor.id, created_at: now() });
+    return it;
+  });
+  log({ actor: actor.id, action: 'reuniao.item', entity: 'meeting', id: m.id, client: m.client_id, summary: `Reunião “${m.title}” — ${kind}: ${body.slice(0, 120)}` });
+  return item;
+}
 comms.post('/meetings/:id/items', requireInternal, (req, res) => {
   const m = one('SELECT * FROM meetings WHERE id=?', req.params.id);
   if (!m) throw new HttpError(404, 'Reunião não encontrada.');
   if (m.client_id) assertClient(req.user, m.client_id);
   if (!can(req.user, 'reunioes', 'edit') && !can(req.user, 'reunioes', 'create')) throw new HttpError(403, 'Sem permissão.');
-  const { kind, body, owner_id, due_at } = req.body || {};
-  if (!['decisao', 'acao', 'pendencia', 'mudanca_estrategia', 'solicitacao', 'informacao'].includes(kind) || !body?.trim()) throw new HttpError(422, 'Tipo e descrição obrigatórios.');
-  const item = tx(() => {
-    const it = insert('meeting_items', { id: uid('mi_'), meeting_id: m.id, kind, body: body.trim(), owner_id: owner_id || null, due_at: due_at ? new Date(due_at).toISOString() : null, origin: 'manual', confirmed: 1, created_at: now() });
-    if (['acao', 'pendencia', 'solicitacao'].includes(kind)) {
-      const t = insert('tasks', { id: uid('t_'), title: body.trim().slice(0, 160), description: `Origem: reunião “${m.title}” (${new Date(m.starts_at).toLocaleDateString('pt-BR')})`, client_id: m.client_id, assignee_id: owner_id || null, status: 'aberta', kind: 'reuniao', origin: 'reuniao', source_type: 'meeting', source_id: m.id, priority: kind === 'pendencia' ? 'alta' : 'media', due_at: it.due_at, created_by: req.user.id, created_at: now() });
-      update('meeting_items', { id: it.id }, { task_id: t.id });
-      if (owner_id) notify(owner_id, { level: 'info', type: 'tarefa', title: 'Nova tarefa da reunião', body: body.slice(0, 140), link: '/', client: m.client_id });
-      automation('reuniao.itens', { entity: 'meeting_item', id: it.id, client: m.client_id, detail: kind });
-    }
-    if (m.client_id && ['decisao', 'mudanca_estrategia'].includes(kind)) insert('client_memories', { id: uid('cm_'), client_id: m.client_id, kind: 'decisao', body: body.trim(), source_type: 'meeting', source_id: m.id, created_by: req.user.id, created_at: now() });
-    return it;
-  });
-  log({ actor: req.user.id, action: 'reuniao.item', entity: 'meeting', id: m.id, client: m.client_id, summary: `Reunião “${m.title}” — ${kind}: ${body.slice(0, 120)}` });
-  res.json(item);
+  res.json(addMeetingItem(m, req.user, req.body || {}));
 });
 comms.post('/meetings/slots', requireInternal, (req, res) => {
   if (!can(req.user, 'reunioes', 'admin') && !can(req.user, 'reunioes', 'edit')) throw new HttpError(403, 'Sem permissão.');

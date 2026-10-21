@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { MediaView } from '../../components/MediaView.jsx';
 import { fmtDateTime } from '../../lib/format.js';
 
-const label = (v) => ({ rascunho: 'rascunho', em_revisao: 'em revisão', enviada_cliente: 'enviada ao cliente', aprovada: 'aprovada', substituida: 'substituída' })[v.status] || v.status;
+const label = (v) => ({ rascunho: 'rascunho', em_revisao: 'em revisão', enviada_cliente: 'enviada ao cliente', aprovada: 'aprovada', liberada: 'liberada (sem aprovação do cliente)', substituida: 'substituída' })[v.status] || v.status;
 
 export function VersionChips({ versions, value, onChange, approvedId }) {
   return (

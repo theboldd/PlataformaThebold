@@ -59,9 +59,12 @@ export async function freeBusy(emails, timeMin, timeMax) {
   const j = await api('/freeBusy', { method: 'POST', body: JSON.stringify({ timeMin, timeMax, items: emails.map((id) => ({ id })) }) });
   return Object.values(j.calendars || {}).flatMap((c) => c.busy || []);
 }
+// Sem local físico, o evento já nasce com link do Google Meet (conferenceDataVersion=1)
 export async function createEvent({ title, description, start, end, attendees, location }) {
-  return api(`/calendars/${calId()}/events?sendUpdates=all`, { method: 'POST', body: JSON.stringify({ summary: title, description, location, start: { dateTime: start, timeZone: 'America/Sao_Paulo' }, end: { dateTime: end, timeZone: 'America/Sao_Paulo' }, attendees: attendees.map((email) => ({ email })) }) });
+  const meet = location ? {} : { conferenceData: { createRequest: { requestId: `bold-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, conferenceSolutionKey: { type: 'hangoutsMeet' } } } };
+  return api(`/calendars/${calId()}/events?sendUpdates=all&conferenceDataVersion=1`, { method: 'POST', body: JSON.stringify({ summary: title, description, location, start: { dateTime: start, timeZone: 'America/Sao_Paulo' }, end: { dateTime: end, timeZone: 'America/Sao_Paulo' }, attendees: attendees.map((email) => ({ email })), ...meet }) });
 }
+export async function getEvent(id) { return api(`/calendars/${calId()}/events/${encodeURIComponent(id)}`); }
 export async function updateEvent(id, patch) { return api(`/calendars/${calId()}/events/${encodeURIComponent(id)}?sendUpdates=all`, { method: 'PATCH', body: JSON.stringify(patch) }); }
 export async function deleteEvent(id) { return api(`/calendars/${calId()}/events/${encodeURIComponent(id)}?sendUpdates=all`, { method: 'DELETE' }); }
 export async function disconnect() {

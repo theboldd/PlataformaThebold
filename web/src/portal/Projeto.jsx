@@ -1,4 +1,5 @@
 // MEU PROJETO — andamento simplificado, o que depende de você e o histórico do que já aconteceu.
+import { Link } from 'react-router-dom';
 import { usePortal } from './PortalApp.jsx';
 import { ago, fmtMonth, cleanName } from '../lib/format.js';
 import { Loading } from '../components/ui.jsx';
@@ -18,8 +19,8 @@ export default function Projeto() {
       <section className="p-now"><div className="caps">Andamento</div><Track track={me.track} /></section>
       <section className="p-mat-sec"><Pendencias embedded /></section>
       <section className="p-mat-sec">
-        <div className="p-sec-h"><span className="caps">Histórico</span></div>
-        <ul className="p-updates">{me.timeline.map((t, i) => <li key={i}><span className="xs faint">{ago(t.created_at)}</span><span className="sm">{t.summary.replace(/ \[DEMO\]/g, '').replace(/^#\d+\s*/, '')}</span></li>)}</ul>
+        <div className="p-sec-h"><span className="caps">Histórico</span><Link to="/portal/historico" className="p-link xs">ver tudo</Link></div>
+        <ul className="p-updates">{me.timeline.map((t, i) => <li key={i}><span className="xs faint">{ago(t.created_at)}</span>{t.link ? <Link className="sm p-hist-link" to={t.link}>{t.summary}</Link> : <span className="sm">{t.summary}</span>}</li>)}</ul>
       </section>
     </div>
   );
