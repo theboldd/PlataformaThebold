@@ -277,7 +277,7 @@ function Post({ it, team, onUpdate }) {
         {!editing && <div className="row gap-4 wrap">
           {caption && long && <button className="p-link" onClick={() => setExpanded((e) => !e)}>{expanded ? 'mostrar menos' : 'mais'}</button>}
           {it.can_like && !it.is_theme && !shown && <button className="p-link" onClick={() => { setDraft(caption); setEditing(true); }}><I.edit size={13} /> Editar legenda</button>}
-          <button className="p-link" onClick={() => openRequest?.({ kind: 'conteudo', ref: { id: it.id, title: it.title } })}>Pedir algo sobre este conteúdo</button>
+          {it.can_request && <button className="p-link" onClick={() => openRequest?.({ kind: 'conteudo', ref: { id: it.id, title: it.title } })}>Pedir algo sobre este conteúdo</button>}
         </div>}
 
         {it.versions?.length > 0 && !it.is_theme && <Versions it={it} vnum={vnum} setVnum={setVnum} />}

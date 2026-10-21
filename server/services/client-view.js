@@ -4,6 +4,7 @@
 // sem nomes da equipe, prioridades, bloqueios internos, custos ou problemas — só a tradução amigável.
 import { one, all, now, parseJSON } from '../db.js';
 import { formStatus } from './onboarding.js';
+import { NOT_LEGACY, PLATFORM_CONTENT } from '../engine/process.js';
 
 const TZ = 'America/Sao_Paulo';
 export const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString('pt-BR', { timeZone: TZ, day: '2-digit', month: '2-digit' }) : '');
@@ -18,16 +19,18 @@ const STEP_OF = { cronograma: 0, analise_cronograma: 0, ajuste_cronograma: 0, ap
   aprovacao_cliente: 3, ajuste_cliente: 3, revisao_ajuste: 3, agendamento: 4, agendado: 5, publicado: 5 };
 const CLIENT_WAIT = ['aprovacao_tema', 'aprovacao_cliente'];
 
-// Ciclo "vivo": o primeiro com trabalho em andamento; senão o mais recente
+// Ciclo "vivo": o primeiro com trabalho da PLATAFORMA em andamento; senão o mais recente com conteúdo da plataforma.
+// Regras 22–24: ciclo formado só por dado migrado/legado nunca é "ciclo atual" (sem ciclo → o portal não mostra jornada).
+const PLAT = `EXISTS (SELECT 1 FROM contents ct WHERE ct.cycle_id=cycles.id AND ${PLATFORM_CONTENT('ct.')} AND ${NOT_LEGACY('ct.')}`;
 export function liveCycle(clientId) {
-  return one("SELECT * FROM cycles WHERE client_id=? AND EXISTS (SELECT 1 FROM contents WHERE cycle_id=cycles.id AND stage NOT IN ('agendado','publicado','cancelado')) ORDER BY month LIMIT 1", clientId)
-    || one("SELECT * FROM cycles WHERE client_id=? AND EXISTS (SELECT 1 FROM contents WHERE cycle_id=cycles.id AND stage NOT IN ('publicado','cancelado')) ORDER BY month LIMIT 1", clientId)
-    || one('SELECT * FROM cycles WHERE client_id=? ORDER BY month DESC LIMIT 1', clientId);
+  return one(`SELECT * FROM cycles WHERE client_id=? AND ${PLAT} AND ct.stage NOT IN ('agendado','publicado','cancelado')) ORDER BY month LIMIT 1`, clientId)
+    || one(`SELECT * FROM cycles WHERE client_id=? AND ${PLAT} AND ct.stage NOT IN ('publicado','cancelado')) ORDER BY month LIMIT 1`, clientId)
+    || one(`SELECT * FROM cycles WHERE client_id=? AND ${PLAT}) ORDER BY month DESC LIMIT 1`, clientId);
 }
 export function journey(clientId) {
   const cycle = liveCycle(clientId);
   if (!cycle) return null;
-  const cs = all("SELECT stage, blocked, waiting_on FROM contents WHERE cycle_id=? AND stage<>'cancelado' AND (legacy_status IS NULL OR legacy_status='reprogramado')", cycle.id);
+  const cs = all("SELECT stage, blocked, waiting_on FROM contents WHERE cycle_id=? AND stage<>'cancelado' AND (legacy_status IS NULL OR legacy_status='reprogramado') AND (data_origin='plataforma' OR legacy_status='reprogramado')", cycle.id);
   if (!cs.length) return { month: cycle.month, steps: JOURNEY.map((label) => ({ label, state: 'next', note: 'próxima etapa', count: 0 })), here: null };
   const idx = cs.map((x) => STEP_OF[x.stage]);
   const min = Math.min(...idx), max = Math.max(...idx);
@@ -171,7 +174,7 @@ export function whatsNext(clientId, actions = clientActions(clientId)) {
   const ms = parseJSON(cycle?.milestones, {});
   const today = now().slice(0, 10);
   if (actions.some((a) => a.kind === 'aprovacao')) out.push({ text: 'Depois da sua aprovação, os conteúdos seguem para agendamento e publicação.' });
-  const stages = cycle ? all("SELECT stage FROM contents WHERE cycle_id=? AND stage<>'cancelado' AND (legacy_status IS NULL OR legacy_status='reprogramado')", cycle.id).map((r) => r.stage) : [];
+  const stages = cycle ? all("SELECT stage FROM contents WHERE cycle_id=? AND stage<>'cancelado' AND (legacy_status IS NULL OR legacy_status='reprogramado') AND (data_origin='plataforma' OR legacy_status='reprogramado')", cycle.id).map((r) => r.stage) : [];
   if (stages.some((s) => ['producao', 'analise_producao', 'ajuste_interno'].includes(s))) {
     const d = ms.cliente_aprova_final?.start;
     out.push({ text: 'Quando a revisão interna terminar, os conteúdos chegam aqui para você aprovar.', date: d && d >= today ? d : null });

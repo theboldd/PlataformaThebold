@@ -12,7 +12,7 @@ import { automation } from '../engine/automations.js';
 import { detectAdjustment } from '../lib/intent.js';
 import { activeForm, questionOf, saveAnswer, formStatus, submitForm } from '../services/onboarding.js';
 import { fileDTO, ingest } from '../services/media.js';
-import { clientHome, clientActions, clientDeadline, clientHistory, journey, profileProgress } from '../services/client-view.js';
+import { clientHome, clientActions, clientDeadline, clientHistory, journey, profileProgress, liveCycle } from '../services/client-view.js';
 import { createRequest, requestForClient, clientReply, REQUEST_KINDS } from '../services/requests.js';
 import { decisionDTO, answerDecision, brandForClient, confirmBrand, pulseForClient } from '../services/client-brand.js';
 import { pendingPrompt, answerSatisfaction, dismissSatisfaction, offerSatisfaction } from '../services/satisfaction.js';
@@ -72,7 +72,10 @@ function feedItem(c, client) {
   const canUnlike = lastClient?.decision === 'aprovado' && hrs <= 24 && ((c.stage === 'agendamento' && !c.scheduled_at && lastClient.kind === 'cliente') || (c.stage === 'producao' && lastClient.kind === 'tema' && !c.current_version_id));
   const adjustState = openAdj.length || c.stage === 'revisao_ajuste' ? 'solicitado' : c.stage === 'aprovacao_cliente' && c.client_adjust_rounds > 0 ? 'concluido' : null;
   const canDecide = ['aprovacao_tema', 'aprovacao_cliente'].includes(c.stage) && !c.blocked;
+  // Solicitação vinculada a conteúdo: só conteúdo operacional da plataforma (regras 22–24)
+  const canRequest = (c.data_origin === 'plataforma' || c.legacy_status === 'reprogramado') && !['nao_validado', 'historico', 'cancelado'].includes(c.legacy_status);
   return {
+    can_request: canRequest,
     id: c.id, number: c.number, title: c.title, format: c.format, planned_at: c.planned_at, scheduled_at: c.scheduled_at, status: publicStatus(c), stage: c.stage,
     is_theme: c.stage === 'aprovacao_tema' || c.stage === 'producao', theme: c.theme, objective: c.objective, reference: c.reference,
     brand: { name: client.name, handle: client.handle },
@@ -88,7 +91,7 @@ const contentFor = (id, client) => feedItem(one('SELECT * FROM contents WHERE id
 // Quando todo o ciclo foi aprovado: convite de satisfação ("Como foi essa etapa?")
 function maybeCycleDone(content) {
   if (!content.cycle_id) return;
-  const pending = one("SELECT COUNT(*) n FROM contents WHERE cycle_id=? AND stage IN ('cronograma','analise_cronograma','ajuste_cronograma','aprovacao_tema','producao','analise_producao','ajuste_interno','aprovacao_cliente','ajuste_cliente','revisao_ajuste')", content.cycle_id).n;
+  const pending = one("SELECT COUNT(*) n FROM contents WHERE cycle_id=? AND (legacy_status IS NULL OR legacy_status='reprogramado') AND stage IN ('cronograma','analise_cronograma','ajuste_cronograma','aprovacao_tema','producao','analise_producao','ajuste_interno','aprovacao_cliente','ajuste_cliente','revisao_ajuste')", content.cycle_id).n;
   if (pending) return;
   const cy = one('SELECT month FROM cycles WHERE id=?', content.cycle_id);
   const MES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
@@ -140,7 +143,7 @@ portal.get('/feed', (req, res) => {
   if (req.query.format) { where.push('format=?'); p.push(req.query.format); }
   where.push("(legacy_status IS NULL OR legacy_status='reprogramado')"); // regra 22: item legado não é conteúdo operacional para o cliente
   const rows = all(`SELECT * FROM contents WHERE ${where.join(' AND ')} ORDER BY CASE WHEN stage IN ('aprovacao_tema','aprovacao_cliente') THEN 0 ELSE 1 END, planned_at`, ...p);
-  const months = all(`SELECT DISTINCT substr(planned_at,1,7) m FROM contents WHERE client_id=? AND planned_at IS NOT NULL AND stage IN (${CLIENT_STAGES.map(() => '?').join(',')}) ORDER BY m`, c.id, ...CLIENT_STAGES).map((r) => r.m);
+  const months = all(`SELECT DISTINCT substr(planned_at,1,7) m FROM contents WHERE client_id=? AND (legacy_status IS NULL OR legacy_status='reprogramado') AND planned_at IS NOT NULL AND stage IN (${CLIENT_STAGES.map(() => '?').join(',')}) ORDER BY m`, c.id, ...CLIENT_STAGES).map((r) => r.m);
   res.json({ items: rows.map((x) => feedItem(x, c)), months, aspects: ADJUST_ASPECTS });
 });
 const getMyContent = (req) => {
@@ -275,9 +278,9 @@ portal.get('/calendar', (req, res) => {
   const c = myClient(req);
   const items = all(`SELECT * FROM contents WHERE client_id=? AND (legacy_status IS NULL OR legacy_status='reprogramado') AND (stage IN (${CLIENT_STAGES.map(() => '?').join(',')}) OR (stage='producao' AND current_version_id IS NULL)) AND planned_at IS NOT NULL ORDER BY planned_at`, c.id, ...CLIENT_STAGES)
     .map((x) => ({ id: x.id, title: x.title, format: x.format, date: x.scheduled_at || x.planned_at, status: publicStatus(x), can_like: ['aprovacao_tema', 'aprovacao_cliente'].includes(x.stage) && !x.blocked }));
-  const upcoming = all("SELECT COUNT(*) n FROM contents WHERE client_id=? AND stage IN ('cronograma','analise_cronograma','ajuste_cronograma','producao','analise_producao','ajuste_interno') AND NOT (stage='producao' AND current_version_id IS NULL)", c.id)[0].n;
+  const upcoming = all("SELECT COUNT(*) n FROM contents WHERE client_id=? AND (legacy_status IS NULL OR legacy_status='reprogramado') AND stage IN ('cronograma','analise_cronograma','ajuste_cronograma','producao','analise_producao','ajuste_interno') AND NOT (stage='producao' AND current_version_id IS NULL)", c.id)[0].n;
   const meetings = all("SELECT id, title, starts_at, ends_at FROM meetings WHERE client_id=? AND status='agendada'", c.id);
-  const cycle = one("SELECT milestones FROM cycles WHERE client_id=? AND status<>'encerrado' ORDER BY month LIMIT 1", c.id);
+  const cycle = liveCycle(c.id); // regras 22–24: nunca um ciclo só de dado migrado/legado
   const ms = parseJSON(cycle?.milestones, {});
   const deadlines = Object.entries(ms).filter(([k]) => ['cliente_aprova_temas', 'cliente_aprova_final'].includes(k)).map(([k, m]) => ({ label: k === 'cliente_aprova_temas' ? 'Sua aprovação dos temas' : 'Sua aprovação dos conteúdos', start: m.start, end: m.end }));
   res.json({ items, meetings, in_preparation: upcoming, deadlines });
@@ -286,8 +289,8 @@ portal.get('/pendencias', (req, res) => {
   const c = myClient(req);
   const ob = one('SELECT * FROM onboarding WHERE client_id=?', c.id);
   const onboarding = ob ? all("SELECT id, kind, label, status, due_at, brain_section FROM onboarding_items WHERE onboarding_id=? AND who='cliente' ORDER BY sort", ob.id) : [];
-  const approvals = all("SELECT id, number, title, stage, stage_entered_at FROM contents WHERE client_id=? AND stage IN ('aprovacao_tema','aprovacao_cliente')", c.id);
-  const materials = all("SELECT id, number, title, block_reason, updated_at, planned_at FROM contents WHERE client_id=? AND blocked=1 AND waiting_on='cliente'", c.id);
+  const approvals = all("SELECT id, number, title, stage, stage_entered_at FROM contents WHERE client_id=? AND (legacy_status IS NULL OR legacy_status='reprogramado') AND stage IN ('aprovacao_tema','aprovacao_cliente')", c.id);
+  const materials = all("SELECT id, number, title, block_reason, updated_at, planned_at FROM contents WHERE client_id=? AND (legacy_status IS NULL OR legacy_status='reprogramado') AND blocked=1 AND waiting_on='cliente'", c.id);
   res.json({ onboarding, approvals, materials, onboarding_status: ob?.status, form_status: ob?.form_status });
 });
 // HISTÓRICO — cada evento abre o registro original
@@ -395,14 +398,14 @@ portal.get('/materials', (req, res) => {
   const dto = (f) => ({ ...fileDTO(f), context: ctxLabel(f), category: f.category });
   res.json({
     requested: [
-      ...all("SELECT id, number, title, block_reason reason, planned_at FROM contents WHERE client_id=? AND blocked=1 AND waiting_on='cliente'", c.id).map((x) => ({ kind: 'conteudo', id: x.id, key: `conteudo:${x.id}`, title: x.reason, context: `Para o conteúdo “${x.title}”`, due: x.planned_at })),
+      ...all("SELECT id, number, title, block_reason reason, planned_at FROM contents WHERE client_id=? AND (legacy_status IS NULL OR legacy_status='reprogramado') AND blocked=1 AND waiting_on='cliente'", c.id).map((x) => ({ kind: 'conteudo', id: x.id, key: `conteudo:${x.id}`, title: x.reason, context: `Para o conteúdo “${x.title}”`, due: x.planned_at })),
       ...(ob ? all("SELECT id, label, due_at FROM onboarding_items WHERE onboarding_id=? AND who='cliente' AND kind IN ('material','acesso') AND status='pendente'", ob.id).map((x) => ({ kind: 'onboarding', id: x.id, key: `onboarding:${x.id}`, title: x.label, context: 'Início do projeto', due: x.due_at })) : []),
       ...all("SELECT id, title, next_action FROM client_requests WHERE client_id=? AND status='aguardando_cliente'", c.id).map((x) => ({ kind: 'solicitacao', id: x.id, key: `solicitacao:${x.id}`, title: x.next_action || x.title, context: `Solicitação “${x.title}”`, due: null })),
     ],
     sent: files.filter((f) => f.uploader_role === 'cliente' && f.category !== 'referencia').map(dto),
     references: files.filter((f) => f.uploader_role === 'cliente' && f.category === 'referencia').map(dto),
     from_team: files.filter((f) => f.uploader_role !== 'cliente').map(dto),
-    open_contents: all("SELECT id, title FROM contents WHERE client_id=? AND stage NOT IN ('publicado','cancelado','cronograma','analise_cronograma','ajuste_cronograma') ORDER BY planned_at LIMIT 40", c.id),
+    open_contents: all("SELECT id, title FROM contents WHERE client_id=? AND (legacy_status IS NULL OR legacy_status='reprogramado') AND stage NOT IN ('publicado','cancelado','cronograma','analise_cronograma','ajuste_cronograma') ORDER BY planned_at LIMIT 40", c.id),
   });
 });
 // context: conteudo:<id> | onboarding:<id> | solicitacao:<id> | referencia | novo (cria uma solicitação de material — nada fica solto)
@@ -467,5 +470,5 @@ portal.post('/meetings/book', async (req, res) => {
 portal.get('/channel', (req, res) => {
   const c = myClient(req);
   const ch = one("SELECT id FROM channels WHERE client_id=? AND kind='cliente'", c.id);
-  res.json({ channel_id: ch?.id || null, contents: all(`SELECT id, title, format FROM contents WHERE client_id=? AND (stage IN (${CLIENT_STAGES.map(() => '?').join(',')})) ORDER BY planned_at DESC LIMIT 40`, c.id, ...CLIENT_STAGES) });
+  res.json({ channel_id: ch?.id || null, contents: all(`SELECT id, title, format FROM contents WHERE client_id=? AND (legacy_status IS NULL OR legacy_status='reprogramado') AND (stage IN (${CLIENT_STAGES.map(() => '?').join(',')})) ORDER BY planned_at DESC LIMIT 40`, c.id, ...CLIENT_STAGES) });
 });

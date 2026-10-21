@@ -58,7 +58,7 @@ export function buildContext(user, agentKey, { clientId = null, contentId = null
   if (allowed.includes('pendencias') && can(user, 'pendencias', 'view')) { ctx.pendencias = computePendencies().slice(0, 40); refs.push({ type: 'pendencies' }); }
   if ((allowed.includes('torre') || allowed.includes('insights')) && !clientId) {
     ctx.insights = all("SELECT problem, cause, impact, suggestion, severity FROM ai_insights WHERE status='aberto' ORDER BY updated_at DESC LIMIT 20");
-    if (allowed.includes('torre')) ctx.carga_equipe = teamLoad().map(({ name, open, late, capacity }) => ({ name, open, late, capacity }));
+    if (allowed.includes('torre')) ctx.carga_equipe = teamLoad().map(({ name, open_platform, late, capacity }) => ({ name, abertas_plataforma: open_platform, atrasadas_plataforma: late, capacidade_configurada: capacity })); // regras 22–24
     refs.push({ type: 'insights' });
   }
   if (allowed.includes('reunioes')) {

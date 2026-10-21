@@ -2,7 +2,7 @@
 // Idempotente: cada disparo é registrado em automation_runs e não se repete para o mesmo marcador.
 import { one, all, insert, update, run, uid, now } from '../db.js';
 import { notify, log } from '../lib/core.js';
-import { STAGES, resolveAssignee, clientUsers, setting, stageOpensAt } from './process.js';
+import { STAGES, resolveAssignee, clientUsers, setting, stageOpensAt, NOT_LEGACY, PLATFORM_CONTENT } from './process.js';
 import { automation, isEnabled, onceFor } from './automations.js';
 import { runDetectors } from './intelligence.js';
 import { publishDueContent } from '../integrations/meta.js';
@@ -93,7 +93,7 @@ export function tick() {
       const exists = one("SELECT 1 FROM tasks WHERE client_id=? AND kind='follow_up' AND status='aberta'", c.client_id);
       if (!exists) {
         const who = resolveAssignee(c.client_id, 'atendimento');
-        const pending = one("SELECT COUNT(*) n FROM contents WHERE client_id=? AND stage IN ('aprovacao_tema','aprovacao_cliente')", c.client_id).n;
+        const pending = one(`SELECT COUNT(*) n FROM contents WHERE client_id=? AND stage IN ('aprovacao_tema','aprovacao_cliente') AND ${PLATFORM_CONTENT()} AND ${NOT_LEGACY()}`, c.client_id).n;
         insert('tasks', { id: uid('t_'), title: `Follow-up de aprovação — ${c.cname}`, client_id: c.client_id, function: 'atendimento', assignee_id: who, status: 'aberta', kind: 'follow_up', origin: 'automacao', priority: 'alta',
           description: `Texto sugerido (WhatsApp): “Oi! Passando para lembrar que ${pending} conteúdo(s) estão aguardando sua aprovação na área The Bold. É só abrir o feed e aprovar ou comentar. Qualquer dúvida estamos aqui ❤”`,
           due_at: new Date(t + 8 * H).toISOString(), created_at: nowIso });
@@ -106,7 +106,8 @@ export function tick() {
     }
   }
   // Prazo de aprovação do cliente vencido → registrar atraso, lembrar (sem excesso), avisar o atendimento, avaliar impacto, escalar se a publicação estiver em risco
-  for (const k of all("SELECT t.*, c.title ctitle, c.planned_at, c.stage cstage, c.stage_entered_at, c.number, cl.name cname FROM tasks t JOIN contents c ON c.id=t.content_id JOIN clients cl ON cl.id=c.client_id WHERE t.kind='aprovacao' AND t.status IN ('aberta','em_andamento') AND t.due_at < ? AND c.blocked=0", nowIso)) {
+  for (const k of all(`SELECT t.*, c.title ctitle, c.planned_at, c.stage cstage, c.stage_entered_at, c.number, cl.name cname FROM tasks t JOIN contents c ON c.id=t.content_id JOIN clients cl ON cl.id=c.client_id WHERE t.kind='aprovacao' AND t.status IN ('aberta','em_andamento') AND t.due_at < ? AND c.blocked=0
+    AND t.data_origin='plataforma' AND ${PLATFORM_CONTENT('c.')} AND ${NOT_LEGACY('c.')}`, nowIso)) { // regras 22–24: dado migrado/legado nunca gera lembrete
     const marker = `${k.cstage}:${k.stage_entered_at}`;
     if (!isEnabled('cliente.prazo_vencido') || !onceFor('cliente.prazo_vencido', k.content_id, `${marker}:${k.due_at}`)) continue;
     const c = { id: k.content_id, client_id: k.client_id };

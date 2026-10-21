@@ -4,7 +4,7 @@
 // Regras: tudo calculado do banco; sem histórico não há tendência; insight só aparece com evidência nos dados.
 import { one, all, now, parseJSON } from '../db.js';
 import { scopeSQL, can } from '../lib/permissions.js';
-import { STAGES, STAGE_ORDER } from './process.js';
+import { NOT_LEGACY, PLATFORM_CONTENT, STAGES, STAGE_ORDER } from './process.js';
 import { computePendencies, clientRisk, teamLoad, runDetectors, explain, OPERATING } from './intelligence.js';
 import { PERF_SQL, perfOK, isInherited, performanceBase } from '../services/delayReview.js';
 import { CATALOG } from './automations.js';
@@ -209,7 +209,9 @@ export function tower(user, qs = {}) {
   // ── Desempenho do período (e comparação somente com histórico) ──
   const perf = (s, e) => {
     const c2 = cw('c');
+    c2.sql += ` AND ${PLATFORM_CONTENT('c.')}`; // regra 24: desempenho do período só com conteúdo da plataforma
     const t2 = tw('t');
+    t2.sql += " AND t.data_origin='plataforma'";
     const r = {
       conteudos_criados: one(`SELECT COUNT(*) n FROM contents c WHERE c.created_at BETWEEN ? AND ? AND ${c2.sql}`, s, e, ...c2.p).n,
       temas_aprovados: one(`SELECT COUNT(*) n FROM approvals a JOIN contents c ON c.id=a.content_id WHERE a.kind='tema' AND a.decision='aprovado' AND a.created_at BETWEEN ? AND ? AND ${c2.sql}`, s, e, ...c2.p).n,

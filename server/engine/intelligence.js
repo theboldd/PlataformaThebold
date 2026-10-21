@@ -232,6 +232,7 @@ export function stageDistribution(user) {
 export function teamLoad() {
   return all(`SELECT u.id, u.name, u.role_key, u.capacity, u.functions,
     (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento')) open,
+    (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento') AND t.data_origin='plataforma') open_platform,
     (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento') AND t.due_at < ? AND ${PERF_SQL.individual('t')}) late,
     (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento') AND t.due_at < ? AND t.data_origin='notion') inherited,
     (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status='concluida' AND t.completed_at > ?) done_7d

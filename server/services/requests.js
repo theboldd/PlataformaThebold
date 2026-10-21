@@ -4,7 +4,7 @@
 import { one, all, insert, update, run, uid, now, tx, nextNumber } from '../db.js';
 import { log, notify, businessDaysFrom, userName } from '../lib/core.js';
 import { HttpError } from '../lib/permissions.js';
-import { resolveAssignee, clientUsers } from '../engine/process.js';
+import { resolveAssignee, clientUsers, NOT_LEGACY, PLATFORM_CONTENT } from '../engine/process.js';
 import { automation } from '../engine/automations.js';
 import { offerSatisfaction } from './satisfaction.js';
 
@@ -30,7 +30,8 @@ export function createRequest(clientId, actor, { kind, title, description, ref_t
   if (!title && !description) throw new HttpError(422, 'Conte o que você precisa.');
   if (!title) title = description.split('\n')[0].slice(0, 90);
   if (title.length > 160 || description.length > 8000) throw new HttpError(422, 'Texto muito longo.');
-  if (ref_type === 'conteudo' && ref_id && !one('SELECT 1 FROM contents WHERE id=? AND client_id=?', ref_id, clientId)) throw new HttpError(404, 'Conteúdo não encontrado.');
+  // Regras 22–24: a solicitação só se vincula a conteúdo operacional da plataforma — nunca a dado migrado ou legado
+  if (ref_type === 'conteudo' && ref_id && !one(`SELECT 1 FROM contents WHERE id=? AND client_id=? AND ${PLATFORM_CONTENT()} AND ${NOT_LEGACY()}`, ref_id, clientId)) throw new HttpError(404, 'Conteúdo não encontrado.');
   const client = one('SELECT name FROM clients WHERE id=?', clientId);
   const ts = now();
   const owner = ownerFor(clientId, kind);

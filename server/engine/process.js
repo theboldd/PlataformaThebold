@@ -99,6 +99,11 @@ const endOfDayBR = (d) => new Date(`${d}T18:00:00-03:00`).toISOString();
 const startOfDayBR = (d) => new Date(`${d}T08:00:00-03:00`).toISOString();
 // Tarefas "vivas" = abertas + agendadas (as agendadas ainda não contam como trabalho de hoje, mas a etapa as reconhece)
 export const LIVE_TASK = "('aberta','em_andamento','agendada')";
+// Regras 22–24 — filtros ESTRUTURAIS (nunca por etapa, título ou marcação). `a` = prefixo da tabela, ex.: 'c.'.
+// NOT_LEGACY: o conteúdo não é legado não validado/histórico/cancelado (legado reprogramado volta a ser operação).
+// PLATFORM_CONTENT: o conteúdo é operação da plataforma (nasceu nela ou é legado reprogramado por decisão explícita).
+export const NOT_LEGACY = (a = '') => `(${a}legacy_status IS NULL OR ${a}legacy_status='reprogramado')`;
+export const PLATFORM_CONTENT = (a = '') => `(${a}data_origin='plataforma' OR ${a}legacy_status='reprogramado')`;
 // Data em que a etapa abre para execução (início do marco do ciclo), quando ainda está no futuro e a etapa usa janela.
 export function stageOpensAt(content, stage) {
   const def = STAGES[stage];
@@ -292,7 +297,7 @@ function enterStage(content, stage, actor, ctx = {}) {
 }
 
 function refreshCycleStatus(cycleId) {
-  const stages = all("SELECT stage FROM contents WHERE cycle_id=? AND stage<>'cancelado'", cycleId).map((r) => r.stage);
+  const stages = all(`SELECT stage FROM contents WHERE cycle_id=? AND stage<>'cancelado' AND ${NOT_LEGACY()}`, cycleId).map((r) => r.stage);
   if (!stages.length) return;
   const min = Math.min(...stages.map((s) => STAGE_ORDER.indexOf(s)));
   const s = STAGE_ORDER[min];

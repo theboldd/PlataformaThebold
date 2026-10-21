@@ -78,7 +78,7 @@ ops.get('/clients/:id', requirePerm('clientes', 'view'), (req, res) => {
   const fst = ob ? formStatus(c.id) : null;
   const onboarding = ob ? { ...ob, form: fst && { answered: fst.answered, total: fst.total }, items: all('SELECT * FROM onboarding_items WHERE onboarding_id=? ORDER BY sort', ob.id) } : null;
   const cycles = all('SELECT * FROM cycles WHERE client_id=? ORDER BY month DESC', c.id).map((cy) => ({ ...cy, milestones: parseJSON(cy.milestones, {}),
-    counts: one("SELECT COUNT(*) total, SUM(stage IN ('agendado','publicado')) done FROM contents WHERE cycle_id=? AND stage<>'cancelado'", cy.id) }));
+    counts: one("SELECT COUNT(*) total, SUM(stage IN ('agendado','publicado')) done FROM contents WHERE cycle_id=? AND stage<>'cancelado' AND (legacy_status IS NULL OR legacy_status='reprogramado')", cy.id) }));
   const contents = all("SELECT * FROM contents WHERE client_id=? AND stage<>'cancelado' AND (legacy_status IS NULL OR legacy_status='reprogramado') ORDER BY planned_at", c.id).map((x) => ({ ...contentCard(x), status: publicStatus(x) }));
   const meetings = all('SELECT * FROM meetings WHERE client_id=? ORDER BY starts_at DESC LIMIT 20', c.id);
   const files = all("SELECT * FROM files WHERE client_id=? ORDER BY created_at DESC LIMIT 60", c.id).map(fileDTO);

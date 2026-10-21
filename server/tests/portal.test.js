@@ -327,3 +327,65 @@ test('saúde do cliente traz evidências e onboarding mostra % sem contar acesso
   assert.equal(g.profile.missing, f.profile.missing - 1);
   assert.ok(one("SELECT 1 FROM activity_logs WHERE action='onboarding.resposta' AND client_id=?", A.id));
 });
+
+// Regras 22–24: legado e dado migrado fora de TODAS as superfícies operacionais — por filtro estrutural, não por etapa
+test('legado/migrado fora do portal, do ciclo atual, do relatório e dos lembretes; plataforma segue normal', async () => {
+  const { liveCycle, journey } = await import('../services/client-view.js');
+  const { generateReport } = await import('../services/reports.js');
+  const C = startClient({ name: 'Cliente C', services: [], monthly_posts: 4, requires_theme_approval: true, team }, U.ceo);
+  const cc = mkUser('caio', 'cliente'); insert('client_members', { client_id: C.id, user_id: cc.id, function: 'cliente' });
+  const month = (d) => new Date(Date.now() + d * 864e5).toISOString();
+  // plataforma: aguardando o cliente; legado: mesmo tipo de etapa (simula "a etapa mudou"); migrado não legado: em produção, outro mês
+  const plat = P.createContent({ client_id: C.id, title: 'PLAT conteúdo', format: 'estatico', theme: 'T', planned_at: month(40), stage: 'aprovacao_cliente' }, user(U.est));
+  const leg = P.createContent({ client_id: C.id, title: 'LEGADO conteúdo', format: 'estatico', theme: 'T', planned_at: month(100), stage: 'aprovacao_cliente' }, user(U.est));
+  const mig = P.createContent({ client_id: C.id, title: 'MIGRADO conteúdo', format: 'estatico', theme: 'T', planned_at: month(160), stage: 'producao' }, user(U.est));
+  run("UPDATE contents SET data_origin='notion', legacy_status='nao_validado' WHERE id=?", leg.id);
+  run("UPDATE tasks SET data_origin='notion' WHERE content_id=?", leg.id);
+  run("UPDATE contents SET data_origin='notion' WHERE id=?", mig.id);
+  run("UPDATE tasks SET data_origin='notion' WHERE content_id=?", mig.id);
+  const cyc = (c) => one('SELECT cycle_id FROM contents WHERE id=?', c.id).cycle_id;
+  const s = await login(user(cc));
+
+  // 1. Seletores do portal: materiais, conversa e meses do feed
+  const mat = (await s.get('/portal/materials')).data.open_contents.map((x) => x.id);
+  assert.ok(mat.includes(plat.id)); assert.ok(!mat.includes(leg.id), 'legado fora do seletor de materiais/solicitação');
+  const ch = (await s.get('/portal/channel')).data.contents.map((x) => x.id);
+  assert.ok(!ch.includes(leg.id), 'legado fora do seletor da conversa');
+  const feed = (await s.get('/portal/feed')).data;
+  assert.ok(!feed.items.some((x) => x.id === leg.id), 'legado fora do feed');
+  assert.ok(!feed.months.includes(one('SELECT substr(planned_at,1,7) m FROM contents WHERE id=?', leg.id).m), 'mês só do legado não aparece');
+  assert.equal(feed.items.find((x) => x.id === plat.id)?.can_request, true, `feed: ${JSON.stringify(feed.items.map((x) => [x.title, x.can_request]))}`);
+  assert.ok(!(await s.get('/portal/pendencias')).data.approvals.some((x) => x.id === leg.id), 'legado em etapa de aprovação não vira pendência do cliente');
+
+  // 2. Solicitação: só conteúdo operacional da plataforma
+  const req2 = async (ref) => { const fd = new FormData(); fd.append('kind', 'conteudo'); fd.append('description', 'Teste de vínculo'); fd.append('ref_type', 'conteudo'); fd.append('ref_id', ref); return s.form('/portal/requests', fd); };
+  assert.equal((await req2(leg.id)).status, 404, 'solicitação não se vincula a legado');
+  assert.equal((await req2(mig.id)).status, 404, 'solicitação não se vincula a dado migrado');
+  assert.equal((await req2(plat.id)).status, 200, 'conteúdo da plataforma segue normal');
+
+  // 3. Ciclo atual nunca formado só por migrado/legado
+  assert.equal(liveCycle(C.id)?.id, cyc(plat));
+  assert.notEqual(liveCycle(C.id)?.id, cyc(leg)); assert.notEqual(liveCycle(C.id)?.id, cyc(mig));
+  const j = journey(C.id); assert.equal(j.month, one('SELECT month FROM cycles WHERE id=?', cyc(plat)).month);
+
+  // 4. Relatório semanal: operação sem legado/migrado; histórico separado
+  const rp = JSON.parse(generateReport('operacao', new Date(Date.now() - 864e5).toISOString(), new Date(Date.now() + 864e5).toISOString()).data);
+  const before = one(`SELECT COUNT(*) n FROM contents WHERE data_origin='plataforma' AND created_at > ?`, new Date(Date.now() - 864e5).toISOString()).n;
+  assert.equal(rp.producao.conteudos_criados, before, 'conteúdos criados = só plataforma');
+  assert.ok(rp.historico_migrado.itens_legados_nao_validados >= 1);
+  assert.ok(rp.historico_migrado.conteudos_migrados_em_andamento >= 1);
+
+  // 5. Lembrete de aprovação vencida: legado/migrado nunca; plataforma sim (mesmo com atributos iguais)
+  const past = new Date(Date.now() - 3 * 864e5).toISOString();
+  for (const c of [plat, leg]) insert('tasks', { id: uid('t_'), title: `Aprovação — ${c.title}`, client_id: C.id, content_id: c.id, stage: 'aprovacao_cliente', function: 'cliente', status: 'aberta', kind: 'aprovacao', origin: 'engine', due_at: past, created_at: now(), data_origin: c === leg ? 'notion' : 'plataforma' });
+  run("UPDATE contents SET legacy_status='nao_validado', data_origin='notion' WHERE id=?", leg.id);
+  tick();
+  assert.equal(one("SELECT COUNT(*) n FROM automation_runs WHERE automation_key='cliente.prazo_vencido' AND entity_id=?", leg.id).n, 0, 'legado não gera lembrete');
+  assert.ok(one("SELECT COUNT(*) n FROM automation_runs WHERE automation_key='cliente.prazo_vencido' AND entity_id=?", plat.id).n >= 1, 'plataforma gera lembrete normalmente');
+
+  // 6. Mudar a etapa do legado não o traz de volta
+  run("UPDATE contents SET stage='agendamento' WHERE id=?", leg.id);
+  assert.ok(!(await s.get('/portal/feed')).data.items.some((x) => x.id === leg.id));
+  assert.ok(!(await s.get('/portal/materials')).data.open_contents.some((x) => x.id === leg.id));
+  assert.notEqual(liveCycle(C.id)?.id, cyc(leg));
+});
