@@ -6,6 +6,7 @@ import { Shell } from './components/Shell.jsx';
 import { Cursor } from './components/Cursor.jsx';
 import { Loading } from './components/ui.jsx';
 import Login from './pages/Login.jsx';
+import { applyTheme } from './lib/theme.js';
 
 const P = (f) => lazy(f);
 const Dashboard = P(() => import('./pages/Dashboard.jsx'));
@@ -42,7 +43,7 @@ export default function App() {
   // tenta de novo em vez de "deslogar" quem atualizou a página.
   const load = useCallback(async () => {
     for (let i = 0; i < 4; i++) {
-      try { setAuth(await api.get('/auth/me')); setDown(false); return; } catch (e) {
+      try { const me = await api.get('/auth/me'); applyTheme(me.user?.theme); setAuth(me); setDown(false); return; } catch (e) {
         if (e.status === 401 || e.status === 403) { setAuth(null); setDown(false); return; }
         await new Promise((r) => setTimeout(r, 600 * (i + 1)));
       }

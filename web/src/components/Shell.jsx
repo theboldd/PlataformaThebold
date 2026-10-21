@@ -7,6 +7,7 @@ import { api } from '../lib/api.js';
 import { ago } from '../lib/format.js';
 import { LEVEL } from '../lib/status.js';
 import { NavHistory, BackLink, useNavLabel } from '../lib/nav.jsx';
+import { ThemeToggle } from './ThemeToggle.jsx';
 
 const CrumbCtx = createContext(() => {});
 export function useCrumbs(...parts) {
@@ -110,6 +111,7 @@ export function Shell({ children }) {
             <div className="crumbs clip"><span>The Bold</span>{crumbs.map((c, i) => <span key={i} className="row gap-2"><span className="sep">/</span>{i === crumbs.length - 1 ? <b className="clip">{c}</b> : <span className="clip">{c}</span>}</span>)}</div>
             <div className="top-actions">
               <span className={`live ${live ? '' : 'off'}`}>{live ? 'Ao vivo' : 'Reconectando'}</span>
+              <ThemeToggle />
               <Button variant="ghost" className="bell" icon={<I.bell />} onClick={() => setNotifOpen(true)} aria-label={`Notificações (${unread} não lidas)`}>{unread > 0 && <span className="dot">{unread > 99 ? '99+' : unread}</span>}</Button>
             </div>
           </header>

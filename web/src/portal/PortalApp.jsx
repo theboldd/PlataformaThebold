@@ -11,6 +11,7 @@ import { Notifications } from '../components/Shell.jsx';
 import Feed from './Feed.jsx';
 import Inicio from './Inicio.jsx';
 import '../styles/portal.css';
+import { ThemeToggle } from '../components/ThemeToggle.jsx';
 
 const Calendario = lazy(() => import('./Calendario.jsx'));
 const Projeto = lazy(() => import('./Projeto.jsx'));
@@ -70,6 +71,7 @@ export default function PortalApp() {
           </nav>
           <div className="p-actions">
             <span className={`p-live ${live ? '' : 'off'}`} title={live ? 'Atualizando em tempo real' : 'Reconectando'} aria-hidden />
+            <ThemeToggle portal className="p-theme-toggle" />
             <button className="p-icon-btn" onClick={() => setNotifOpen(true)} aria-label={`Notificações (${unread} não lidas)`}>
               <I.bell size={18} />{unread > 0 && <span className="p-dot">{unread > 99 ? '99+' : unread}</span>}
             </button>

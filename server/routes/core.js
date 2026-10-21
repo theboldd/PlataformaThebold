@@ -9,7 +9,7 @@ import { verifyAssetSig } from '../integrations/meta.js';
 
 export const core = Router();
 
-const userDTO = (u) => ({ id: u.id, name: u.name, email: u.email, role_key: u.role_key, title: u.title, functions: parseJSON(u.functions, []), active: !!u.active, avatar_color: u.avatar_color, capacity: u.capacity, last_login_at: u.last_login_at });
+const userDTO = (u) => ({ id: u.id, name: u.name, email: u.email, role_key: u.role_key, title: u.title, functions: parseJSON(u.functions, []), active: !!u.active, avatar_color: u.avatar_color, capacity: u.capacity, last_login_at: u.last_login_at, theme: u.theme || 'system' });
 
 // ── AUTH ──
 core.post('/auth/login', (req, res) => {
@@ -34,6 +34,13 @@ core.get('/auth/me', requireAuth, (req, res) => {
   const clients = u.role_key === 'cliente' ? all("SELECT c.id, c.name, c.handle, c.color FROM client_members cm JOIN clients c ON c.id=cm.client_id WHERE cm.user_id=? AND cm.function='cliente'", u.id) : [];
   res.json({ user: userDTO(u), role: { key: role.key, label: role.label, dashboard: role.dashboard, all_clients: !!role.all_clients }, permissions: permissionMap(u), internal: isInternal(u), clients,
     pendencias: can(u, 'pendencias') });
+});
+// Tema claro/escuro: preferência da pessoa, salva no usuário (vale em qualquer aparelho)
+core.put('/auth/theme', requireAuth, (req, res) => {
+  const theme = req.body?.theme;
+  if (!['light', 'dark', 'system'].includes(theme)) throw new HttpError(422, 'Tema inválido.');
+  update('users', { id: req.user.id }, { theme });
+  res.json({ ok: true, theme });
 });
 core.post('/auth/password', requireAuth, (req, res) => {
   const { current, next } = req.body || {};

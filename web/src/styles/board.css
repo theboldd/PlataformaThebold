@@ -15,7 +15,7 @@
 .jb-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .jb-search { position: relative; display: flex; align-items: center; }
 .jb-search input { height: 36px; width: 200px; border: 2px solid var(--jb-line); border-radius: 6px; background: var(--card); padding: 0 34px 0 10px; font-size: 14px; color: var(--jb-ink); transition: border-color .15s, width .2s; }
-.jb-search input:focus { outline: none; border-color: var(--bordo); width: 240px; }
+.jb-search input:focus { outline: none; border-color: var(--primary-text); width: 240px; }
 .jb-search svg { position: absolute; right: 10px; color: var(--jb-muted); pointer-events: none; }
 .jb-avatars { display: flex; align-items: center; }
 .jb-av { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--bg); margin-left: -6px; color: #fff; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex: none; transition: transform .15s, box-shadow .15s; padding: 0; }
@@ -27,7 +27,7 @@
 .jb-av-none { background: transparent !important; color: var(--err) !important; border: 2px dashed var(--err) !important; }
 .jb-select { height: 34px; border: 0; border-radius: 6px; background: rgba(11,11,11,.06); padding: 0 10px; font-size: 14px; color: var(--jb-ink); cursor: pointer; }
 .jb-select:hover { background: rgba(11,11,11,.11); }
-.jb-link { border: 0; background: none; color: var(--bordo); font-size: 14px; cursor: pointer; }
+.jb-link { border: 0; background: none; color: var(--primary-text); font-size: 14px; cursor: pointer; }
 .jb-group { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--jb-muted); }
 .jb-auto { display: flex; align-items: center; gap: 8px; margin: 14px 0 12px; font-size: 13px; color: var(--jb-muted); }
 .jb-pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 rgba(62,106,78,.5); animation: jb-pulse 2.2s infinite; }
@@ -91,7 +91,7 @@
 .jb-col-empty { padding: 14px 8px; font-size: 12px; color: var(--jb-muted); text-align: center; border: 1px dashed var(--jb-line); border-radius: 6px; }
 .jb-owner { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .jb-owner-name { font-size: 12px; font-weight: 600; color: var(--jb-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90px; }
-.jb-av-none + .jb-owner-name { color: var(--bordo); }
+.jb-av-none + .jb-owner-name { color: var(--primary-text); }
 /* coluna de etapa vazia: estreita, para a equipe aparecer sem rolar */
 .jb-col.jb-col-min { width: 150px; min-width: 150px; flex-basis: 150px; }
 .jb-col.jb-col-min .jb-col-title { white-space: normal; }

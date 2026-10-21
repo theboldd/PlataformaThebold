@@ -11,7 +11,7 @@ import '../styles/board.css';
 
 const FILTER_KEYS = ['month', 'client_id', 'assignee_id', 'stage', 'format', 'risk', 'priority', 'due', 'q'];
 // Cores de etiqueta por cliente — tons sóbrios derivados da paleta The Bold (como os labels do Jira)
-const LABEL_TONES = ['#4A1725', '#1F3A4D', '#3E6A4E', '#8A5A1E', '#5B2A55', '#2F5F63', '#7A3B2E', '#3B3734'];
+const LABEL_TONES = ['#45131D', '#1F3A4D', '#3E6A4E', '#8A5A1E', '#5B2A55', '#2F5F63', '#7A3B2E', '#3B3734'];
 const toneOf = (id = '') => LABEL_TONES[[...id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % LABEL_TONES.length];
 const PRIO_ICON = { critica: '⏶⏶', alta: '⏶', media: '=', baixa: '⏷' };
 
