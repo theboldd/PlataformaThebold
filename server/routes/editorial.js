@@ -17,7 +17,7 @@ export const PHASES = [
   { key: 'aprovado', label: 'Para agendar', stages: ['agendamento'] }, // aprovado só quando há registro (approved_version_id)
   { key: 'agendado', label: 'Agendado', stages: ['agendado'] },
   { key: 'publicado', label: 'Publicado', stages: ['publicado'] },
-  // regra 18: item legado não validado não é conteúdo operacional — fica num grupo à parte
+  // regra 22: item legado não validado não é conteúdo operacional — fica num grupo à parte
   { key: 'legado', label: 'Legado do Notion · não validado', stages: [] },
 ];
 const PHASE_OF = Object.fromEntries(PHASES.flatMap((p) => p.stages.map((s) => [s, p.key])));
@@ -72,7 +72,10 @@ editorial.get('/clients/:id/editorial', requireInternal, requirePerm('conteudos'
 // HISTÓRICO DO NOTION · SOMENTE LEITURA (regra oficial 15). Só GET: nada aqui é editável, nem vira tarefa/pendência/atraso.
 editorial.get('/clients/:id/notion-history', requireInternal, requirePerm('conteudos', 'view'), (req, res) => {
   assertClient(req.user, req.params.id);
-  const rows = all('SELECT * FROM notion_history WHERE client_id=? ORDER BY date_start IS NULL, date_start DESC, title', req.params.id)
+  // Linhas vazias ficam no banco (fidelidade à origem) e só aparecem com ?vazios=1 ("Mostrar registros vazios", desligado por padrão)
+  const showEmpty = req.query.vazios === '1';
+  const rows = all(`SELECT * FROM notion_history WHERE client_id=? ${showEmpty ? '' : 'AND empty=0'} ORDER BY date_start IS NULL, date_start DESC, title`, req.params.id)
     .map((r) => ({ ...r, properties: parseJSON(r.properties, {}) }));
-  res.json({ read_only: true, items: rows, sources: [...new Set(rows.map((r) => r.source_db_url).filter(Boolean))], extracted_at: rows[0]?.extracted_at || null });
+  const empty = one('SELECT COUNT(*) n FROM notion_history WHERE client_id=? AND empty=1', req.params.id).n;
+  res.json({ read_only: true, items: rows, empty_count: empty, showing_empty: showEmpty, by_source: all('SELECT source, COUNT(*) n FROM notion_history WHERE client_id=? GROUP BY source', req.params.id), sources: [...new Set(rows.map((r) => r.source_db_url).filter(Boolean))], extracted_at: rows[0]?.extracted_at || null });
 });

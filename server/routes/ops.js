@@ -418,7 +418,7 @@ export function addComment(c, user, { body, visibility, parent_id, anchor, file_
 // ═════════════ PROCESSOS (quadro operacional — compartilhado com toda a equipe interna) ═════════════
 ops.get('/process/board', requirePerm('processos', 'view'), (req, res) => {
   const { client_id, assignee_id, stage, risk, priority, due, q, month, format } = req.query;
-  const where = ["c.stage NOT IN ('cancelado')", "(c.legacy_status IS NULL OR c.legacy_status='reprogramado')"]; // regra 18: legado fora do quadro const p = [];
+  const where = ["c.stage NOT IN ('cancelado')", "(c.legacy_status IS NULL OR c.legacy_status='reprogramado')"]; // regra 22: legado fora do quadro const p = [];
   // Mês do ciclo (como os quadros mensais do Notion): com mês escolhido, o quadro mostra o mês inteiro, inclusive publicados
   if (month) { where.push('COALESCE(c.cycle_month, substr(c.planned_at,1,7))=?'); p.push(month); }
   else if (!req.query.include_published) where.push("NOT (c.stage='publicado' AND c.published_at < ?)"), p.push(new Date(Date.now() - 7 * 864e5).toISOString());

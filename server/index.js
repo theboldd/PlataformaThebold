@@ -66,7 +66,7 @@ export function bootstrap() {
   activateScheduledTasks();
   classifyInternalClient();
   markMigratedTasks(); // tarefas herdadas da migração ficam fora da performance até serem classificadas
-  markLegacy(); // regra 18: itens herdados sem decisão = LEGADO — NÃO VALIDADO, fora da operação
+  markLegacy(); // regra 22: itens herdados sem decisão = LEGADO — NÃO VALIDADO, fora da operação
   syncDelayReviews();
 }
 

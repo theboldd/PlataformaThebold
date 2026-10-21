@@ -138,7 +138,7 @@ portal.get('/feed', (req, res) => {
   if (f === 'aprovados') where.push('approved_version_id IS NOT NULL'); // só com aprovação registrada (regra oficial 14)
   if (req.query.month) { where.push('substr(planned_at,1,7)=?'); p.push(req.query.month); }
   if (req.query.format) { where.push('format=?'); p.push(req.query.format); }
-  where.push("(legacy_status IS NULL OR legacy_status='reprogramado')"); // regra 18: item legado não é conteúdo operacional para o cliente
+  where.push("(legacy_status IS NULL OR legacy_status='reprogramado')"); // regra 22: item legado não é conteúdo operacional para o cliente
   const rows = all(`SELECT * FROM contents WHERE ${where.join(' AND ')} ORDER BY CASE WHEN stage IN ('aprovacao_tema','aprovacao_cliente') THEN 0 ELSE 1 END, planned_at`, ...p);
   const months = all(`SELECT DISTINCT substr(planned_at,1,7) m FROM contents WHERE client_id=? AND planned_at IS NOT NULL AND stage IN (${CLIENT_STAGES.map(() => '?').join(',')}) ORDER BY m`, c.id, ...CLIENT_STAGES).map((r) => r.m);
   res.json({ items: rows.map((x) => feedItem(x, c)), months, aspects: ADJUST_ASPECTS });

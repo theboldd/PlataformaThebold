@@ -496,7 +496,7 @@ export function commentToAdjustment(commentId, actor, { size = 'normal', track =
   });
 }
 
-// Item LEGADO reprogramado (regra 18): volta à operação na etapa escolhida, com responsável e prazo definidos por uma pessoa.
+// Item LEGADO reprogramado (regra 22): volta à operação na etapa escolhida, com responsável e prazo definidos por uma pessoa.
 // As tarefas novas nascem na plataforma (data_origin padrão) e passam a ser demanda válida; a tarefa legada fica guardada como "legado".
 export function reopenLegacy(contentId, actor, { stage, assignee_id, due_at, reason }) {
   return tx(() => {

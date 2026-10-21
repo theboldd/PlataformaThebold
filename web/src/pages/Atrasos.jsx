@@ -1,4 +1,4 @@
-// ITENS LEGADOS (regra oficial 18) — LEGADO / MIGRADO DO NOTION — NÃO VALIDADO.
+// ITENS LEGADOS (regra oficial 22) — LEGADO / MIGRADO DO NOTION — NÃO VALIDADO.
 // Fatos de cada item (sempre com a fonte) e decisão individual: REPROGRAMAR · ENCERRAR COMO CANCELADO · MANTER COMO HISTÓRICO.
 // Nada aqui é atraso, pendência ou dado de performance. Não existe ação em massa.
 import { useMemo, useState } from 'react';

@@ -4,12 +4,14 @@
 // Uso: node server/migration/import-cr-editorial.js   (npm run migrar:cr-editorial)
 import fs from 'node:fs';
 import path from 'node:path';
-import { one, insert, uid, now, tx } from '../db.js';
+import { one, all, run, insert, uid, now, tx } from '../db.js';
 import { log } from '../lib/core.js';
 
-const FILE = path.resolve(process.env.BOLD_MIGRATION_DIR || 'storage/migration/notion', '_cr_editorial.json');
-if (!fs.existsSync(FILE)) { console.log('_cr_editorial.json não encontrado — nada a importar.'); process.exit(0); }
-const X = JSON.parse(fs.readFileSync(FILE, 'utf8'));
+// Fontes: CR EDITORIAL (_cr_editorial.json) e calendários extras aprovados na auditoria (_calendarios_extra.json → só "clients";
+// bases com veredito "dúvida" ou "não importar" ficam fora — ver "audit" no arquivo)
+const DIR = path.resolve(process.env.BOLD_MIGRATION_DIR || 'storage/migration/notion');
+const FILES = ['_cr_editorial.json', '_calendarios_extra.json'].map((f) => path.join(DIR, f)).filter((f) => fs.existsSync(f));
+if (!FILES.length) { console.log('Nenhum export de calendário encontrado — nada a importar.'); process.exit(0); }
 // Propriedade de data: a do tipo "date" no schema do banco; se houver mais de uma, a de nome Data/Date/Postagem; o nome usado fica registrado
 const pickDate = (schema) => {
   const dates = Object.entries(schema || {}).filter(([, t]) => String(t).toLowerCase().includes('date')).map(([k]) => k);
@@ -20,7 +22,13 @@ const ENT = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'
 const clean = (v) => (typeof v === 'string' ? v.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (m) => ENT[m]).trim()
   : Array.isArray(v) ? v.map(clean) : v && typeof v === 'object' && !('start' in v) ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, clean(x)])) : v);
 const dateOf = (v) => (v && typeof v === 'object' ? v.start || null : typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v : null);
-const report = { imported: 0, skipped: 0, no_date: 0, clients: {} };
+// Linha vazia = sem título e sem nenhum valor preenchido além da data/caixas desmarcadas (copiada do modelo do Notion).
+// Fica guardada (fidelidade à origem) e só aparece com o filtro "Mostrar registros vazios".
+const filled = (v) => v != null && v !== false && !(typeof v === 'string' && !v.trim()) && !(Array.isArray(v) && !v.length) && !(typeof v === 'object' && !Array.isArray(v) && 'start' in v);
+const isEmpty = (title, props) => !String(title || '').trim() && !Object.values(props || {}).some(filled);
+const report = { imported: 0, skipped: 0, no_date: 0, empty: 0, clients: {} };
+for (const FILE of FILES) {
+const X = JSON.parse(fs.readFileSync(FILE, 'utf8'));
 tx(() => {
   for (const c of X.clients || []) {
     if (!one('SELECT 1 FROM clients WHERE id=?', c.client_id)) { console.warn(`cliente ${c.client_name} (${c.client_id}) não existe — ignorado`); continue; }
@@ -31,14 +39,20 @@ tx(() => {
         const d = dp ? r.properties?.[dp] : null;
         const start = dateOf(d);
         if (!start) report.no_date++;
-        insert('notion_history', { id: uid('nh_'), client_id: c.client_id, source: db.title || 'CR EDITORIAL', source_db_url: db.url || null, notion_url: r.notion_url || null,
+        const props = clean(r.properties || {});
+        const empty = isEmpty(clean(r.title), props) ? 1 : 0;
+        if (empty) report.empty++;
+        insert('notion_history', { id: uid('nh_'), client_id: c.client_id, source: String(db.title || 'CR EDITORIAL').trim(), source_db_url: db.url || null, notion_url: r.notion_url || null, empty,
           title: clean(r.title) || null, date_start: start, date_end: d && typeof d === 'object' ? d.end || null : null, date_property: dp,
-          properties: JSON.stringify(clean(r.properties || {})), created_time: r.created_time || null, last_edited_time: r.last_edited_time || null, extracted_at: X.extracted_at || null, imported_at: now() });
+          properties: JSON.stringify(props), created_time: r.created_time || null, last_edited_time: r.last_edited_time || null, extracted_at: X.extracted_at || null, imported_at: now() });
         report.imported++;
         report.clients[c.client_name] = (report.clients[c.client_name] || 0) + 1;
       }
     }
   }
-  if (report.imported) log({ kind: 'sistema', action: 'migracao.cr_editorial', entity: 'sistema', origin: 'automatica', summary: `Histórico do Notion (CR EDITORIAL, somente leitura): ${report.imported} item(ns) importado(s) de ${Object.keys(report.clients).length} cliente(s)` });
 });
+}
+// Marca de vazio também para o que já tinha sido importado antes desta regra (sem apagar nada)
+for (const r of all('SELECT id, title, properties FROM notion_history')) run('UPDATE notion_history SET empty=? WHERE id=?', isEmpty(r.title, JSON.parse(r.properties || '{}')) ? 1 : 0, r.id);
+if (report.imported) log({ kind: 'sistema', action: 'migracao.calendarios_notion', entity: 'sistema', origin: 'automatica', summary: `Histórico do Notion (somente leitura): ${report.imported} item(ns) importado(s) de ${Object.keys(report.clients).length} cliente(s)` });
 console.log(report);

@@ -1,4 +1,58 @@
-# THE BOLD OS — Relatório de arquitetura para o Railway
+# THE BOLD OS — Auditoria arquitetural (hospedagem)
+
+**Status: auditoria apenas.** Nada foi migrado, nenhuma infraestrutura foi criada e a produção não foi alterada (regra oficial 26). A migração só acontece com aprovação explícita da CEO.
+
+## A. Mapa: ATUAL → DESTINO PROPOSTO → MOTIVO → RISCO → IMPACTO/CUSTO
+
+| Componente | ATUAL (Vercel, prévia) | DESTINO PROPOSTO | MOTIVO | RISCO | IMPACTO / CUSTO |
+|---|---|---|---|---|---|
+| Frontend | React 19 + Vite, estático no CDN da Vercel | Servido pelo próprio serviço Node (web/dist) no Railway; CDN opcional depois | Um único deploy, sem CORS nem configuração dupla | Baixo; sem CDN no início, um pouco mais lento fora do Brasil | Sem custo à parte |
+| Backend/API | Express 5 dentro de uma função serverless (`api/index.js`), até 60 s por requisição | Processo Node 22 contínuo (`npm start`), 1 réplica | O agendador interno e as conexões persistentes precisam de processo contínuo | Médio: ponto único de falha (mitigado com reinício automático e healthcheck) | ~US$ 5–15/mês de uso |
+| Banco | SQLite **cifrado no repositório** (~11 MB), decifrado em `/tmp` a cada instância: **as alterações se perdem** | O mesmo SQLite (~14 MB) num **volume persistente** `/data` | É a única mudança que torna os dados permanentes; não exige reescrever nada | Médio: um escritor por vez (suficiente hoje); o volume precisa de backup | Volume de 5 GB ~US$ 1/mês |
+| Storage, uploads e arquivos | `/tmp` da função: uploads somem; sem ffmpeg (vídeo sem capa) | Volume `/data/originals` e `/data/derived`; ffmpeg na imagem Docker; interface `storage` pronta para R2/S3 | Originais preservados e capas de vídeo geradas | Baixo; o volume cresce com a mídia | Incluído no volume; R2/S3 quando passar de alguns GB |
+| Autenticação e sessões | Sessão **assinada sem estado**, porque cada instância tem a própria cópia do banco | Sessão com registro no banco (o logout revoga de verdade) | Mais segura, e é o modo nativo do código | Baixo: todos precisam entrar de novo uma vez | Nenhum |
+| APIs (~160 rotas) | Uma função na Vercel | As mesmas rotas, sem mudança | — | Nenhum | Nenhum |
+| Integrações (Google, Slack, Meta, Resend, Claude, Notion export) | Código pronto; nenhuma conectada; os retornos de login usam `PUBLIC_BASE_URL` | As mesmas, com `PUBLIC_BASE_URL` apontando para o domínio final | Os retornos de login precisam de um domínio estável | Médio: trocar o domínio exige atualizar as URLs de retorno em cada serviço | Planos gratuitos ou por uso |
+| Webhooks | Prefixo `/api/integrations/webhooks/*` reservado; **nenhum implementado** | Igual | — | Nenhum hoje | Nenhum |
+| Jobs (agendador interno, a cada minuto) | **Não rodam na Vercel** | Rodam no processo contínuo, com a trava `runJob` (lease + timeout + registro em `job_runs`) | Prazos, cobrança, etapas, relatório, detectores e transcrições exigem processo vivo | Baixo: idempotentes (`onceFor`) | Incluído |
+| Cron | Cron diário da Vercel (`0 10 * * *` UTC), que **depende do `CRON_SECRET`** (não configurado) | Serviço de cron do Railway (UTC) que só chama `/api/cron/tick` por HTTP | Garante a execução mesmo se o processo reiniciar; o cron não acessa o volume | Baixo: execução ainda ativa pode pular a próxima, o que é tratado pela trava e pela idempotência | Desprezível |
+| Workers | Não existem | Ainda não são necessários (mídia em segundo plano no próprio processo) | Volume baixo de vídeo | Médio, se o volume de vídeo crescer | Depois: worker + R2/S3 |
+| Variáveis e secrets | `BOLD_SNAPSHOT_KEY` (os demais segredos são derivados dela) | Variáveis do Railway: `BOLD_VAULT_KEY`, `BOLD_SESSION_SECRET`, `CRON_SECRET`, `PUBLIC_BASE_URL`, `BOLD_DATA_DIR=/data`, `BOLD_STORAGE_DIR=/data`, e as chaves das integrações | Segredos próprios, fora do repositório | Médio: perder `BOLD_VAULT_KEY` inutiliza os tokens salvos (hoje não há nenhum) | Nenhum |
+| Domínio | `*.vercel.app` | Domínio temporário `*.up.railway.app` → domínio próprio depois da validação | Links de e-mail e retornos de login | Baixo | Custo do domínio |
+| Vercel | Prévia com dados descartáveis | Fica como prévia/staging ou é desligada depois da virada | — | Duas fontes de verdade se usada como produção (não usar) | Gratuito |
+| Dependências externas | npm (express, multer, sharp, cookie-parser, @anthropic-ai/sdk); ffmpeg ausente | Dockerfile com Node 22 + ffmpeg fixos | Build reproduzível | Baixo | Nenhum |
+| Rotinas automáticas | Só disparam com ação de usuário; as de horário não rodam | Todas ativas (a lista está no checklist oficial, seção 16) | Operação sem ninguém online | Baixo | Incluído |
+| Serviços de IA | Claude via `ANTHROPIC_API_KEY` (não configurado): responde "não configurado", nada é simulado | Igual, com a chave no Railway | — | Custo por uso | Por uso |
+| Backups | Só o snapshot cifrado manual no Git | 3 camadas: backup do volume + `VACUUM INTO` noturno (7 diários + 4 semanais) + cópia cifrada externa (R2/S3) | Hoje não há backup automático | Alto **hoje**; baixo depois | Centavos (R2/S3) |
+
+## B. Plano de migração (só depois da aprovação)
+1. **Código, sem efeito em produção:**
+   - `Dockerfile` com ffmpeg;
+   - `railway.json` com healthcheck;
+   - carga única da base a partir do snapshot;
+   - rotina de backup;
+   - versão do Railway no `/api/health`.
+2. **Congelar a base mestra:** contagens (clientes, conteúdos, tarefas, legados, histórico do Notion, logs) e sha256 do arquivo.
+3. **Criar no Railway:** serviço web, volume `/data`, variáveis e cron (pausado).
+4. **Primeira subida** em domínio temporário; a base é carregada do snapshot e depois a chave de carga é removida.
+5. **Validação** (seção 13): contagens, integridade, login, permissões, rotinas (`ok` e `ignorado`), mídia, reinício e backup/restauração.
+6. **Virada:** domínio próprio; ativar o cron do Railway; remover o cron da Vercel.
+
+## C. Rollback
+- **Antes da virada:** nada muda na Vercel. Basta não virar.
+- **Depois da virada:**
+  1. apontar o domínio de volta para a Vercel;
+  2. gerar um snapshot novo a partir do `/data/bold.db`;
+  3. publicar esse snapshot;
+  4. pausar o cron do Railway.
+- **Deploy com defeito:** reverter para o deploy anterior no painel; o volume não é afetado.
+- **Dados corrompidos:** restaurar o último `backups/bold-*.db`.
+
+> Os detalhes de cada item (serviços, variáveis, riscos e custo) estão nas seções abaixo, do relatório anterior.
+
+---
+
+# Relatório de arquitetura para o Railway (detalhamento)
 
 **Status: relatório aprovado para elaboração. Migração NÃO aprovada.** Nada foi migrado nem será sem aprovação explícita deste plano pela CEO.
 A Vercel continua como prévia até lá. Itens marcados com **[confirmar]** dependem de conferência no painel do Railway/Vercel na hora de executar.

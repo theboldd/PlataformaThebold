@@ -36,7 +36,7 @@ export function activateScheduledTasks(onlyIds = null) {
   for (const k of due) {
     update('tasks', { id: k.id }, { status: 'aberta' });
     automation('etapa.disponivel', { entity: 'task', id: k.id, client: k.client_id, detail: `${k.title} — disponível desde ${k.available_at.slice(0, 10)}` });
-    // regra 19: tarefa migrada abre normalmente, mas sem gerar aviso automático
+    // regra 23: tarefa migrada abre normalmente, mas sem gerar aviso automático
     if (k.data_origin === 'notion') { log({ kind: 'sistema', action: 'etapa.disponivel', entity: 'task', id: k.id, client: k.client_id, content: k.content_id, summary: `Etapa disponível (item migrado, sem aviso): ${k.title}` }); continue; }
     if (k.assignee_id) notify(k.assignee_id, { level: 'info', type: 'tarefa', title: `Disponível hoje: ${STAGES[k.stage]?.label || 'etapa'}`, body: `${k.client}: #${k.number} ${k.ctitle}`, link: k.content_id ? `/conteudos/${k.content_id}` : '/', groupKey: `abriu:${k.assignee_id}:${k.stage}:${k.available_at.slice(0, 10)}`, client: k.client_id, content: k.content_id });
     else notify(cc(), { level: 'urgente', type: 'sem_responsavel', title: `Etapa abriu sem responsável: ${k.title}`, body: `${k.client}: #${k.number} ${k.ctitle}`, link: k.content_id ? `/conteudos/${k.content_id}` : '/pendencias', client: k.client_id, content: k.content_id });

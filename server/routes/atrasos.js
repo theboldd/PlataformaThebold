@@ -1,4 +1,4 @@
-// REVISÃO DE ITENS LEGADOS (regra oficial 18) — fatos de cada item herdado e decisão individual por pessoa autorizada.
+// REVISÃO DE ITENS LEGADOS (regra oficial 22) — fatos de cada item herdado e decisão individual por pessoa autorizada.
 // Restrito (permissão "atrasos": CEO e quem ela liberar). Três ações apenas, item a item: reprogramar · cancelar · manter como histórico.
 import { Router } from 'express';
 import { all } from '../db.js';

@@ -1,7 +1,7 @@
-// ITENS LEGADOS (regra oficial 18) — os itens herdados de "Para agendamento" ficam como LEGADO / MIGRADO DO NOTION — NÃO VALIDADO.
+// ITENS LEGADOS (regra oficial 22) — os itens herdados de "Para agendamento" ficam como LEGADO / MIGRADO DO NOTION — NÃO VALIDADO.
 // Não são pendência, atraso, tarefa ativa, carga, KPI, notificação nem aprovação. A regra só levanta FATOS (com a fonte);
 // uma pessoa autorizada (permissão "atrasos") decide, item a item, uma de três ações: REPROGRAMAR · CANCELAR · MANTER COMO HISTÓRICO.
-// Origem estrutural (regra 20): tasks.data_origin / contents.data_origin = notion | plataforma — é o que todos os cálculos usam.
+// Origem estrutural (regra 24): tasks.data_origin / contents.data_origin = notion | plataforma — é o que todos os cálculos usam.
 import { one, all, run, insert, update, now, parseJSON, tx } from '../db.js';
 import { log } from '../lib/core.js';
 import { HttpError } from '../lib/permissions.js';
@@ -14,7 +14,7 @@ export const DECISIONS = {
   historico: 'Mantido como histórico',
 };
 
-// Performance, atraso e capacidade só com origem "plataforma" (regras 20 e 21). Mesmo filtro para SQL e para linhas carregadas.
+// Performance, atraso e capacidade só com origem "plataforma" (regras 24 e 25). Mesmo filtro para SQL e para linhas carregadas.
 export const PERF_SQL = {
   individual: (a = 't') => `${a}.data_origin='plataforma'`,
   equipe: (a = 't') => `${a}.data_origin='plataforma'`,
@@ -42,7 +42,7 @@ export function markLegacy() {
       if (d.content_id) run("UPDATE contents SET legacy_status='nao_validado' WHERE id=? AND legacy_status IS NULL", d.content_id);
       update('delay_reviews', { task_id: d.task_id }, { category: 'nao_validado', updated_at: now() });
       log({ kind: 'sistema', action: 'legado.marcado', entity: 'task', id: d.task_id, client: d.client_id, content: d.content_id, origin: 'automatica',
-        summary: 'Item herdado de "Para agendamento" marcado como LEGADO / MIGRADO DO NOTION — NÃO VALIDADO (regra oficial 18): fora da operação até decisão individual',
+        summary: 'Item herdado de "Para agendamento" marcado como LEGADO / MIGRADO DO NOTION — NÃO VALIDADO (regra oficial 22): fora da operação até decisão individual',
         before: JSON.stringify({ task_status: d.task_status, legacy_status: d.legacy_status || null }), after: JSON.stringify({ task_status: 'legado', legacy_status: 'nao_validado' }) });
     });
     n++;
@@ -98,7 +98,7 @@ export function factsFor(t) {
   return F;
 }
 
-// Atualiza só os FATOS das linhas existentes. Dado migrado não gera item novo automaticamente (regra 19).
+// Atualiza só os FATOS das linhas existentes. Dado migrado não gera item novo automaticamente (regra 23).
 export function syncDelayReviews() {
   const rows = all('SELECT t.* FROM tasks t JOIN delay_reviews d ON d.task_id=t.id');
   for (const t of rows) update('delay_reviews', { task_id: t.id }, { facts: factsFor(t), updated_at: now() });

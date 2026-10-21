@@ -79,7 +79,7 @@ export function tower(user, qs = {}) {
     if (F.stage) { w.push(`${alias}.stage=?`); p.push(F.stage); }
     if (F.format) { w.push(`(${alias}.content_id IS NULL OR EXISTS (SELECT 1 FROM contents fc WHERE fc.id=${alias}.content_id AND fc.format=?))`); p.push(F.format); }
     if (F.kind) { w.push(`${alias}.kind=?`); p.push(F.kind); }
-    // origem estrutural (regra 20): migrado do Notion × nascido na plataforma
+    // origem estrutural (regra 24): migrado do Notion × nascido na plataforma
     if (F.origin) w.push(`${alias}.data_origin='${F.origin === 'migrado' ? 'notion' : 'plataforma'}'`);
     if (F.status) w.push(`EXISTS (SELECT 1 FROM contents fs WHERE fs.id=${alias}.content_id AND ${STATUS_SQL[F.status]('fs')})`);
     return { sql: w.join(' AND '), p };
@@ -167,7 +167,7 @@ export function tower(user, qs = {}) {
 
   // ── Responsabilidades ──
   const noOwner = health.filter((h) => h.sem_funcao.length).map((h) => ({ client_id: h.id, client: h.name, functions: h.sem_funcao }));
-  // regra 19/20: tarefa migrada sem dono não vira alerta; aparece só como contagem à parte
+  // regra 23/20: tarefa migrada sem dono não vira alerta; aparece só como contagem à parte
   const unassignedMigrated = openTasks.filter((t) => !t.assignee_id && t.data_origin === 'notion').length;
   const unassigned = openTasks.filter((t) => !t.assignee_id && t.data_origin === 'plataforma').map((t) => ({ id: t.id, title: t.title, client: t.client, client_id: t.client_id, function: t.function, content_id: t.content_id, due_at: t.due_at }));
   const teamConflicts = one("SELECT COUNT(*) n FROM migration_issues WHERE status='aberto' AND kind='equipe'").n;

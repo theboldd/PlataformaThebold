@@ -21,7 +21,7 @@ export function computePendencies() {
     FROM tasks t LEFT JOIN clients c ON c.id=t.client_id LEFT JOIN users u ON u.id=t.assignee_id LEFT JOIN contents ct ON ct.id=t.content_id
     WHERE t.status IN ('aberta','em_andamento')`);
   for (const k of tasks) {
-    if (k.data_origin === 'notion') continue; // regra 19: dado migrado não gera pendência automaticamente
+    if (k.data_origin === 'notion') continue; // regra 23: dado migrado não gera pendência automaticamente
     const overdue = k.due_at && new Date(k.due_at).getTime() < t;
     const isClient = k.function === 'cliente';
     const base = { id: `task:${k.id}`, client_id: k.client_id, client: k.client_name, content_id: k.content_id, content: k.content_id ? `#${k.content_number} ${k.content_title}` : null,

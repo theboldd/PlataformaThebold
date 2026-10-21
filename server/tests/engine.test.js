@@ -178,7 +178,7 @@ test('rotinas: trava impede execução simultânea, timeout registra erro e leas
   assert.equal(one("SELECT COUNT(*) n FROM job_runs WHERE job='t3' AND status='expirado'").n, 1);
 });
 
-test('legado (regra 18): fora da operação; só reprogramar, cancelar ou manter histórico, um a um', async () => {
+test('legado (regra 22): fora da operação; só reprogramar, cancelar ou manter histórico, um a um', async () => {
   const D = await import('../services/delayReview.js');
   const { computePendencies, teamLoad } = await import('../engine/intelligence.js');
   const mk = (title) => {

@@ -154,13 +154,18 @@ function Feed({ items }) {
 // HISTÓRICO DO NOTION · SOMENTE LEITURA: o que existia no "CR EDITORIAL" antes da plataforma. Não é o calendário ativo.
 const val = (v) => (v == null ? '' : typeof v === 'boolean' ? (v ? 'marcado no Notion' : 'não marcado') : Array.isArray(v) ? v.join(', ') : typeof v === 'object' ? (v.start ? `${v.start}${v.end ? ` → ${v.end}` : ''}` : JSON.stringify(v)) : String(v));
 function NotionHistory({ clientId }) {
-  const { data, error, loading } = useApi(`/clients/${clientId}/notion-history`, [clientId], { live: false });
+  const [showEmpty, setShowEmpty] = useUrlState('vazios', false);
+  const { data, error, loading } = useApi(`/clients/${clientId}/notion-history${showEmpty ? '?vazios=1' : ''}`, [clientId, showEmpty], { live: false });
   if (error) return <ErrorBox error={error} />;
   if (loading || !data) return <Loading rows={4} />;
   return (
     <section className="ed-hist" aria-label="Histórico do Notion">
-      <div className="ed-hist-banner"><b>Histórico do Notion · somente leitura</b><span>Itens do calendário “CR EDITORIAL”, guardados como contexto. Não geram tarefa, pendência, atraso nem cobrança e não substituem o calendário editorial da plataforma.{data.extracted_at ? ` Extraído em ${fmtDate(data.extracted_at)}.` : ''}</span></div>
-      {!data.items.length ? <Empty title="Nenhum item do CR EDITORIAL para este cliente." /> : (
+      <div className="ed-hist-banner"><b>Histórico do Notion · somente leitura</b><span>Itens dos calendários editoriais do Notion (CR EDITORIAL e equivalentes auditados), guardados como contexto. Não geram tarefa, pendência, atraso nem cobrança e não substituem o calendário editorial da plataforma.{data.extracted_at ? ` Extraído em ${fmtDate(data.extracted_at)}.` : ''}</span></div>
+      <div className="row wrap between gap-3 mb-4">
+        <span className="xs muted">{data.by_source.map((s) => `${s.source}: ${s.n}`).join(' · ')}</span>
+        {data.empty_count > 0 && <label className="check xs"><input type="checkbox" checked={!!showEmpty} onChange={(e) => setShowEmpty(e.target.checked)} /> Mostrar registros vazios ({data.empty_count})</label>}
+      </div>
+      {!data.items.length ? <Empty title="Nenhum item do calendário do Notion para este cliente." /> : (
         <div className="table-wrap"><table className="table ed-hist-t">
           <thead><tr><th>Data</th><th>Título</th><th>Informações do Notion</th><th /></tr></thead>
           <tbody>{data.items.map((r) => {
