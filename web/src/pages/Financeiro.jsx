@@ -5,15 +5,83 @@ import { LoadError } from './admin/Guard.jsx';
 import { api } from '../lib/api.js';
 import { useApi, useAuth, useToast } from '../lib/hooks.js';
 import { useCrumbs } from '../components/Shell.jsx';
-import { Button, Empty, ErrorBox, Field, Loading, Modal, PageHead, Section, Seg, Tag } from '../components/ui.jsx';
+import { Button, Empty, ErrorBox, Field, Loading, Modal, PageHead, Section, Seg, Tabs, Tag } from '../components/ui.jsx';
+import { StatePanel, StateTag } from '../components/State.jsx';
 import { I } from '../components/Icons.jsx';
 import { fmtDate, money, cleanName } from '../lib/format.js';
 import { useUrlState } from '../lib/nav.jsx';
 
 const INV = { aberta: ['Em aberto', 'info'], paga: ['Paga', 'ok'], atrasada: ['Atrasada', 'err'], cancelada: ['Cancelada', ''] };
 
+// FINANCEIRO — três áreas: RECEBIMENTOS (contratos e parcelas) · PRODUÇÃO & REPASSES · RENTABILIDADE.
+// Sem dado: "dados insuficientes". Sem regra definida: "aguardando decisão". Nenhum valor é estimado ou inventado.
 export default function Financeiro() {
   useCrumbs('Financeiro');
+  const [tab, setTab] = useUrlState('aba', 'recebimentos');
+  const est = useApi('/financeiro/estrutura');
+  const st = est.data;
+  return (
+    <div className="page">
+      <PageHead kicker="Acesso restrito" title="Financeiro" sub="Recebimentos, produção & repasses e rentabilidade — cada área com dados reais ou o estado honesto do que falta." />
+      <Tabs value={tab} onChange={setTab} tabs={[
+        { key: 'recebimentos', label: 'Recebimentos' }, { key: 'repasses', label: 'Produção & Repasses' }, { key: 'rentabilidade', label: 'Rentabilidade' },
+      ]} />
+      {tab === 'recebimentos' && <Recebimentos estado={st?.recebimentos} />}
+      {tab === 'repasses' && (st ? <Repasses r={st.repasses} /> : <Loading />)}
+      {tab === 'rentabilidade' && (st ? <Rentabilidade r={st.rentabilidade} /> : <Loading />)}
+    </div>
+  );
+}
+
+function Repasses({ r }) {
+  return (
+    <>
+      <StatePanel s={r.state} kicker="Repasses" title="Valores de repasse aguardam as regras financeiras." missing="a CEO definir valor por demanda ou por função, competência, fechamento e motivos de desconto.">
+        <p>{r.motivo}</p>
+        <p className="xs muted">Estrutura prevista por linha: {r.campos.join(' · ')}.</p>
+      </StatePanel>
+      <Section kicker="Dado real" title="Produção por profissional e competência">
+        <p className="sm muted" style={{ margin: '0 0 12px' }}>Demandas concluídas na plataforma (base do repasse). Sem valor em reais até as regras existirem.</p>
+        {!r.producao.length ? <StatePanel compact s="dados_insuficientes" title="Nenhuma demanda concluída na plataforma nos últimos 3 meses." /> : (
+          <div className="table-wrap"><table className="table">
+            <thead><tr><th>Profissional</th><th>Competência</th><th className="num">Demandas</th><th>Funções</th><th>Valor</th><th>Status</th></tr></thead>
+            <tbody>{r.producao.map((p) => <tr key={p.id + p.competencia}><td className="strong">{p.name}</td><td className="sm">{p.competencia}</td><td className="num tnum">{p.demandas}</td><td className="xs">{p.funcoes}</td><td><StateTag s="aguardando_decisao" /></td><td><StateTag s="aguardando_decisao">Fechamento: aguardando</StateTag></td></tr>)}</tbody>
+          </table></div>
+        )}
+      </Section>
+    </>
+  );
+}
+
+function Rentabilidade({ r }) {
+  return (
+    <>
+      <div className="state-grid mb-5">
+        <StatePanel compact s={r.receita.length ? 'ativo' : 'dados_insuficientes'} kicker="Receita" title={r.receita.length ? money(r.receita.reduce((s, x) => s + x.receita, 0)) + ' / mês' : 'Sem contratos cadastrados'} />
+        <StatePanel compact s="aguardando_decisao" kicker="Custos" title="Regras de custo não definidas" />
+        <StatePanel compact s="aguardando_decisao" kicker="Repasses" title="Regras de repasse não definidas" />
+        <StatePanel compact s="aguardando_decisao" kicker="Margem" title="Depende de custos e repasses" />
+        <StatePanel compact s={r.retrabalho_state} kicker="Retrabalho" title={r.retrabalho.length ? `${r.retrabalho.reduce((s, x) => s + x.internos + x.do_cliente, 0)} ajustes em 3 meses` : 'Nenhum ajuste registrado'} />
+        <StatePanel compact s="dados_insuficientes" kicker="Evolução" title="Sem histórico para comparar" />
+        <StatePanel compact s="aguardando_decisao" kicker="Metas" title="Meta · realizado · projeção · desvio" missing="a CEO definir as metas financeiras." />
+      </div>
+      <p className="sm muted">{r.motivo}</p>
+      <Section kicker="Por cliente" title="Rentabilidade por cliente">
+        {!r.receita.length && !r.retrabalho.length ? <StatePanel compact s="dados_insuficientes" title="Sem receita cadastrada nem retrabalho registrado." missing="cadastrar os contratos em Recebimentos e definir as regras de custos e repasses." /> : (
+          <div className="table-wrap"><table className="table">
+            <thead><tr><th>Cliente</th><th className="num">Receita / mês</th><th className="num">Ajustes internos</th><th className="num">Ajustes do cliente</th><th>Custos</th><th>Margem</th></tr></thead>
+            <tbody>{[...new Set([...r.receita.map((x) => x.id), ...r.retrabalho.map((x) => x.id)])].map((id) => {
+              const rc = r.receita.find((x) => x.id === id), rt = r.retrabalho.find((x) => x.id === id);
+              return <tr key={id}><td className="strong">{cleanName((rc || rt).name)}</td><td className="num tnum">{rc ? money(rc.receita) : '—'}</td><td className="num tnum">{rt?.internos ?? '—'}</td><td className="num tnum">{rt?.do_cliente ?? '—'}</td><td><StateTag s="aguardando_decisao" /></td><td><StateTag s="aguardando_decisao" /></td></tr>;
+            })}</tbody>
+          </table></div>
+        )}
+      </Section>
+    </>
+  );
+}
+
+function Recebimentos({ estado }) {
   const { data, error, loading, reload } = useApi('/finance');
   const auth = useAuth();
   const toast = useToast();
@@ -27,10 +95,14 @@ export default function Financeiro() {
   const invoices = data.invoices.filter((i) => (filter === 'todas' || i.status === filter) && (!client || i.client_id === client));
   const debtors = Object.values(data.overdue.reduce((acc, i) => { (acc[i.client_id] ||= { id: i.client_id, name: i.client_name, total: 0, n: 0, since: i.due_at }).total += i.amount; acc[i.client_id].n++; return acc; }, {}));
   return (
-    <div className="page">
-      <PageHead kicker="Acesso restrito" title="Financeiro" sub="Contratos, parcelas e recebimentos.">
+    <div>
+      <div className="row wrap gap-3 mb-4" style={{ alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="row wrap gap-3" style={{ alignItems: 'center' }}>
+          <StateTag s={estado?.state || 'dados_insuficientes'}>{estado?.state === 'ativo' ? 'Recebimentos ativos' : 'Dados insuficientes · nenhum contrato cadastrado'}</StateTag>
+          {estado?.cobranca && <span className="xs muted">{estado.cobranca}</span>}
+        </div>
         {auth.can('financeiro', 'create') && <Button variant="primary" icon={<I.plus size={15} />} onClick={() => setNewContract(true)}>Novo contrato</Button>}
-      </PageHead>
+      </div>
       <div className="fin-grid">
         {[['Receita recorrente', s.receita_recorrente, 'contratos ativos / mês'], ['Faturado no mês', s.faturado_mes, 'vencimentos do mês'], ['Recebido no mês', s.recebido_mes, 'pagamentos registrados'], ['Pendente', s.pendente, 'em aberto'], ['Atrasado', s.atrasado, `${debtors.length} cliente(s)`]].map(([l, v, h], i) => (
           <div key={l}><div className="caps">{l}</div><div className={`fin-num tnum mt-2 ${i === 4 && v > 0 ? 'bordo' : ''}`}>{money(v)}</div><div className="xs muted mt-2">{h}</div></div>

@@ -60,13 +60,14 @@ export default function Inicio() {
       <section className="p-hello">
         <div className="caps">{cleanName(me.client.name)}{data.journey ? ` · ${fmtMonth(data.journey.month)}` : ''}</div>
         <h1 className="p-hello-t">{greeting()}, {name}.</h1>
+        <p className="p-updated xs">{data.history[0] ? `Última atualização do seu projeto: ${ago(data.history[0].at)}` : 'Última atualização do seu projeto: ainda não há eventos registrados.'}</p>
         <p className="p-hello-s">{actions.length ? (actions.length === 1 ? 'Uma coisa espera por você hoje.' : `${actions.length} coisas esperam por você.`) : 'Tudo em dia por aqui.'}</p>
       </section>
 
       {/* AGORA */}
       <section className="p-now" aria-labelledby="h-now">
         <div className="caps" id="h-now">Você está aqui</div>
-        {data.journey ? <Track track={data.journey} /> : <p className="sm muted mt-2">Seu primeiro ciclo de conteúdos começa logo após o onboarding.</p>}
+        {data.journey ? <Track track={data.journey} /> : <p className="sm muted mt-2">O acompanhamento do ciclo aqui começa no primeiro ciclo criado na nova plataforma. Os conteúdos que já estavam em andamento estão em <Link to="/portal/conteudos" className="p-link">Conteúdos</Link>.</p>}
       </section>
 
       {/* VOCÊ */}
@@ -112,12 +113,11 @@ export default function Inicio() {
       </div>
 
       {/* DEPOIS */}
-      {data.next.length > 0 && (
-        <section className="p-after" aria-labelledby="h-after">
-          <div className="caps" id="h-after">Depois</div>
+      <section className="p-after" aria-labelledby="h-after">
+          <div className="caps" id="h-after">Próximo passo</div>
+          {!data.next.length && <p className="sm muted mt-2">Nenhum próximo passo com data ainda. Quando houver, ele aparece aqui com o dia.</p>}
           <ul className="p-list">{data.next.map((n, i) => <li key={i}>{n.date && <span className="p-list-date">{n.time ? fmtDateTime(n.date) : fmtDate(n.date)}</span>}<span className="grow">{n.text}</span></li>)}</ul>
         </section>
-      )}
 
       {data.pulse && (
         <section className="p-pulse-teaser">

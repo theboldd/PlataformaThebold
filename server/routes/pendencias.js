@@ -63,6 +63,13 @@ pendencias.get('/pendencias', ...guard, (req, res) => {
     scope, can_team: team, tab_counts: { minhas: mine.length, equipe: team ? teamVisible(req.user).length : null },
     counts: { total: items.length, critica: count((i) => i.severity === 'critica'), alta: count((i) => i.severity === 'alta'), media: count((i) => i.severity === 'media'), baixa: count((i) => i.severity === 'baixa') },
     causes,
+    // Regra 23: dado migrado do Notion não gera pendência. Fica visível aqui, à parte, até a CEO decidir como tratá-lo.
+    fora_regra_23: scope === 'equipe' || team ? {
+      tarefas_herdadas_abertas: one("SELECT COUNT(*) n FROM tasks WHERE data_origin='notion' AND status IN ('aberta','em_andamento')").n,
+      tarefas_herdadas_vencidas: one("SELECT COUNT(*) n FROM tasks WHERE data_origin='notion' AND status IN ('aberta','em_andamento') AND due_at IS NOT NULL AND due_at < ?", now()).n,
+      conteudos_migrados_bloqueados: one("SELECT COUNT(*) n FROM contents WHERE data_origin='notion' AND legacy_status IS NULL AND blocked=1 AND stage NOT IN ('publicado','cancelado')").n,
+      legado_nao_validado: one("SELECT COUNT(*) n FROM contents WHERE legacy_status='nao_validado'").n,
+    } : null,
     filters: {
       clients: [...new Map(items.filter((i) => i.client_id).map((i) => [i.client_id, i.client])).entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
       who, processes: [...new Set(items.map((i) => i.process).filter(Boolean))].sort(),

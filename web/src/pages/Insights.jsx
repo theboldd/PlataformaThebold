@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useApi, useAuth, useToast } from '../lib/hooks.js';
 import { api } from '../lib/api.js';
 import { useCrumbs } from '../components/Shell.jsx';
+import { StatePanel } from '../components/State.jsx';
 import { PageHead, Loading, Empty, Tabs, Button, ErrorBox, Tag } from '../components/ui.jsx';
 import { ago } from '../lib/format.js';
 import '../styles/intel.css';
@@ -10,6 +11,20 @@ import { useUrlState } from '../lib/nav.jsx';
 
 const DET = { retrabalho: 'Retrabalho', gargalo: 'Gargalo', tempo_aprovacao: 'Tempo de aprovação', carga: 'Excesso de carga', material: 'Material ausente', dependencia: 'Dependência manual', sem_responsavel: 'Sem responsável' };
 const SEV = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
+
+// O que a inteligência já faz, o que depende do Claude e o que ainda não tem histórico para existir
+function InsightStates() {
+  const { data } = useApi('/produto/integracoes');
+  const ai = data?.items.find((i) => i.key === 'anthropic')?.state;
+  return (
+    <div className="state-grid mb-5">
+      <StatePanel compact s="ativo" kicker="Detectores" title="Fato e padrão observado por regra determinística" />
+      <StatePanel compact s={ai === 'conectada' ? 'ativo' : 'aguardando_configuracao'} kicker="Narrativa e aprofundamento" title="Explicação das leituras pelo Claude" missing={ai !== 'conectada' ? 'conectar o Claude em Integrações. Os números nunca vêm da IA.' : null} />
+      <StatePanel compact s="dados_insuficientes" kicker="Tendências" title="Comparação ao longo do tempo" missing="histórico de eventos nascidos na plataforma (ciclos completos) para comparar períodos." />
+      <StatePanel compact s="ativo" kicker="Evidência" title="Cada leitura mostra o fato, a regra que a gerou e a hipótese marcada como não verificada" />
+    </div>
+  );
+}
 
 export default function Insights() {
   useCrumbs('Insights');
@@ -26,6 +41,7 @@ export default function Insights() {
       <PageHead kicker="Inteligência de gestão" title="Fato, padrão, hipótese — e o que fazer." sub="Detectores determinísticos leem o banco a cada 15 minutos. Quando o Claude estiver configurado, ele narra e aprofunda — os números nunca vêm da IA.">
         <Button variant="primary" magnetic onClick={run} disabled={busy}>{busy ? 'Analisando…' : 'Rodar detectores agora'}</Button>
       </PageHead>
+      <InsightStates />
       <Tabs tabs={[{ key: 'aberto', label: 'Abertos' }, { key: 'aplicado', label: 'Aplicados' }, { key: 'descartado', label: 'Descartados' }, { key: 'resolvido', label: 'Resolvidos sozinhos' }]} value={status} onChange={setStatus} />
       <ErrorBox error={error} />
       {loading && !data ? <Loading rows={6} /> : !data?.length ? <Empty title="Nenhum insight aqui.">{status === 'aberto' ? 'A operação não apresenta padrões preocupantes agora.' : ''}</Empty> : data.map((x) => (

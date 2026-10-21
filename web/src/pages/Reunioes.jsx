@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useApi, useAuth, useToast } from '../lib/hooks.js';
 import { api } from '../lib/api.js';
+import { StatePanel } from '../components/State.jsx';
 import { useCrumbs } from '../components/Shell.jsx';
 import { PageHead, Section, Loading, Empty, ErrorBox, Tabs, Button, Modal, Field, Tag, Avatar } from '../components/ui.jsx';
 import { fmtDate, fmtTime, fmtDateTime, cleanName, ago } from '../lib/format.js';
@@ -58,16 +59,28 @@ function MeetingRow({ m, onOpen, selected }) {
   );
 }
 
+// Tudo que a Central de Reuniões usa, com o estado real: nada some por falta de conexão
+function MeetingIntegrations({ google }) {
+  const prod = useApi('/produto/integracoes');
+  const st = Object.fromEntries((prod.data?.items || []).map((i) => [i.key, i.state]));
+  const gc = google === 'conectado' ? 'conectada' : 'aguardando_conexao';
+  return (
+    <div className="state-grid mb-5">
+      <StatePanel compact s={gc} kicker="Google Calendar" title={gc === 'conectada' ? 'Eventos e convidados sincronizados' : 'Reuniões ficam só na plataforma'} missing={gc !== 'conectada' ? 'conectar o Google Calendar em Integrações.' : null} to={gc !== 'conectada' ? '/integracoes' : null} action="Configurar" />
+      <StatePanel compact s={gc} kicker="Google Meet" title={gc === 'conectada' ? 'Link do Meet criado no evento' : 'Link do Meet depende do Google Calendar'} missing={gc !== 'conectada' ? 'mesma conexão do Google Calendar. Até lá, cole o link em “Local / link”.' : null} />
+      <StatePanel compact s={st.anthropic === 'conectada' ? 'ativo' : 'aguardando_configuracao'} kicker="Resumos com IA" title="Transcrição → resumo interno e do cliente" missing={st.anthropic !== 'conectada' ? 'conectar o Claude. Hoje o resumo é escrito à mão na aba Inteligência e publicado só depois de revisado.' : null} />
+      <StatePanel compact s="em_desenvolvimento" kicker="Videochamada própria" title="Sala de reunião dentro da plataforma" missing="V2: videochamada nativa, gravação com consentimento e transcrição (especificado em docs/modulos/reunioes.md)." />
+    </div>
+  );
+}
+
 function Agenda({ data, onOpen }) {
   const now = new Date().toISOString();
   const upcoming = data.meetings.filter((m) => m.ends_at >= now && m.status !== 'cancelada').sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   const past = data.meetings.filter((m) => m.ends_at < now || m.status === 'cancelada');
   return (
     <>
-      <div className="row wrap gap-4 mb-4">
-        {data.google === 'conectado' ? <Tag tone="ok">Google Calendar conectado — eventos e convidados sincronizados</Tag>
-          : <span className="sm muted">Google Calendar desconectado: reuniões ficam registradas na plataforma, sem evento no Google. <Link to="/integracoes" className="bordo">Conectar →</Link></span>}
-      </div>
+      <MeetingIntegrations google={data.google} />
       <div className="cols">
         <div>
           <Section title="Próximas" kicker={`${upcoming.length} reunião(ões)`}>{upcoming.length ? upcoming.map((m) => <MeetingRow key={m.id} m={m} onOpen={onOpen} />) : <Empty title="Nenhuma reunião agendada." />}</Section>

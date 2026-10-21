@@ -120,7 +120,7 @@ export default function Executive() {
                       <span className="ex-att-client">{cleanName(a.client || '')}</span>
                       {a.time && <span className="ex-att-time">{a.time}</span>}
                     </span>
-                    <span className="ex-att-p">{a.problem}</span>
+                    <span className="ex-att-p">{a.problem}{a.origin === 'notion' && <span className="tag tag-mig" style={{ marginLeft: 8 }}>Migrado do Notion</span>}</span>
                     <span className="ex-att-meta">
                       {a.impact && <span><b>Impacto</b>{a.impact}</span>}
                       {a.who && <span><b>Responsável</b>{a.who}</span>}
@@ -205,7 +205,8 @@ export default function Executive() {
       <nav className="ex-links" aria-label="Aprofundar">
         <Link to="/torre"><span>Torre de Controle</span><small>Operação inteira, gargalos e investigação</small><I.arrow size={14} /></Link>
         {e.finance && <Link to="/financeiro"><span>Financeiro</span><small>{e.finance.has_data ? `${money(e.finance.recebido_mes)} recebido no mês${e.finance.atrasado ? ` · ${money(e.finance.atrasado)} em atraso` : ''}` : 'Dados insuficientes: nenhum contrato ou fatura cadastrado'}</small><I.arrow size={14} /></Link>}
-        <Link to="/torre?tab=pessoas"><span>Capacidade da equipe</span><small>{e.capacity.open ? `${pl(e.capacity.open, 'tarefa aberta', 'tarefas abertas')}${e.capacity.acima ? ` · ${pl(e.capacity.acima, 'pessoa acima', 'pessoas acima')} da capacidade` : ''}` : 'Nenhuma tarefa aberta na equipe'}</small><I.arrow size={14} /></Link>
+        <Link to="/torre?tab=pessoas"><span>Capacidade da equipe</span><small>{e.capacity.open ? `${pl(e.capacity.open, 'tarefa aberta', 'tarefas abertas')}${e.capacity.acima ? ` · ${pl(e.capacity.acima, 'pessoa acima', 'pessoas acima')} da capacidade` : ''}` : `Dados insuficientes: nenhuma tarefa nascida na plataforma${e.capacity.inherited ? ` · ${e.capacity.inherited} herdadas do Notion, à parte` : ''}`}</small><I.arrow size={14} /></Link>
+        <Link to="/performance"><span>Equipe · Performance</span><small>Entregas, prazos, reaberturas e capacidade por pessoa</small><I.arrow size={14} /></Link>
         <Link to="/automacoes"><span>Automações</span><small>{e.automations.runs_7d ? `${pl(e.automations.runs_7d, 'execução', 'execuções')} em 7 dias${e.automations.errors_7d ? ` · ${pl(e.automations.errors_7d, 'falha', 'falhas')}` : ''}` : 'Nenhuma execução nos últimos 7 dias'}</small><I.arrow size={14} /></Link>
       </nav>
 

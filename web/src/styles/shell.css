@@ -75,3 +75,9 @@
 .theme-toggle { width: 36px; height: 36px; border-radius: 999px; border: 1px solid var(--line); background: none; color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast); }
 .theme-toggle:hover { color: var(--ink); border-color: var(--line-strong); background: rgba(var(--tint-rgb), .04); }
 .theme-toggle:focus-visible { outline: 2px solid var(--primary-text); outline-offset: 2px; }
+/* Celular: o título da tela não é cortado pelos níveis intermediários do caminho */
+@media (max-width: 720px) {
+  .crumbs > span:not(:last-child) { display: none; }
+  .crumbs > span:last-child > .sep { display: none; }
+  .crumbs b { font-size: 18px; }
+}

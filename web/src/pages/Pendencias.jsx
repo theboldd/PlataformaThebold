@@ -10,6 +10,7 @@ import { I } from '../components/Icons.jsx';
 import { fmtDateTime, ago, cleanName } from '../lib/format.js';
 import { FUNCTIONS } from '../lib/status.js';
 import '../styles/pend.css';
+import { StatePanel } from '../components/State.jsx';
 import { useDetailParam } from '../lib/nav.jsx';
 
 const SEV = [['critica', 'Críticas'], ['alta', 'Altas'], ['media', 'Médias'], ['baixa', 'Baixas']];
@@ -17,6 +18,34 @@ const SEV1 = { critica: 'Crítica', alta: 'Alta', media: 'Média', baixa: 'Baixa
 const KEYS = ['sev', 'cause', 'client', 'who', 'process'];
 const pad = (n) => String(n).padStart(2, '0');
 const pl = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+// Com zero pendências a estrutura continua visível: prioridades, como cada pendência é lida e o que fica fora (regra 23)
+function PendStructure({ data }) {
+  const fr = data.fora_regra_23;
+  return (
+    <div className="col gap-5 mt-5">
+      <section className="pd-radar" aria-label="Prioridade">
+        {SEV.map(([k, label]) => (
+          <div key={k} className={`pd-sev s-${k} zero`}><span className="pd-big">00</span><span className="pd-sev-l"><i aria-hidden />{label}</span></div>
+        ))}
+      </section>
+      <section>
+        <h2 className="pd-h2">Como cada pendência é lida</h2>
+        <ol className="pd-model">
+          {[['O que aconteceu', 'o fato, com a origem (tarefa, conteúdo, item de onboarding ou fatura)'], ['Por que está parado', 'a causa: prazo vencido, bloqueio, material, aprovação, sem responsável'], ['Quem precisa agir', 'a pessoa (ou o cliente) definida pela regra do processo'], ['O que precisa ser feito', 'a próxima ação, com o atalho para resolver na origem'], ['Até quando', 'o prazo e o impacto se não for feito']].map(([t, d]) => <li key={t}><b>{t}</b><span>{d}</span></li>)}
+        </ol>
+        <p className="xs muted">Filtros disponíveis quando houver pendências: prioridade, causa, cliente, quem age e processo.</p>
+      </section>
+      {fr && (fr.tarefas_herdadas_abertas > 0 || fr.conteudos_migrados_bloqueados > 0) && (
+        <StatePanel s="aguardando_decisao" kicker="Fora das pendências · regra 23" title="O que veio do Notion não gera pendência.">
+          <p>{fr.tarefas_herdadas_abertas} tarefas herdadas abertas ({fr.tarefas_herdadas_vencidas} com prazo já passado) e {fr.conteudos_migrados_bloqueados} conteúdos migrados bloqueados ficam fora daqui. {fr.legado_nao_validado} itens legados aguardam validação individual.</p>
+          <p className="xs muted">Como tratar o trabalho migrado em andamento é uma decisão pendente da CEO. Enquanto isso, ele aparece na Torre (marcado como herdado) e em Itens legados.</p>
+          <div className="row wrap gap-2"><Link to="/torre" className="btn btn-sm">Ver na Torre</Link><Link to="/atrasos" className="btn btn-sm">Itens legados</Link></div>
+        </StatePanel>
+      )}
+    </div>
+  );
+}
 
 export default function Pendencias() {
   useCrumbs('Centro de Pendências');
@@ -53,7 +82,10 @@ export default function Pendencias() {
       </header>
 
       {!C.total ? (
+<>
         <div className="pd-clear"><span className="pd-big">00</span><p>{scope === 'minhas' ? 'Nada depende de você agora. Quando uma tarefa sua atrasar, um conteúdo seu travar ou um cliente seu esperar resposta, aparece aqui.' : 'Nada travando a operação agora. Tarefas atrasadas, bloqueios, onboarding parado e pagamentos vencidos aparecem aqui sozinhos.'}</p></div>
+          <PendStructure data={data} />
+        </>
       ) : (
         <>
           {/* RADAR DE PRIORIDADE */}

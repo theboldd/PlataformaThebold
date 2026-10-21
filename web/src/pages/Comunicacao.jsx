@@ -3,7 +3,8 @@ import { flushSync } from 'react-dom';
 import { useNavigate, useParams, useSearchParams, Link } from 'react-router-dom';
 import '../styles/admin.css';
 import { api } from '../lib/api.js';
-import { useAuth, useToast } from '../lib/hooks.js';
+import { useApi, useAuth, useToast } from '../lib/hooks.js';
+import { StateTag } from '../components/State.jsx';
 import { useCrumbs } from '../components/Shell.jsx';
 import { Avatar, Button, Empty, Field, Loading, Modal, Tag } from '../components/ui.jsx';
 import { I } from '../components/Icons.jsx';
@@ -23,6 +24,13 @@ const channelTitle = (c) => (c.kind === 'cliente' ? cleanName(c.client_name || c
 function Body({ text }) {
   const parts = String(text).split(/(@[\p{L}][\p{L}\d_.-]*)/u);
   return <div className="body">{parts.map((p, i) => (p.startsWith('@') ? <span key={i} className="mention">{p}</span> : p))}</div>;
+}
+
+function SlackState() {
+  const { data } = useApi('/produto/integracoes');
+  const st = data?.items.find((i) => i.key === 'slack')?.state;
+  if (!st) return null;
+  return <div className="row wrap gap-2" style={{ alignItems: 'center' }}><span className="xs muted">Slack</span><StateTag s={st === 'conectada' ? 'conectada' : st === 'erro' ? 'erro' : 'aguardando_conexao'} />{st !== 'conectada' && <Link to="/integracoes" className="xs bordo">configurar</Link>}</div>;
 }
 
 export default function Comunicacao() {
@@ -59,10 +67,15 @@ export default function Comunicacao() {
                 {c.unread > 0 && <span className="unread">{c.unread}</span>}
               </button>
             ))}
-            {!channels.some((c) => c.kind === g.key) && <div className="xs faint" style={{ padding: '4px 10px' }}>Nenhuma.</div>}
+            {!channels.some((c) => c.kind === g.key) && (g.key === 'cliente' ? <div className="xs faint" style={{ padding: '4px 10px' }}>Nenhuma.</div> : (
+              <button className="ch-link ch-empty" onClick={() => setModal(g.key)}><span className="hash">+</span><span className="clip">{g.key === 'interno' ? 'Nenhum canal da equipe ainda — criar canal' : 'Nenhuma conversa direta — iniciar'}</span></button>
+            ))}
           </div>
         ))}
-        <p className="xs faint mt-6" style={{ lineHeight: 1.5 }}>Transição do Slack: avisos-chave podem ser espelhados em um canal do Slack — configure em <Link to="/integracoes" className="bordo">Integrações</Link>. Decisões e pedidos importantes devem virar registro oficial (“Transformar em…”).</p>
+        <div className="mt-6 col gap-2">
+          <SlackState />
+          <p className="xs faint" style={{ lineHeight: 1.5, margin: 0 }}>Transição do Slack: avisos-chave podem ser espelhados em um canal do Slack. Decisões e pedidos importantes viram registro oficial pelo “Transformar em…” (tarefa, pendência, decisão, ajuste ou evento).</p>
+        </div>
       </aside>
       {channelId ? <Conversation key={channelId} channelId={channelId} channel={current} threadId={threadId} openThread={(id) => setSp(id ? { thread: id } : {})} onRead={loadChannels} /> : <div className="chat-main"><Empty title="Escolha uma conversa." /></div>}
       {modal === 'interno' && <NewChannel onClose={() => setModal(null)} onDone={(id) => { setModal(null); loadChannels(); nav(`/comunicacao/${id}`); }} />}

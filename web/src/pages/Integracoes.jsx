@@ -6,7 +6,8 @@ import { api } from '../lib/api.js';
 import { useApi, useAuth, useToast } from '../lib/hooks.js';
 import { useCrumbs } from '../components/Shell.jsx';
 import { Button, ErrorBox, Field, Loading, PageHead } from '../components/ui.jsx';
-import { ago, cleanName } from '../lib/format.js';
+import { ago, cleanName, fmtDateTime } from '../lib/format.js';
+import { StateTag } from '../components/State.jsx';
 
 const PILL = { conectado: 'Conectado', desconectado: 'Desconectado', erro: 'Erro', token_expirado: 'Token expirado', planejado: 'Especificado' };
 const NOTES = {
@@ -20,6 +21,8 @@ const NOTES = {
 export default function Integracoes() {
   useCrumbs('Integrações');
   const { data, error, loading, reload } = useApi('/integrations');
+  const prod = useApi('/produto/integracoes');
+  const st = Object.fromEntries((prod.data?.items || []).map((i) => [i.key, i]));
   const [sp, setSp] = useSearchParams();
   const toast = useToast();
   useEffect(() => {
@@ -32,12 +35,30 @@ export default function Integracoes() {
     <div className="page">
       <PageHead kicker="Sistema" title="Integrações" sub="Conexões reais via OAuth. Status honesto: nada aparece como conectado sem estar. Tokens ficam criptografados no servidor e nunca são exibidos." />
       {!data.public_base_url && <p className="note mb-5">PUBLIC_BASE_URL não está configurado no servidor: callbacks OAuth usam localhost e a publicação via Meta fica indisponível.</p>}
-      <div className="integ">{data.providers.map((p) => <Card key={p.provider} p={p} clients={data.clients} reload={reload} />)}</div>
+      <div className="row wrap gap-2 mb-5" aria-label="Legenda">{['conectada', 'nao_conectada', 'aguardando_configuracao', 'erro'].map((k) => <StateTag key={k} s={k} />)}</div>
+      <div className="integ">
+        {data.providers.map((p) => <Card key={p.provider} p={p} state={st[p.provider]?.state} clients={data.clients} reload={reload} />)}
+        {(prod.data?.items || []).filter((i) => !data.providers.some((p) => p.provider === i.key)).map((i) => <Extra key={i.key} i={i} />)}
+      </div>
     </div>
   );
 }
 
-function Card({ p, clients, reload }) {
+// Conexões que não são OAuth próprio: Meet (vem do Google Calendar), Resend (chave), Notion (só importação histórica), hospedagem
+function Extra({ i }) {
+  return (
+    <article className="integ-card">
+      <div className="row between"><h2 className="ed-md">{i.label}</h2><StateTag s={i.state}>{i.key === 'infra' && i.state === 'aguardando_decisao' ? 'Prévia · aguardando decisão' : undefined}</StateTag></div>
+      <p className="sm muted" style={{ margin: 0 }}>{i.docs}</p>
+      {i.depends && <div className="xs faint">Depende de: {i.depends}</div>}
+      {i.imported_at && <div className="xs faint">Última extração: {fmtDateTime(i.imported_at)}</div>}
+      {i.env && <div><div className="caps mb-2">Credenciais no servidor</div><div className="envs">{i.env.map((e) => <code key={e} className={i.state === 'conectada' ? 'ok' : ''}>{i.state === 'conectada' ? '✓' : '○'} {e}</code>)}</div></div>}
+      {i.key === 'infra' && <div className="envs"><code className={i.cron ? 'ok' : ''}>{i.cron ? '✓' : '○'} CRON_SECRET</code><code className={i.base_url ? 'ok' : ''}>{i.base_url ? '✓' : '○'} PUBLIC_BASE_URL</code></div>}
+    </article>
+  );
+}
+
+function Card({ p, state, clients, reload }) {
   const auth = useAuth();
   const toast = useToast();
   const admin = auth.can('integracoes', 'admin');
@@ -52,7 +73,7 @@ function Card({ p, clients, reload }) {
   const disconnect = async () => { if (!confirm(`Desconectar ${p.label}?`)) return; try { await api.post(`/integrations/${p.provider}/disconnect`); toast('Desconectado'); reload(); } catch (e) { toast(e.message, 'err'); } };
   return (
     <article className="integ-card">
-      <div className="row between"><h2 className="ed-md">{p.label}</h2><span className={`pill ${status}`}>{PILL[status] || status}</span></div>
+      <div className="row between"><h2 className="ed-md">{p.label}</h2>{state ? <StateTag s={p.provider === 'google_drive' && state !== 'conectada' ? 'aguardando_decisao' : state} /> : <span className={`pill ${status}`}>{PILL[status] || status}</span>}</div>
       {p.account && <div className="sm"><span className="muted">Conta:</span> {p.account}</div>}
       {p.updated_at && <div className="xs faint">Atualizado {ago(p.updated_at)}</div>}
       {p.last_error && <div className="sm" style={{ color: 'var(--err)' }}>Último erro: {p.last_error}</div>}

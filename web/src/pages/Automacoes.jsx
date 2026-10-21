@@ -6,6 +6,7 @@ import { useCrumbs } from '../components/Shell.jsx';
 import { Button, Empty, ErrorBox, Loading, PageHead, Section, Seg, Stat, Tabs, Tag } from '../components/ui.jsx';
 import { ago, fmtDateTime, cleanName } from '../lib/format.js';
 import { useUrlState } from '../lib/nav.jsx';
+import { StateTag } from '../components/State.jsx';
 
 const CLASS = { 1: 'Simples', 2: 'Regras', 3: 'Precisa de IA', 4: 'Aprovação humana' };
 const ENGINE = { regra: 'Regra', ia: 'IA', humano: 'Humano' };
@@ -18,8 +19,9 @@ export default function Automacoes() {
   return (
     <div className="page">
       <PageHead kicker="Sistema" title="Automações" sub="O que o sistema faz sozinho: evento → condição → ação → responsável → notificação → prazo → motor → log. Regras determinísticas movem o processo; IA só interpreta." />
-      <Tabs value={tab} onChange={setTab} tabs={[{ key: 'mapa', label: 'Mapa de automações' }, { key: 'runs', label: 'Execuções' }, { key: 'regras', label: 'Regras do processo' }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ key: 'mapa', label: 'Mapa de automações' }, { key: 'rotinas', label: 'Rotinas do sistema' }, { key: 'runs', label: 'Execuções' }, { key: 'regras', label: 'Regras do processo' }]} />
       {tab === 'mapa' && <Mapa />}
+      {tab === 'rotinas' && <Rotinas />}
       {tab === 'runs' && <Runs />}
       {tab === 'regras' && <Regras />}
     </div>
@@ -28,6 +30,8 @@ export default function Automacoes() {
 
 function Mapa() {
   const { data, error, loading, reload } = useApi('/automations');
+  const est = useApi('/automations/estado');
+  const stOf = Object.fromEntries((est.data?.automations || []).map((a) => [a.key, a]));
   const auth = useAuth();
   const toast = useToast();
   const [phase, setPhase] = useUrlState('fase', 'todas');
@@ -42,7 +46,8 @@ function Mapa() {
       <div className="stats mb-5">
         <Stat value={data.automations.length} label="Automações mapeadas" />
         <Stat value={active} label="Ativas nesta versão" />
-        <Stat value={data.automations.filter((a) => !a.implemented).length} label="Planejadas (V2/V3)" />
+        <Stat value={(est.data?.automations || []).filter((a) => a.state === 'aguardando_integracao').length} label="Aguardando integração" />
+        <Stat value={data.automations.filter((a) => !a.implemented).length} label="Em desenvolvimento (V2/V3)" />
         <Stat value={data.automations.reduce((s, a) => s + a.runs, 0)} label="Execuções registradas" />
       </div>
       <div className="row wrap mb-4 gap-4">
@@ -50,7 +55,7 @@ function Mapa() {
         <Seg label="Classe" value={cls} onChange={setCls} options={[{ value: 'todas', label: 'Todas' }, ...Object.entries(CLASS).map(([k, v]) => ({ value: k, label: `${k} · ${v}` }))]} />
       </div>
       <div className="table-wrap"><table className="table">
-        <thead><tr><th>Evento</th><th>Condição</th><th>Ação</th><th>Responsável</th><th>Notificação</th><th>Prazo</th><th>Motor</th><th>Fase</th><th>Log</th><th>Estado</th></tr></thead>
+        <thead><tr><th>Evento</th><th>Condição</th><th>Ação</th><th>Responsável</th><th>Notificação</th><th>Prazo</th><th>Motor</th><th>Fase</th><th>Log</th><th>Estado</th><th>Ligada</th></tr></thead>
         <tbody>{list.map((a) => (
           <tr key={a.key} className={`auto-row ${a.implemented ? '' : 'planned'}`}>
             <td><div className="strong">{a.event}</div><code className="xs faint">{a.key}</code></td>
@@ -58,11 +63,38 @@ function Mapa() {
             <td><span className={`engine ${a.engine}`}>{ENGINE[a.engine]}</span><div className="xs faint mt-2">{a.class} · {CLASS[a.class]}</div></td>
             <td><Tag tone={a.phase === 'MVP' ? 'bordo' : ''}>{a.phase}</Tag></td>
             <td className="xs">{a.runs ? <><span className="strong tnum">{a.runs}×</span><div className="faint" style={{ whiteSpace: 'nowrap' }}>{ago(a.last_run)}</div></> : <span className="faint">—</span>}</td>
+            <td className="xs">{stOf[a.key] ? <StateTag s={stOf[a.key].state} /> : '—'}
+              {stOf[a.key]?.dependency && stOf[a.key].dependency.state !== 'conectada' && <div className="faint mt-2">Depende de {stOf[a.key].dependency.label}</div>}
+              {stOf[a.key]?.last_error && <div className="mt-2" style={{ color: 'var(--err)' }}>Erro {ago(stOf[a.key].last_error.at)}: {stOf[a.key].last_error.detail}</div>}
+            </td>
             <td>
               {!a.implemented ? <Tag tone="info">Planejada</Tag> : a.core ? <span className="xs muted" title="Parte do núcleo do processo — sempre ativa">Núcleo do processo</span> : (
                 <button className={`switch ${a.enabled ? 'on' : ''}`} role="switch" aria-checked={!!a.enabled} aria-label={`Ligar/desligar ${a.event}`} disabled={!auth.can('automacoes', 'admin')} onClick={() => toggle(a)} />
               )}
             </td>
+          </tr>
+        ))}</tbody>
+      </table></div>
+    </>
+  );
+}
+
+// Rotinas: quando rodam, última e próxima execução, e o que impede de rodar no ambiente atual
+function Rotinas() {
+  const { data, error, loading } = useApi('/automations/estado');
+  if (loading && !data) return <Loading />;
+  if (error) return <ErrorBox error={error} />;
+  return (
+    <>
+      {data.hosting === 'vercel' && <p className="note mb-5">Este ambiente é a prévia na Vercel: as rotinas contínuas não rodam aqui. Elas dependem da hospedagem definitiva (aguardando aprovação).</p>}
+      <div className="table-wrap"><table className="table">
+        <thead><tr><th>Rotina</th><th>Quando</th><th>Estado</th><th>Última execução</th><th>Próxima</th></tr></thead>
+        <tbody>{data.routines.map((r) => (
+          <tr key={r.key}>
+            <td className="strong">{r.label}</td><td className="sm">{r.schedule}</td>
+            <td className="xs"><StateTag s={r.state} />{r.note && <div className="faint mt-2">{r.note}</div>}</td>
+            <td className="sm">{r.last ? <>{fmtDateTime(r.last)}{r.last_status && r.last_status !== 'ok' && <div className="xs" style={{ color: r.last_status === 'erro' ? 'var(--err)' : 'inherit' }}>{r.last_status}{r.last_error ? `: ${r.last_error}` : ''}</div>}</> : <span className="faint">Nunca executou</span>}</td>
+            <td className="sm">{r.next ? (r.next.includes('T') ? fmtDateTime(r.next) : r.next) : <span className="faint">—</span>}</td>
           </tr>
         ))}</tbody>
       </table></div>

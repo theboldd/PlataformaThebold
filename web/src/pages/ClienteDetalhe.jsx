@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { useApi, useAuth, useToast } from '../lib/hooks.js';
+import { ClientePendencias, ClienteOrigem } from './client/ClienteOrigem.jsx';
 import { useCrumbs } from '../components/Shell.jsx';
 import { Avatar, Button, Empty, ErrorBox, Field, Loading, Modal, Risk, Stat, Tabs, Timeline } from '../components/ui.jsx';
 import { I } from '../components/Icons.jsx';
@@ -35,8 +36,8 @@ export default function ClienteDetalhe() {
     { key: 'onboarding', label: 'Onboarding', count: ob && ob.status !== 'concluido' ? missing.length : 0 },
     { key: 'conteudos', label: 'Calendário editorial', count: data.contents.length }, { key: 'reunioes', label: 'Reuniões', count: data.meetings.length },
     { key: 'solicitacoes', label: 'Solicitações', count: data.open_requests || 0 }, { key: 'decisoes', label: 'Decisões' }, { key: 'marca', label: 'Marca & Pulso' }, { key: 'saude', label: 'Saúde' },
-    { key: 'equipe', label: 'Equipe' }, { key: 'arquivos', label: 'Arquivos', count: data.files.length },
-    ...(data.finance ? [{ key: 'financeiro', label: 'Financeiro' }] : []), { key: 'historico', label: 'Histórico' },
+    { key: 'pendencias', label: 'Pendências' }, { key: 'equipe', label: 'Equipe' }, { key: 'arquivos', label: 'Arquivos', count: data.files.length },
+    ...(data.finance ? [{ key: 'financeiro', label: 'Financeiro' }] : []), { key: 'origem', label: 'Origem dos dados' }, { key: 'historico', label: 'Histórico' },
   ];
   return (
     <div className="page">
@@ -85,6 +86,8 @@ export default function ClienteDetalhe() {
       ))}
       {tab === 'financeiro' && data.finance && <FinanceTab finance={data.finance} />}
       {tab === 'historico' && <Timeline items={data.timeline} />}
+      {tab === 'pendencias' && <ClientePendencias clientId={data.client.id} />}
+      {tab === 'origem' && <ClienteOrigem clientId={data.client.id} />}
     </div>
   );
 }

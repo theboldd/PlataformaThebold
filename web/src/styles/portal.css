@@ -395,3 +395,8 @@ html[data-theme="light"][data-portal] body { background: #F6F3F0; }
 }
 .p-ob-migrated { font-size: 14px; color: var(--ink-2); border-left: 2px solid var(--primary-text); padding: 6px 0 6px 12px; margin: 12px 0 0; }
 .p-ob-src { margin-left: 8px; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 4px; padding: 1px 6px; vertical-align: middle; }
+.p-updated { margin: 6px 0 0; color: var(--muted, rgba(246,243,240,.6)); letter-spacing: .02em; }
+/* Quadradinho só com texto: o título não invade a data nem o número (corta com reticências) */
+.p-tile-text { overflow: hidden; padding: 26% 10% 24%; justify-content: flex-start; }
+.p-tile-text .ed { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+@media (max-width: 560px) { .p-tile-text { gap: 4px; padding-top: 30%; } .p-tile-text .caps { display: none; } .p-tile-text .ed { font-size: 12.5px; -webkit-line-clamp: 3; } }

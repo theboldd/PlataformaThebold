@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApi } from '../lib/hooks.js';
+import { StateTag } from '../components/State.jsx';
 import { useCrumbs } from '../components/Shell.jsx';
 import { Button, Seg, Loading, Empty, ErrorBox, Tag } from '../components/ui.jsx';
 import { I } from '../components/Icons.jsx';
@@ -72,7 +73,7 @@ export default function Calendario() {
           <span className="gstatus">
             {g?.status === 'conectado' ? <Tag tone="ok">Google Calendar conectado · {g.items} eventos</Tag>
               : g?.status === 'erro' ? <Tag tone="err">Google Calendar com erro: {g.error}</Tag>
-              : <><Tag>Google Calendar desconectado</Tag><Link to="/integracoes" className="xs bordo">conectar →</Link></>}
+              : <><StateTag s="aguardando_conexao">Google Calendar · aguardando conexão</StateTag><Link to="/integracoes" className="xs bordo">configurar →</Link></>}
           </span>
         </div>
       </div>

@@ -129,3 +129,7 @@
 .pd-scope button b { font-variant-numeric: tabular-nums; font-size: 12px; padding: 1px 7px; border-radius: 999px; background: rgba(var(--tint-rgb), .07); }
 .pd-scope button.on { background: var(--ink); color: var(--bg); }
 .pd-scope button.on b { background: rgba(var(--tint-rgb), .0); color: var(--bg); }
+.pd-model { list-style: none; margin: 12px 0 8px; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; counter-reset: pm; }
+.pd-model li { counter-increment: pm; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.pd-model li::before { content: counter(pm, decimal-leading-zero) " →"; font-size: 11px; letter-spacing: .1em; color: var(--primary-text); }
+.pd-model li b { color: var(--ink); font-weight: 600; font-size: 14px; }

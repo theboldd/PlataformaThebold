@@ -27,12 +27,14 @@ const NAV = [
     { to: '/processos', label: 'Processos', icon: I.flow, mod: 'processos' },
     { to: '/pendencias', label: 'Pendências', icon: I.alert, team: true },
     { to: '/atrasos', label: 'Itens legados', icon: I.history, mod: 'atrasos' },
+    { to: '/performance', label: 'Equipe · Performance', icon: I.chart, mod: 'performance' },
   ] },
   { group: 'Clientes', items: [
     { to: '/clientes', label: 'Clientes', icon: I.clients, mod: 'clientes' },
     { to: '/divisao', label: 'Divisão', icon: I.division, mod: 'divisao', anyAct: true },
     { to: '/conteudos', label: 'Conteúdos', icon: I.content, mod: 'conteudos' },
     { to: '/revisao', label: 'Sala de Revisão', icon: I.review, mod: 'revisao' },
+    { to: '/notion', label: 'Notion · histórico', icon: I.layers, mod: 'clientes' },
   ] },
   { group: 'Agenda', items: [
     { to: '/calendario', label: 'Calendário', icon: I.calendar, mod: 'calendario' },
@@ -49,6 +51,7 @@ const NAV = [
     { to: '/automacoes', label: 'Automações', icon: I.bolt, mod: 'automacoes' },
   ] },
   { group: 'Sistema', items: [
+    { to: '/configuracoes', label: 'Configurações', icon: I.gear, team: true },
     { to: '/integracoes', label: 'Integrações', icon: I.plug, mod: 'integracoes' },
     { to: '/usuarios', label: 'Usuários e permissões', icon: I.users, mod: 'usuarios' },
     { to: '/historico', label: 'Histórico', icon: I.history, mod: 'historico' },

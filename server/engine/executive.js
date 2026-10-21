@@ -88,9 +88,11 @@ export function executiveOverview(user, qs = {}) {
   }
   // Tarefas da própria CEO vencidas ou que vencem na janela escolhida
   for (const t of all(`SELECT tk.*, c.name client FROM tasks tk LEFT JOIN clients c ON c.id=tk.client_id WHERE tk.assignee_id=? AND tk.status IN ('aberta','em_andamento') AND tk.due_at IS NOT NULL AND tk.due_at <= ? ORDER BY tk.due_at`, user.id, W.end)) {
-    const late = t.due_at < nowIso;
-    attention.push({ id: `mine:${t.id}`, level: late ? 'critico' : 'atencao', client: t.client || 'The Bold', client_id: t.client_id, problem: t.title, context: STAGES[t.stage]?.label || null,
-      impact: late ? 'Tarefa sua vencida: as próximas etapas esperam por ela.' : 'Tarefa sua com prazo dentro do período.', who: 'Você',
+    // Herdada do Notion (regra 23): aparece marcada pela origem, nunca como crítica nem como atraso
+    const inherited = t.data_origin === 'notion';
+    const late = t.due_at < nowIso && !inherited;
+    attention.push({ id: `mine:${t.id}`, origin: inherited ? 'notion' : 'plataforma', level: late ? 'critico' : 'atencao', client: t.client || 'The Bold', client_id: t.client_id, problem: t.title, context: STAGES[t.stage]?.label || null,
+      impact: inherited ? 'Tarefa herdada do Notion: fora de atraso, carga e performance. Como tratá-la na operação aguarda decisão.' : late ? 'Tarefa sua vencida: as próximas etapas esperam por ela.' : 'Tarefa sua com prazo dentro do período.', who: 'Você',
       time: late ? `venceu ${new Date(t.due_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'short' })}` : `até ${new Date(t.due_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'short' })}`,
       action: { label: 'Abrir tarefa', to: t.content_id ? `/conteudos/${t.content_id}` : t.client_id ? `/clientes/${t.client_id}` : '/processos' } });
   }
@@ -160,8 +162,11 @@ export function executiveOverview(user, qs = {}) {
   const mon = new Date().toISOString().slice(0, 7);
   const finCount = one('SELECT (SELECT COUNT(*) FROM contracts) + (SELECT COUNT(*) FROM invoices) n').n;
   const finance = { has_data: finCount > 0, recebido_mes: one('SELECT COALESCE(SUM(paid_amount),0) v FROM invoices WHERE substr(paid_at,1,7)=?', mon).v, atrasado: one("SELECT COALESCE(SUM(amount),0) v FROM invoices WHERE status='atrasada'").v };
-  const team = all(`SELECT u.capacity, (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento')) open FROM users u WHERE u.active=1 AND u.role_key<>'cliente'`);
-  const capacity = { open: team.reduce((a, x) => a + x.open, 0), acima: team.filter((x) => x.open > x.capacity).length };
+  // Mesma regra da Torre (regras 24 e 25): carga e "acima da capacidade" só com tarefas nascidas na plataforma; herdadas à parte
+  const team = all(`SELECT u.capacity, (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento') AND t.data_origin='plataforma') open,
+    (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento','agendada') AND t.data_origin='notion') inherited FROM users u WHERE u.active=1 AND u.role_key<>'cliente'`);
+  const openPlat = team.reduce((a, x) => a + x.open, 0);
+  const capacity = { open: openPlat, inherited: team.reduce((a, x) => a + x.inherited, 0), acima: team.filter((x) => x.open > x.capacity).length, state: openPlat ? 'ativo' : 'dados_insuficientes' };
   const automations = { runs_7d: one('SELECT COUNT(*) n FROM automation_runs WHERE created_at > ?', new Date(Date.now() - 7 * DAY).toISOString()).n, errors_7d: one("SELECT COUNT(*) n FROM automation_runs WHERE status='erro' AND created_at > ?", new Date(Date.now() - 7 * DAY).toISOString()).n };
 
   // ── Está tudo bem? ──

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { StateTag, StatePanel } from '../components/State.jsx';
 import { Link } from 'react-router-dom';
 import { useApi, useToast } from '../lib/hooks.js';
 import { api } from '../lib/api.js';
@@ -44,6 +45,15 @@ export default function Brain() {
             <Tag>Memória: {meta.knowledge_provider === 'banco' ? 'banco da plataforma' : meta.knowledge_provider}</Tag>
           </span>
         </div>
+        <h1 className="brain-title">THE BOLD BRAIN</h1>
+        <p className="brain-lede">Sua inteligência operacional.</p>
+        {!meta.configured && (
+          <div className="brain-off" role="status">
+            <StateTag s="aguardando_configuracao" />
+            <span><b>Conecte o Claude para ativar consultas inteligentes.</b> Sem a conexão, nenhuma resposta é gerada: a pergunta devolve só os dados que seriam usados, para conferência.</span>
+            <Link to="/integracoes" className="bordo">Configurar em Integrações →</Link>
+          </div>
+        )}
         <label htmlFor="brain-q" className="sr-only">Pergunta</label>
         <textarea id="brain-q" className="brain-q" rows={2} placeholder="Pergunte qualquer coisa sobre a operação…" value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } }} />
@@ -59,6 +69,13 @@ export default function Brain() {
         </div>
         <div className="chips mt-5">{SUGGESTED.map((s) => <button key={s} className="chip" onClick={() => { setQ(s); ask(s); }}>{s}</button>)}</div>
         <p className="xs mt-4" style={{ color: 'rgba(246,243,240,.55)', maxWidth: 720 }}>{available.find((a) => a.key === agent)?.desc} Os dados enviados respeitam suas permissões: o agente só vê o que você pode ver.</p>
+      </div>
+
+      <div className="state-grid section">
+        <StatePanel compact s={meta.configured ? 'ativo' : 'aguardando_configuracao'} kicker="Consultas" title="Perguntas sobre clientes, operação, gargalos e padrões" missing={meta.configured ? null : 'conectar o Claude (ANTHROPIC_API_KEY) em Integrações.'} />
+        <StatePanel compact s="ativo" kicker="Memória" title="Client Brain e dados da plataforma, respeitando suas permissões" />
+        <StatePanel compact s="em_desenvolvimento" kicker="Memória de Decisões" title="“Por que fazemos dessa forma?” — decisões com contexto, motivo e validade" missing="fase 3 do roadmap de inteligência (Bloco 13)." />
+        <StatePanel compact s="em_desenvolvimento" kicker="Radar de Automações" title="Padrões manuais repetidos viram sugestão de regra, sempre com aprovação humana" missing="fase 3 do roadmap de inteligência (Bloco 13)." />
       </div>
 
       <div ref={out} style={{ scrollMarginTop: 80 }}>

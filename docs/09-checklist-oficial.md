@@ -1,6 +1,237 @@
 # THE BOLD OS — Checklist oficial de conferência
 
-**Revisão 2 · 21/10/2026.** Auditoria de consistência depois de:
+**Revisão 3 · 21/10/2026 · PRODUTO VISÍVEL.** Esta revisão troca a pergunta “existe no código?” por **“a usuária entra na plataforma e encontra, entende e usa?”**.
+
+**Fonte dos requisitos.** Inventário de **457 requisitos definidos**, reconciliados de três fontes:
+- todos os documentos de `docs/`;
+- as mensagens da CEO nas duas conversas do projeto, incluindo as enviadas durante um turno;
+- os resumos de rodada.
+
+**Como foi conferido.** A plataforma foi percorrida como usuária, em computador (1440 px) e celular (390 px):
+- como CEO, todas as telas internas, clicando em todas as abas;
+- como cliente, as 13 telas do portal.
+
+A base usada foi uma cópia descartável da base real, a mesma da prévia. A cópia foi apagada ao final e a base real não foi alterada.
+
+**Regra desta revisão:** backend, documentação ou teste passando **não** contam como entrega. Entregue = está no menu, abre, explica para que serve, mostra o estado, mostra os dados ou “dados insuficientes”, diz o que falta para ativar e, quando cabe, deixa agir.
+
+**Estados usados na interface:**
+- ATIVO
+- DADOS INSUFICIENTES
+- AGUARDANDO CONFIGURAÇÃO
+- AGUARDANDO INTEGRAÇÃO / CONEXÃO
+- AGUARDANDO DECISÃO
+- EM DESENVOLVIMENTO
+- BLOQUEADO POR DEPENDÊNCIA
+- Integrações: CONECTADA, NÃO CONECTADA, AGUARDANDO CONFIGURAÇÃO e ERRO
+
+Todos vêm do mesmo componente (`web/src/components/State.jsx`).
+
+> A prévia na Vercel continua **descartável**: o que se altera nela se perde, e as rotinas contínuas não rodam. A tela Integrações → “Hospedagem e rotinas” mostra isso como **AGUARDANDO DECISÃO**.
+
+## O que mudou nesta rodada (para ficar visível)
+
+| Tela | Antes | Agora |
+|---|---|---|
+| Processos (Quadro) | Erro 500 (variável engolida por comentário, commit `f05c88a`) | Abre normalmente. Um teste novo abre todas as telas e falha em qualquer erro 500 |
+| Equipe · Performance | Não existia | Tela nova no menu (só CEO). Mostra entregas, no prazo, com atraso, devoluções, reaberturas, bloqueios, reprogramações, abertas/vencidas, herdadas à parte, capacidade configurada × medida, tendência e contexto dos atrasos. Com 0 eventos: **DADOS INSUFICIENTES PARA MEDIR PERFORMANCE**. Sem score e sem ranking |
+| Configurações | Não existia (espalhada) | Tela nova no menu. Uma área por cartão (usuários, perfis, funções, acessos do portal, integrações, automações, regras, calendário operacional, notificações, financeiro, hospedagem, perfil), cada uma com estado, o que falta e atalho |
+| Notion · histórico | Decisões da migração fora do menu | Tela nova no menu: o que veio do Notion, CR Editorial e calendários (somente leitura), itens legados, 251 decisões e conteúdo migrado em andamento (**AGUARDANDO DECISÃO**) |
+| Financeiro | Só recebimentos | Três abas: **Recebimentos · Produção & Repasses · Rentabilidade**. Repasses: aguardando decisão, com a produção real por profissional e competência, sem valor. Rentabilidade: receita, custos, repasses, margem, retrabalho, evolução e metas, cada item com seu estado |
+| Integrações | 5 cartões | 11 cartões, com estado padronizado e legenda. Novos: Google Meet, Resend, Notion (só importação), push no celular, banco/pagamentos, hospedagem e rotinas |
+| Automações | Mapa sem dependência | Coluna **Estado** (ativa, aguardando integração, desligada, em desenvolvimento, erro) com a dependência e o último erro. Nova aba **Rotinas do sistema**: quando roda, última e próxima execução e o que bloqueia no ambiente atual |
+| The Bold Brain | “Claude não configurado” pequeno | “THE BOLD BRAIN · Sua inteligência operacional.” e o aviso **Conecte o Claude para ativar consultas inteligentes**, com atalho. Memória de Decisões e Radar de Automações aparecem como **EM DESENVOLVIMENTO** |
+| Reuniões | Texto “desconectado” | Quatro estados visíveis: Google Calendar, Google Meet, resumos com IA e videochamada própria (em desenvolvimento) |
+| Calendário | “Google Calendar desconectado” | **Google Calendar · AGUARDANDO CONEXÃO**, com “configurar →” |
+| Pendências | Com 0 itens, só o número 00 | Estrutura sempre visível: prioridades, o modelo **O que aconteceu → Por que parou → Quem age → O que fazer → Até quando** e o bloco “fora das pendências · regra 23” (tarefas herdadas e conteúdos migrados bloqueados), em **AGUARDANDO DECISÃO** |
+| Visão Geral | “6 pessoas acima da capacidade” (contava herdadas) | Mesma regra da Torre: só tarefas nascidas na plataforma, herdadas à parte. Tarefas herdadas em “Precisa da sua atenção” levam o selo **Migrado do Notion**, sem nível crítico. Novo atalho para Performance |
+| Cliente (ficha) | 14 abas | Mais duas abas: **Pendências** (do cliente) e **Origem dos dados** (plataforma × Notion, com link da página do Notion) |
+| Bold Chat | “Nenhuma.” | Canais e diretas vazios viram ação (“criar canal” / “iniciar”); estado do Slack visível |
+| Insights | Só a lista | Estados de detectores, narrativa com IA, tendências e evidência |
+| Portal (home) | “Primeiro ciclo começa após o onboarding”, mesmo com conteúdo no feed | Texto coerente com o feed. “Última atualização do seu projeto” e bloco **Próximo passo** sempre visíveis |
+| Celular | Títulos cortados (“La Ma”, “Qu”); textos do feed sobrepostos | Título da tela inteiro no topo; quadradinhos do feed sem sobreposição |
+
+## 🟢 ENTREGUE E VISÍVEL
+
+| Área | Requisito | Onde |
+|---|---|---|
+| Visão Geral | Saudação, data, filtro Hoje/7/30/Personalizado, 4 indicadores clicáveis, “Precisa da sua atenção”, operação, inteligência, financeiro e capacidade resumidos, “o que os dados ainda não permitem afirmar” | Visão geral |
+| Torre | Estado, riscos/gargalos/bloqueios, mapa das 13 etapas, acúmulo, clientes & saúde, capacidade com herdadas à parte, responsabilidades, desempenho do período (“histórico insuficiente”), inteligência FATO/PADRÃO/HIPÓTESE/RECOMENDAÇÃO, detalhamento, 7 filtros incluindo origem | Torre de Controle |
+| Processos | Quadro com filtros e agrupamento; mover etapa com tipo (manual, retorno, reabertura, correção, exceção), motivo e impacto; janela da etapa (409 até o marco) | Processos · Conteúdo → Mover etapa |
+| Pendências | Minhas × Equipe, radar de prioridade, causas, filtros e detalhe completo quando há itens; estrutura visível com 0 | Pendências |
+| Itens legados | 144 itens com fatos e fonte; três ações individuais | Itens legados |
+| Performance | Estrutura completa, eventos válidos, “dados insuficientes”, sem score | Equipe · Performance |
+| Clientes | Carteira, onboarding, 16 abas da ficha (inclui Pendências e Origem dos dados), Divisão | Clientes · Divisão |
+| Conteúdos | Lista e filtros, novo conteúdo, página do conteúdo (ações, legenda, arquivos, comentários interno/cliente com @, tarefas, ajustes, aprovações, briefing, histórico), comparar versões e diferença de legenda (a partir da V2) | Conteúdos |
+| Sala de Revisão | Revisão por cliente, em rodada | Sala de Revisão |
+| Calendário | Mês/Semana/Dia/Agenda, filtros, ciclo, prazos | Calendário |
+| Reuniões | Agenda, nova reunião com pauta visível ao cliente, transcrição colada, resumo interno e do cliente com verificação de vazamento e “Aprovar e publicar”, extração em tarefas, sala de horários | Reuniões |
+| Bold Chat | Canais do cliente, criar canal, diretas, @menções, threads, conteúdo na mensagem, “Transformar em…” tarefa/pendência/decisão/ajuste/evento | Comunicação |
+| CRM | Pipeline com etapas e probabilidade, negócio com responsável e próxima ação, follow-ups vencidos, fechamento cria cliente | CRM |
+| Financeiro · Recebimentos | Contratos, parcelas, vencimentos, atrasos, registrar pagamento manual | Financeiro → Recebimentos |
+| Insights | Abertos/aplicados/descartados/resolvidos, evidência, “Rodar detectores agora” | Insights |
+| Notion | Histórico somente leitura por cliente (com filtro de vazios), resumo da importação, decisões da migração | Notion · histórico · ficha → Calendário editorial |
+| Automações | Mapa com estado e dependência, rotinas, execuções, regras do processo editáveis | Automações |
+| Integrações | Todas as conexões com estado honesto | Integrações |
+| Configurações | Hub de todas as configurações | Configurações |
+| Usuários | Pessoas, acessos dos clientes, perfis | Usuários e permissões |
+| Portal | Início (Momento Bold), Conteúdos (prévia do feed, um por um, coração = aprovação, ajuste por página/tempo/ponto, comentários, versões), Decisões, Calendário, Reuniões, Mensagens, Solicitações (pedir algo), Materiais, Sua marca, Histórico, Onboarding, Perfil | Portal do cliente |
+
+## 🟡 VISÍVEL, MAS PARCIAL
+
+| Requisito | Tela | O que falta |
+|---|---|---|
+| Ciclo atual / jornada do cliente | Portal → Início | Só aparece com ciclo criado na plataforma. Os clientes reais só têm conteúdo migrado |
+| Progresso do ciclo no portal | Portal → Início | Hoje só aparece o % do onboarding |
+| AGORA → VOCÊ → THE BOLD → DEPOIS dentro do conteúdo | Conteúdos → conteúdo | Existe na home do portal, não na página do conteúdo |
+| Notificações inteligentes do cliente | Sino do portal | Agrupamento e textos definidos, mas nunca observados com dado real |
+| Saúde do cliente | Ficha → Saúde | Só “satisfação contextual”, vazia. Sinais e tendência sem histórico |
+| Client Brain | Ficha → Resumo do Brain / Ficha | 495 entradas migradas, mas o resumo de La Marca está vazio. Unificação dos formatos 14 × 22 pendente |
+| Sala de Revisão e indicadores com conteúdo migrado em andamento | Sala de Revisão · Torre · Visão Geral | Os 307 migrados contam como operação (ver “Precisa de decisão”) |
+| Bold Chat | Comunicação | 0 canais de equipe e 0 diretas; o chat inteligente (IA) não existe |
+| Reuniões | Reuniões | 0 reuniões registradas; briefing pré-reunião (IA) não existe |
+| Recebimentos | Financeiro | Sem lembrete D-1, cobrança D0 nem régua (dependem de Resend e das regras); calendário de recebimentos não existe |
+| Performance | Equipe · Performance | Estrutura pronta; o registro auditável de eventos (Bloco 6) e “ver dados de origem” em cada métrica ainda não existem |
+| Tendências | Insights · Torre | Sem histórico para comparar |
+| Acesso real da equipe | Configurações → Usuários | 9 pessoas com e-mail provisório `@thebold.demo`: sem acesso até receber o e-mail definitivo |
+| Acesso dos clientes | Usuários → Acessos dos clientes | 1 de 23 clientes com acesso ao portal |
+| Celular | Todas | Tabela de Automações rola na horizontal; ficha do cliente com 16 abas em faixa rolável; “Excluir cliente” em destaque no topo |
+
+## 🟠 EXISTE NO CÓDIGO, MAS NÃO ESTÁ VISÍVEL
+
+| Requisito | Situação |
+|---|---|
+| Detalhe da pendência | Existe e abre quando há pendência; hoje há 0. A estrutura agora está descrita na tela |
+| Revelar credenciais do onboarding (cofre) | Só para `clientes.admin`, dentro da ficha; não tem entrada própria |
+| Relatório semanal | Gerado pela rotina (segunda, 8h), que não roda na prévia; o atalho na Torre lista “nenhum relatório” |
+
+## 🔵 AGUARDANDO CONFIGURAÇÃO
+
+| Requisito | O que falta | Onde aparece |
+|---|---|---|
+| Google Calendar e Google Meet | `GOOGLE_CLIENT_ID/SECRET` + conectar | Integrações · Calendário · Reuniões |
+| Claude (Brain, resumos de reunião, narrativa de insights) | `ANTHROPIC_API_KEY` | Brain · Reuniões · Insights · Integrações |
+| Meta/Instagram (publicação no horário) | `META_APP_ID/SECRET`, `PUBLIC_BASE_URL`, conectar | Integrações · Automações |
+| Slack (espelhar avisos) | `SLACK_CLIENT_ID/SECRET` + conectar | Integrações · Comunicação |
+| Resend (convites, senha, cobranças) | `RESEND_API_KEY` + `BOLD_MAIL_FROM` | Integrações · Financeiro |
+| Cron diário na prévia | `CRON_SECRET` | Automações → Rotinas · Integrações |
+| Rotinas contínuas (insights 15 min, relatório, publicação, transcrições) | Servidor contínuo (hospedagem) | Automações → Rotinas (BLOQUEADO POR DEPENDÊNCIA) |
+
+## 🔴 NÃO IMPLEMENTADO
+
+| Requisito | Onde vai aparecer | Situação na tela |
+|---|---|---|
+| Valores e fechamento de repasses (estrutura, status, fechamento, relatório e e-mail) | Financeiro → Produção & Repasses | Mostrado como AGUARDANDO DECISÃO (regras) |
+| Custos, margem, metas, evolução | Financeiro → Rentabilidade | AGUARDANDO DECISÃO / DADOS INSUFICIENTES |
+| Preferências de notificação por pessoa; e-mail e push | Configurações · Integrações | EM DESENVOLVIMENTO |
+| Memória de Decisões e Radar de Automações | The Bold Brain | EM DESENVOLVIMENTO |
+| Videochamada própria, gravação com consentimento, reunião assíncrona | Reuniões | EM DESENVOLVIMENTO |
+| Google Drive (Central de Arquivos) | Integrações | AGUARDANDO DECISÃO (Workspace × Gmail) |
+| Sincronização do Google Calendar nos dois sentidos | Calendário | Depende da conexão (Bloco 10) |
+| Chat inteligente com IA; sincronização real do Slack | Comunicação | Não aparece |
+| Previsão de capacidade e de atraso | Torre | Não aparece (adiado) |
+| Revisão por IA na Sala de Revisão | Sala de Revisão | Não aparece (depende dos critérios e do Claude) |
+| Criação automática do ciclo mensal | Automações | Listada como planejada (V2) |
+| Score de confiabilidade | — | Proibido por decisão até haver dados |
+
+## ⚪ PRECISA DE DECISÃO
+
+1. Como mostrar os **307 conteúdos migrados em andamento** nos indicadores, na Torre e na Sala de Revisão. Visível em Notion · histórico e em Pendências.
+2. **Regras financeiras:** repasse, custos, metas, dia de fechamento, e-mail do relatório, cobranças após o vencimento. Visível em Financeiro e Configurações.
+3. **Hospedagem definitiva** (plano de `docs/08`). Visível em Integrações → Hospedagem e em Automações → Rotinas.
+4. **144 itens legados**, um a um. Visível em Itens legados.
+5. **251 pontos da migração.** Visível em Notion · histórico → Decisões.
+6. **Status dos 23 clientes “a confirmar”.**
+7. **Ocear — “Cronograma editorial”** (30 registros).
+8. **E-mails definitivos da equipe** (9 provisórios) e **convites aos clientes**.
+9. **Google Drive:** Workspace × Gmail.
+10. **Critérios de revisão** de Rebeca e Raísa.
+11. **Perguntas obrigatórias do onboarding.**
+12. **E-mail candidato** de cliente (regra 17).
+13. **Senha do cliente visível à CEO** (conflita com a segurança: senha não é guardada em claro).
+14. **Material fora do prazo;** prazo formal de aprovação de arte/vídeo.
+15. **Acesso ao MindMeister.**
+
+## O QUE VOCÊ DEVE REVISAR MANUALMENTE AGORA
+
+Navegue nesta ordem. Em cada tela, confira os itens listados.
+
+1. **Visão Geral**
+   - Troque Hoje / 7 / 30 / Personalizado e veja os números mudarem.
+   - Clique nos 4 indicadores.
+   - Em “Precisa da sua atenção”, confira se as tarefas herdadas aparecem com o selo **Migrado do Notion** e sem “crítico”.
+   - No rodapé, “Capacidade da equipe” deve dizer **dados insuficientes · N herdadas à parte**, e não “acima da capacidade”.
+   - Abra o atalho **Equipe · Performance**.
+2. **Torre de Controle**
+   - Use os filtros (cliente, responsável, etapa, origem).
+   - Clique em uma etapa do mapa e em um risco.
+   - Confira a capacidade com herdadas à parte e o bloco de inteligência (fato/padrão/hipótese/recomendação).
+3. **Pendências**
+   - Com 0 itens, confira as prioridades, o modelo de leitura em 5 passos e o bloco **Fora das pendências · regra 23** com os números das herdadas.
+4. **Itens legados**
+   - Abra um item e veja os fatos com a fonte e as três ações.
+   - Não decida nada sem querer: a decisão vale na prévia só até ela reiniciar.
+5. **Equipe · Performance**
+   - Troque 7/30/90 dias.
+   - Confira **DADOS INSUFICIENTES PARA MEDIR PERFORMANCE**, a tabela por pessoa com herdadas à parte, “capacidade configurada · medida: dados insuficientes”, o contexto dos atrasos e as regras no rodapé.
+6. **Clientes**
+   - Carteira e Onboarding.
+   - Abra La Marca e percorra as 16 abas, principalmente **Pendências** e **Origem dos dados** (link para o Notion).
+7. **Área do Cliente** (entre com um acesso de cliente)
+   - No Início: “Última atualização”, o texto de “Você está aqui” e o bloco **Próximo passo**.
+   - Em Conteúdos: no celular, a prévia do feed sem sobreposição.
+   - Percorra Decisões, Calendário, Reuniões, Mensagens, Solicitações (+), Materiais, Sua marca, Histórico e Onboarding.
+8. **Conteúdos**
+   - Filtros.
+   - Abra um conteúdo: ações, “Mover etapa” (tipo, motivo, impacto), comentários interno × cliente vê, abas.
+9. **Processos**
+   - O quadro precisa abrir (antes dava erro).
+   - Agrupar por responsável/cliente, filtros e arrastar um card (mostra impacto e pede motivo).
+10. **Calendário**
+    - Mês/Semana/Dia/Agenda.
+    - Selo **Google Calendar · AGUARDANDO CONEXÃO** com “configurar →”.
+11. **Reuniões**
+    - Os 4 estados no topo (Calendar, Meet, resumos com IA, videochamada própria).
+    - Nova reunião.
+    - Aba Inteligência (transcrição, resumos) e Sala de horários.
+12. **Bold Chat**
+    - “Nenhum canal da equipe ainda — criar canal” e “iniciar” conversa direta.
+    - Estado do Slack.
+    - Numa conversa de cliente, “Transformar em…”.
+13. **CRM**
+    - Pipeline vazio com as 7 etapas.
+    - “Novo negócio” (campos responsável e próxima ação).
+14. **Financeiro**
+    - As três abas.
+    - Em Recebimentos: estado e “Novo contrato”.
+    - Em Produção & Repasses: AGUARDANDO DECISÃO, mais a tabela de produção real (vazia).
+    - Em Rentabilidade: os 7 cartões com estado.
+15. **Notion · histórico**
+    - Números da importação e tabela de calendários/CR Editorial.
+    - Cartões de itens legados, decisões da migração e conteúdo migrado em andamento.
+16. **The Bold Brain**
+    - Título, aviso **Conecte o Claude para ativar consultas inteligentes** e os 4 estados.
+    - Faça uma pergunta: deve responder “nenhuma resposta foi gerada” e mostrar os dados que seriam usados.
+17. **Insights**
+    - Os 4 estados no topo e as abas.
+18. **Automações**
+    - Coluna Estado (aguardando integração com a dependência).
+    - Aba **Rotinas do sistema** (última e próxima execução, bloqueio da prévia).
+19. **Integrações**
+    - Legenda e 11 cartões; nada pode aparecer como conectado.
+    - Hospedagem: “Prévia · aguardando decisão”.
+20. **Configurações**
+    - Os cartões, os estados e o aviso dos 9 e-mails provisórios.
+    - Abra cada atalho.
+21. **No celular**
+    - Repita Visão Geral, Torre, cliente, Financeiro, Performance e o portal.
+    - O título da tela no topo deve aparecer inteiro.
+
+---
+
+# Anexo — Revisão 2 (auditoria de consistência anterior)
+
+**Revisão 2 · 21/10/2026 (mantida como histórico).** Auditoria de consistência depois de:
 - mesclar a área premium do cliente;
 - aplicar as regras 22–26;
 - tratar os 144 itens legados e criar o campo `data_origin`;
