@@ -15,6 +15,10 @@ const pickDate = (schema) => {
   const dates = Object.entries(schema || {}).filter(([, t]) => String(t).toLowerCase().includes('date')).map(([k]) => k);
   return dates.find((k) => /^(data|date|postagem|data de postagem)$/i.test(k.trim())) || dates[0] || null;
 };
+// Texto puro: a marcação do Notion (<b>, <br />, menções com e-mail no atributo) vira texto; o conteúdo não muda
+const ENT = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&nbsp;': ' ' };
+const clean = (v) => (typeof v === 'string' ? v.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (m) => ENT[m]).trim()
+  : Array.isArray(v) ? v.map(clean) : v && typeof v === 'object' && !('start' in v) ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, clean(x)])) : v);
 const dateOf = (v) => (v && typeof v === 'object' ? v.start || null : typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v : null);
 const report = { imported: 0, skipped: 0, no_date: 0, clients: {} };
 tx(() => {
@@ -28,8 +32,8 @@ tx(() => {
         const start = dateOf(d);
         if (!start) report.no_date++;
         insert('notion_history', { id: uid('nh_'), client_id: c.client_id, source: db.title || 'CR EDITORIAL', source_db_url: db.url || null, notion_url: r.notion_url || null,
-          title: r.title || null, date_start: start, date_end: d && typeof d === 'object' ? d.end || null : null, date_property: dp,
-          properties: JSON.stringify(r.properties || {}), created_time: r.created_time || null, last_edited_time: r.last_edited_time || null, extracted_at: X.extracted_at || null, imported_at: now() });
+          title: clean(r.title) || null, date_start: start, date_end: d && typeof d === 'object' ? d.end || null : null, date_property: dp,
+          properties: JSON.stringify(clean(r.properties || {})), created_time: r.created_time || null, last_edited_time: r.last_edited_time || null, extracted_at: X.extracted_at || null, imported_at: now() });
         report.imported++;
         report.clients[c.client_name] = (report.clients[c.client_name] || 0) + 1;
       }

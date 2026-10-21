@@ -151,7 +151,7 @@ function Feed({ items }) {
 }
 
 // HISTÓRICO DO NOTION · SOMENTE LEITURA: o que existia no "CR EDITORIAL" antes da plataforma. Não é o calendário ativo.
-const val = (v) => (v == null ? '' : Array.isArray(v) ? v.join(', ') : typeof v === 'object' ? (v.start ? `${v.start}${v.end ? ` → ${v.end}` : ''}` : JSON.stringify(v)) : String(v));
+const val = (v) => (v == null ? '' : typeof v === 'boolean' ? (v ? 'marcado no Notion' : 'não marcado') : Array.isArray(v) ? v.join(', ') : typeof v === 'object' ? (v.start ? `${v.start}${v.end ? ` → ${v.end}` : ''}` : JSON.stringify(v)) : String(v));
 function NotionHistory({ clientId }) {
   const { data, error, loading } = useApi(`/clients/${clientId}/notion-history`, [clientId], { live: false });
   if (error) return <ErrorBox error={error} />;
@@ -166,10 +166,10 @@ function NotionHistory({ clientId }) {
             const extra = Object.entries(r.properties).filter(([k, v]) => k !== r.date_property && val(v) && val(v) !== r.title);
             return (
               <tr key={r.id}>
-                <td className="sm">{r.date_start ? fmtDate(`${r.date_start.slice(0, 10)}T12:00:00-03:00`) : <span className="muted">sem data</span>}</td>
+                <td className="sm nowrap">{r.date_start ? r.date_start.slice(0, 10).split('-').reverse().join('/') : <span className="muted">sem data</span>}</td>
                 <td className="sm strong">{r.title || <span className="muted">sem título</span>}</td>
                 <td className="xs">{extra.map(([k, v]) => <span key={k} className="ed-hist-p"><b>{k}:</b> {val(v)}</span>)}</td>
-                <td>{r.notion_url && <a className="xs" href={r.notion_url} target="_blank" rel="noreferrer">abrir no Notion ↗</a>}</td>
+                <td className="nowrap">{r.notion_url && <a className="xs" href={r.notion_url} target="_blank" rel="noreferrer">abrir no Notion ↗</a>}</td>
               </tr>
             );
           })}</tbody>
