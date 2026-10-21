@@ -8,7 +8,7 @@ export const MODULES = {
   chat: 'Comunicação', pendencias: 'Centro de Pendências', crm: 'CRM', financeiro: 'Financeiro',
   insights: 'Insights', brain: 'The Bold Brain', automacoes: 'Automações', integracoes: 'Integrações',
   usuarios: 'Usuários e permissões', historico: 'Histórico', portal: 'Área do cliente',
-  divisao: 'Divisão de clientes (vincular e desvincular clientes da equipe)',
+  divisao: 'Divisão de clientes (ver e gerenciar quem cuida de cada cliente)',
   carteira: 'Carteira de clientes (criar cliente e mudar status: ativar, pausar, encerrar)',
 };
 export const ACTIONS = ['view', 'create', 'edit', 'approve', 'admin'];

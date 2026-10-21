@@ -212,7 +212,7 @@ Só onde não existe equivalente:
    - **(B) Supabase Postgres.** Exige reescrever a camada de dados inteira (hoje síncrona) para assíncrona. É um projeto grande por si só.
    - **(C) Ficar só na Vercel.** Não serve para financeiro, cobrança ou apuração: os dados se perdem.
 2. **Divisão: quem visualiza.** Antes você pediu que **toda a equipe** pudesse ver a Divisão. Agora o req. 18 pede que **visualizar** também seja restrito à CEO e a autorizados. Vale o novo?
-3. **"Isa"** (req. 21): não há ninguém chamado Isa na equipe cadastrada (Rebeca, Vitória, Vivian, Raísa, Juliane, Monique, Felipe, Nicole, Léo, Matheus). É a **Raísa**?
+3. ~~"Isa"~~ **Resolvido:** é a **Raísa** (regra oficial 3, `docs/07-regras-oficiais.md`).
 4. **Logins dos clientes (req. 23):** só **1** cliente tem e-mail na ficha. Preciso da lista real de e-mails de acesso. Não vou inventar e-mails.
 5. **Critérios de revisão (req. 19):** a estrutura será criada **vazia**, aguardando os critérios reais da Rebeca e da Raísa.
 6. **Regras financeiras:** ficam como "regra pendente de configuração" até a CEO definir:

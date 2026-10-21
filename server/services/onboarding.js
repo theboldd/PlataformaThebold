@@ -82,6 +82,25 @@ export function formStatus(clientId) {
   return { form_id: form.id, version: form.version, total: keys.length, answered: answered.length, missing_required: missingRequired, status: ob?.form_status || 'nao_iniciado', submitted_at: ob?.form_submitted_at || null, answers };
 }
 
+// Regras oficiais 5 e 6: onboarding de quem já é cliente vem do Notion. Com tudo respondido = concluído;
+// com parte respondida = "migrado_parcial" (o cliente completa só o que falta); sem nada = não iniciado.
+export function migratedFormStatus(clientId) {
+  const st = formStatus(clientId);
+  if (!st) return 'nao_iniciado';
+  return st.answered >= st.total ? 'concluido' : st.answered > 0 ? 'migrado_parcial' : 'nao_iniciado';
+}
+// Ajuste único da base: clientes migrados marcados como "concluído" sem ter respondido tudo
+export function reconcileMigratedForms() {
+  if (one("SELECT 1 FROM settings WHERE key='onboarding_parcial_reconciliado'")) return 0;
+  let n = 0;
+  for (const o of all("SELECT client_id FROM onboarding WHERE form_status='concluido' AND form_submitted_at IS NULL")) {
+    const next = migratedFormStatus(o.client_id);
+    if (next !== 'concluido') { run('UPDATE onboarding SET form_status=? WHERE client_id=?', next, o.client_id); n++; }
+  }
+  run('INSERT INTO settings (key,value,updated_at) VALUES (?,?,?)', 'onboarding_parcial_reconciliado', JSON.stringify(n), now());
+  return n;
+}
+
 // Cliente conclui o formulário → onboarding avança sozinho
 export function submitForm(clientId, actor, onComplete) {
   const st = formStatus(clientId);

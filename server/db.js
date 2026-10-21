@@ -123,6 +123,15 @@ CREATE TABLE IF NOT EXISTS stage_moves (
   reason TEXT, actor_id TEXT, prev_assignees TEXT, new_assignees TEXT, impacts TEXT, created_at TEXT NOT NULL
 );
 
+-- E-mails de cliente encontrados em fontes reais que NÃO são cadastro de acesso (ex.: contato publicado num post):
+-- ficam para a equipe confirmar antes de virar login (regra oficial 4 — nada é inventado nem usado sem origem)
+CREATE TABLE IF NOT EXISTS client_email_candidates (
+  id TEXT PRIMARY KEY, client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE, email TEXT NOT NULL,
+  source TEXT NOT NULL, source_url TEXT, confidence TEXT NOT NULL, -- cadastro | conteudo
+  status TEXT NOT NULL DEFAULT 'a_confirmar', -- a_confirmar | usado | descartado
+  decided_by TEXT, decided_at TEXT, created_at TEXT NOT NULL, UNIQUE (client_id, email)
+);
+
 -- ───────────── ONBOARDING ─────────────
 CREATE TABLE IF NOT EXISTS onboarding (
   id TEXT PRIMARY KEY, client_id TEXT NOT NULL UNIQUE REFERENCES clients(id) ON DELETE CASCADE,
@@ -381,7 +390,7 @@ CREATE TABLE IF NOT EXISTS reports (
 `;
 db.exec(SCHEMA);
 // Migrações leves (colunas adicionadas depois da primeira versão)
-for (const sql of ['ALTER TABLE adjustments ADD COLUMN reapproval INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE clients ADD COLUMN notion_url TEXT', 'ALTER TABLE clients ADD COLUMN notion_section TEXT', 'ALTER TABLE clients ADD COLUMN aliases TEXT', "ALTER TABLE onboarding ADD COLUMN form_status TEXT NOT NULL DEFAULT 'nao_iniciado'", 'ALTER TABLE onboarding ADD COLUMN form_submitted_at TEXT', 'ALTER TABLE client_brain_entries ADD COLUMN source_url TEXT', 'ALTER TABLE contents ADD COLUMN material_url TEXT', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'", 'ALTER TABLE tasks ADD COLUMN available_at TEXT']) { try { db.exec(sql); } catch { /* já existe */ } }
+for (const sql of ['ALTER TABLE adjustments ADD COLUMN reapproval INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE clients ADD COLUMN notion_url TEXT', 'ALTER TABLE clients ADD COLUMN notion_section TEXT', 'ALTER TABLE clients ADD COLUMN aliases TEXT', "ALTER TABLE onboarding ADD COLUMN form_status TEXT NOT NULL DEFAULT 'nao_iniciado'", 'ALTER TABLE onboarding ADD COLUMN form_submitted_at TEXT', 'ALTER TABLE client_brain_entries ADD COLUMN source_url TEXT', 'ALTER TABLE contents ADD COLUMN material_url TEXT', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'", 'ALTER TABLE tasks ADD COLUMN available_at TEXT', 'ALTER TABLE users ADD COLUMN email_source TEXT', 'ALTER TABLE users ADD COLUMN email_source_url TEXT']) { try { db.exec(sql); } catch { /* já existe */ } }
 
 // ── helpers ───────────────────────────────────────────
 export const one = (sql, ...p) => db.prepare(sql).get(...p);

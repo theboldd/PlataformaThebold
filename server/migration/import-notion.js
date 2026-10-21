@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { one, all, insert, run, uid, now, tx } from '../db.js';
 import { log } from '../lib/core.js';
-import { activeForm, brainSectionFor } from '../services/onboarding.js';
+import { activeForm, brainSectionFor, migratedFormStatus } from '../services/onboarding.js';
 import { BRAIN_SECTIONS } from '../ai/memory.js';
 
 const DIR = process.env.BOLD_MIGRATION_DIR || path.resolve('storage', 'migration', 'notion');
@@ -115,7 +115,7 @@ function importClient(file) {
       insert('onboarding_answers', { id: uid('oa_'), client_id: c.id, form_id: form.id, question_key: key, question_text: q.text, answer, origin: 'onboarding_cliente', source_type: 'notion', source_ref: list[0].f.source_url || d.notion_url, answered_by: null, answered_at: ts, updated_at: ts });
       stats.answers++;
     }
-    if (stats.answers) run("UPDATE onboarding SET form_status='concluido', form_submitted_at=NULL WHERE client_id=? AND form_status<>'concluido'", c.id);
+    if (stats.answers) run('UPDATE onboarding SET form_status=?, form_submitted_at=NULL WHERE client_id=?', migratedFormStatus(c.id), c.id);
 
     for (const l of d.links || []) { if (!l.url) continue; insert('client_links', { id: uid('lk_'), client_id: c.id, label: l.label || null, url: l.url, kind: 'link', source_page: l.source_page || null, source_type: 'notion', created_at: ts }); stats.links++; }
     for (const a of d.files || []) {
@@ -178,7 +178,7 @@ if (fs.existsSync(ansFile)) {
           insert('client_brain_entries', { id: uid('be_'), client_id: c.id, section: it.question_key === 'rot_texto_livre' ? 'identidade' : 'outro', label: it.question_text || 'Informação adicional do formulário', content: val, origin: 'onboarding_cliente', source_type: 'notion', source_ref: block.source?.url, source_page: 'Formulário Sua marca', source_url: block.source?.url || null, created_at: now() });
         }
       }
-      if (added) run("UPDATE onboarding SET form_status='concluido' WHERE client_id=?", c.id);
+      if (added) run('UPDATE onboarding SET form_status=? WHERE client_id=?', migratedFormStatus(c.id), c.id);
       const rc = report.clients.find((x) => x.id === c.id);
       if (rc) { rc.answers += added; report.totals.answers += added; }
     });

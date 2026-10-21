@@ -149,3 +149,10 @@
 .pw-box { border: 1px solid var(--line); border-radius: 10px; padding: var(--sp-4); }
 .pw-events { list-style: none; margin: 10px 0; padding: 0; display: grid; gap: 6px; }
 .pw-link { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+/* Acessos dos clientes */
+.ca-sum { display: flex; flex-wrap: wrap; gap: var(--sp-5); margin: var(--sp-4) 0 var(--sp-2); font-size: var(--fs-sm); color: var(--muted); }
+.ca-n b { font-size: 22px; color: var(--ink); margin-right: 4px; font-variant-numeric: tabular-nums; }
+.ca-n.s-ativo b { color: var(--ok); } .ca-n.s-convite b { color: var(--warn); } .ca-n.s-bloqueado b { color: var(--err); }
+.ca-cand { margin-top: 6px; padding: 8px 10px; border: 1px dashed var(--line-strong); border-radius: 8px; background: var(--surface); }
+.ca-actions { white-space: nowrap; }
+.ca-table td { vertical-align: top; }

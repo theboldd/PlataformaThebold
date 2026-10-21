@@ -59,6 +59,7 @@ export default function Onboarding() {
     <div className="p-page p-ob" ref={top}>
       <div className="caps">Onboarding · {data.title || 'Sua marca'}</div>
       <h1 className="p-hello-t" style={{ fontSize: 'clamp(30px, 7vw, 46px)' }}>Bem-vinda(o) à The Bold.</h1>
+      {data.status === 'migrado_parcial' && <p className="p-ob-migrated">Trouxemos as respostas que você já tinha dado no Notion (marcadas como “Migrado do Notion”). Complete só as que faltam.</p>}
       <p className="p-hello-s">{done
         ? `Formulário enviado${data.submitted_at ? ` em ${fmtDateTime(data.submitted_at)}` : ''}. Você ainda pode complementar suas respostas — a equipe é avisada.`
         : 'Suas respostas são salvas automaticamente. Pode parar e voltar quando quiser.'}</p>
@@ -79,7 +80,7 @@ export default function Onboarding() {
       )}
       {sec.questions.map((q) => (
         <div key={q.key} className="p-ob-q">
-          <label htmlFor={`q-${q.key}`}>{q.text}{q.required ? ' *' : ''}</label>
+          <label htmlFor={`q-${q.key}`}>{q.text}{q.required ? ' *' : ''}{data.answers[q.key]?.migrated && <span className="p-ob-src">Migrado do Notion</span>}</label>
           {q.help && <div className="help">{q.help}</div>}
           {q.sensitive ? (
             <input id={`q-${q.key}`} type={/senha/i.test(q.text) ? 'password' : 'text'} autoComplete="off" value={values[q.key] ?? ''}

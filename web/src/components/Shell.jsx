@@ -29,7 +29,7 @@ const NAV = [
   ] },
   { group: 'Clientes', items: [
     { to: '/clientes', label: 'Clientes', icon: I.clients, mod: 'clientes' },
-    { to: '/divisao', label: 'Divisão', icon: I.division, team: true },
+    { to: '/divisao', label: 'Divisão', icon: I.division, mod: 'divisao', anyAct: true },
     { to: '/conteudos', label: 'Conteúdos', icon: I.content, mod: 'conteudos' },
     { to: '/revisao', label: 'Sala de Revisão', icon: I.review, mod: 'revisao' },
   ] },
@@ -79,7 +79,7 @@ export function Shell({ children }) {
     return () => { window.removeEventListener('bold:notification', h); window.removeEventListener('bold:message', h); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const allowed = (n) => (n.team ? auth.internal : auth.permissions[n.mod]?.includes('view')) && (n.special !== 'pendencias' || auth.pendencias);
+  const allowed = (n) => (n.team ? auth.internal : n.anyAct ? !!auth.permissions[n.mod]?.length : auth.permissions[n.mod]?.includes('view')) && (n.special !== 'pendencias' || auth.pendencias);
   const groups = NAV.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length);
   return (
     <NavHistory top={TOP} labels={TOP_LABEL}>

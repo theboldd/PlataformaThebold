@@ -120,7 +120,7 @@ function Entries({ data, clientId, reload }) {
 
 function Answers({ data }) {
   const st = data.form_status;
-  const label = { nao_iniciado: 'Não iniciado', em_andamento: 'Em preenchimento', concluido: 'Concluído' }[st?.status] || st?.status;
+  const label = { nao_iniciado: 'Não iniciado', em_andamento: 'Em preenchimento', migrado_parcial: 'Migrado do Notion (parcial) — o cliente completa o restante', concluido: 'Concluído' }[st?.status] || st?.status;
   return (
     <>
       <p className="sm muted">Formulário oficial “Sua marca” (ESPAÇO CLIENTE). Status: <b>{label}</b>{st?.submitted_at ? ` · enviado em ${fmtDateTime(st.submitted_at)}` : ''} · {st?.answered} de {st?.total} respondidas.</p>

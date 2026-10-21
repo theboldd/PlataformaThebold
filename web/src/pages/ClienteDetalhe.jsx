@@ -204,7 +204,7 @@ function OnboardingTab({ data, missing, reload }) {
   if (!ob) return <Empty title="Sem onboarding." />;
   const formLine = ob.form && (
     <div className="panel mb-5 row between wrap gap-3">
-      <span className="sm">Formulário “Sua marca”: <b>{{ nao_iniciado: 'não iniciado', em_andamento: 'em preenchimento pelo cliente', concluido: 'concluído' }[ob.form_status] || ob.form_status}</b> · {ob.form.answered}/{ob.form.total} respostas{ob.form_submitted_at ? ` · enviado em ${fmtDateTime(ob.form_submitted_at)}` : ''}</span>
+      <span className="sm">Formulário “Sua marca”: <b>{{ nao_iniciado: 'não iniciado', em_andamento: 'em preenchimento pelo cliente', migrado_parcial: 'migrado do Notion (parcial)', concluido: 'concluído' }[ob.form_status] || ob.form_status}</b> · {ob.form.answered}/{ob.form.total} respostas{ob.form_submitted_at ? ` · enviado em ${fmtDateTime(ob.form_submitted_at)}` : ''}</span>
       <Link className="btn btn-sm btn-ghost" to={`/clientes/${data.client.id}?tab=ficha`}>Ver respostas</Link>
     </div>
   );

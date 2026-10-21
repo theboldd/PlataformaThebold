@@ -393,3 +393,5 @@ html[data-theme="light"][data-portal] body { background: #F6F3F0; }
   --bordo-soft: rgba(69, 19, 29, 0.07); --bordo-line: rgba(69, 19, 29, 0.28);
   --ok: #3E6A4E; --warn: #9C6B22; --err: #9E3A2E; --info: #3B556F;
 }
+.p-ob-migrated { font-size: 14px; color: var(--ink-2); border-left: 2px solid var(--primary-text); padding: 6px 0 6px 12px; margin: 12px 0 0; }
+.p-ob-src { margin-left: 8px; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 4px; padding: 1px 6px; vertical-align: middle; }

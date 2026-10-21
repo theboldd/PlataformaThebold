@@ -161,6 +161,8 @@ ops.get('/clients/:id/brain.md', requirePerm('brain', 'view'), (req, res) => { a
 ops.put('/clients/:id/team', requirePerm('divisao', 'edit'), (req, res) => {
   assertClient(req.user, req.params.id);
   const members = (req.body?.members || []).filter((m) => m.user_id && m.function && m.function !== 'cliente');
+  const teamSnap = () => all("SELECT u.name, cm.function FROM client_members cm JOIN users u ON u.id=cm.user_id WHERE cm.client_id=? AND cm.function<>'cliente' ORDER BY cm.function, u.name", req.params.id).map((r) => `${r.function}:${r.name}`);
+  const before = teamSnap();
   tx(() => {
     run("DELETE FROM client_members WHERE client_id=? AND function<>'cliente'", req.params.id);
     members.forEach((m) => run('INSERT OR IGNORE INTO client_members (client_id,user_id,function) VALUES (?,?,?)', req.params.id, m.user_id, m.function));
@@ -172,7 +174,8 @@ ops.put('/clients/:id/team', requirePerm('divisao', 'edit'), (req, res) => {
       if (a) { update('tasks', { id: t.id }, { assignee_id: a }); notify(a, { level: 'info', type: 'tarefa', title: t.title, body: 'Atribuída após atualização da equipe do cliente', link: t.content_id ? `/conteudos/${t.content_id}` : '/', content: t.content_id }); }
     }
   });
-  log({ actor: req.user.id, action: 'cliente.equipe', entity: 'client', id: req.params.id, client: req.params.id, summary: `Equipe do cliente atualizada: ${members.map((m) => `${userName(m.user_id)} (${m.function})`).join(', ')}` });
+  log({ actor: req.user.id, action: 'cliente.equipe', entity: 'client', id: req.params.id, client: req.params.id, summary: `Equipe do cliente atualizada: ${members.map((m) => `${userName(m.user_id)} (${m.function})`).join(', ')}`,
+    before: JSON.stringify(before), after: JSON.stringify(teamSnap()) });
   res.json({ ok: true });
 });
 ops.patch('/onboarding/items/:id', requirePerm('clientes', 'edit'), (req, res) => {

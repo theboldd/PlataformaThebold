@@ -17,6 +17,7 @@ import { ficha } from './routes/ficha.js';
 import { pendencias } from './routes/pendencias.js';
 import { divisao } from './routes/divisao.js';
 import { review } from './routes/review.js';
+import { reconcileMigratedForms } from './services/onboarding.js';
 
 export function bootstrap() {
   for (const r of ROLE_DEFS) {
@@ -33,6 +34,7 @@ export function bootstrap() {
   }
   seedAutomations();
   reconcileStageWindows(); // regra pronto ≠ disponível aplicada às tarefas que já existiam
+  reconcileMigratedForms(); // onboarding migrado parcial não fica como "concluído"
   activateScheduledTasks();
 }
 

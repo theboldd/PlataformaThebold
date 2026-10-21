@@ -95,7 +95,8 @@ portal.get('/me', (req, res) => {
   if (counts.aguardando) steps.push({ text: counts.aguardando === 1 ? '1 conteúdo aguardando sua aprovação.' : `${counts.aguardando} conteúdos aguardando sua aprovação.`, link: '/portal/conteudos', cta: 'Ver conteúdos' });
   const mat = one("SELECT COUNT(*) n FROM contents WHERE client_id=? AND blocked=1 AND waiting_on='cliente'", c.id).n;
   if (mat) steps.push({ text: `Enviar ${mat} material(is) pendente(s)`, link: '/portal/projeto', cta: 'Enviar materiais' });
-  if (ob && ob.form_status !== 'concluido' && ob.status !== 'migrado') steps.unshift({ text: ob.form_status === 'em_andamento' ? 'Seu formulário de onboarding está pela metade — continue de onde parou.' : 'Preencha o formulário de onboarding para começarmos seu projeto.', link: '/portal/onboarding', cta: ob.form_status === 'em_andamento' ? 'Continuar formulário' : 'Preencher formulário' });
+  if (ob && ob.form_status === 'migrado_parcial') { const fs = formStatus(c.id); steps.unshift({ text: `Trouxemos ${fs.answered} respostas que você já tinha dado no Notion. Faltam ${fs.total - fs.answered} para completar seu onboarding.`, link: '/portal/onboarding', cta: 'Completar onboarding' }); }
+  else if (ob && ob.form_status !== 'concluido' && ob.status !== 'migrado') steps.unshift({ text: ob.form_status === 'em_andamento' ? 'Seu formulário de onboarding está pela metade — continue de onde parou.' : 'Preencha o formulário de onboarding para começarmos seu projeto.', link: '/portal/onboarding', cta: ob.form_status === 'em_andamento' ? 'Continuar formulário' : 'Preencher formulário' });
   else if (ob && !['concluido', 'migrado'].includes(ob.status)) steps.push({ text: 'Faltam algumas informações para começarmos.', link: '/portal/projeto', cta: 'Completar' });
   if (next) steps.push({ text: `Reunião em ${new Date(next.starts_at).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' })}`, link: '/portal/reunioes', cta: 'Ver reunião' });
   res.json({ client: { id: c.id, name: c.name, handle: c.handle, status: c.status, services: parseJSON(c.services, []) }, team: team.map(({ id, name, function: f }) => ({ id, name, function: f })), counts, next_meeting: next, timeline, steps,
@@ -218,7 +219,7 @@ portal.get('/onboarding/form', (req, res) => {
   if (!form) throw new HttpError(404, 'Formulário não configurado.');
   const st = formStatus(c.id);
   // Acessos nunca voltam para a tela: só a indicação de que já foram informados
-  const answers = Object.fromEntries(Object.entries(st.answers).map(([k, a]) => [k, k.startsWith('acesso_') ? { saved: true } : { value: a.answer, updated_at: a.updated_at }]));
+  const answers = Object.fromEntries(Object.entries(st.answers).map(([k, a]) => [k, k.startsWith('acesso_') ? { saved: true, migrated: a.source_type === 'notion' } : { value: a.answer, updated_at: a.updated_at, migrated: a.source_type === 'notion' }]));
   res.json({ title: form.title, version: form.version, sections: form.sections.map((s) => ({ title: s.title, intro: s.intro || null, questions: s.questions.map(({ key, text, type, options, help, sensitive }) => ({ key, text, type, options, help: help && !/^(CAMPO SENSÍVEL|Linha |Checkboxes|Pode envolver|Resposta:)/.test(help) ? help : null, sensitive: !!sensitive, required: form.required_keys.includes(key) })) })),
     answers, status: st.status, submitted_at: st.submitted_at, answered: st.answered, total: st.total, missing_required: st.missing_required });
 });
