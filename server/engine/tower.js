@@ -65,7 +65,7 @@ export function tower(user, qs = {}) {
     if (F.stage) { w.push(`${alias}.stage=?`); p.push(F.stage); }
     if (F.assignee_id) { w.push(`EXISTS (SELECT 1 FROM tasks ft WHERE ft.content_id=${alias}.id AND ft.assignee_id=? AND ft.status IN ('aberta','em_andamento'))`); p.push(F.assignee_id); }
     if (F.status) w.push(STATUS_SQL[F.status](alias));
-    if (F.origin) w.push(`${alias}.strategy_tags ${F.origin === 'migrado' ? '' : 'NOT '}LIKE '%importado-notion%'`);
+    if (F.origin) w.push(`${alias}.data_origin='${F.origin === 'migrado' ? 'notion' : 'plataforma'}'`);
     if (F.kind) { w.push(`EXISTS (SELECT 1 FROM tasks fk WHERE fk.content_id=${alias}.id AND fk.kind=?)`); p.push(F.kind); }
     return { sql: w.join(' AND '), p };
   };
@@ -79,8 +79,8 @@ export function tower(user, qs = {}) {
     if (F.stage) { w.push(`${alias}.stage=?`); p.push(F.stage); }
     if (F.format) { w.push(`(${alias}.content_id IS NULL OR EXISTS (SELECT 1 FROM contents fc WHERE fc.id=${alias}.content_id AND fc.format=?))`); p.push(F.format); }
     if (F.kind) { w.push(`${alias}.kind=?`); p.push(F.kind); }
-    // origem: tarefa herdada da migração (perf_status preenchido) × evento operacional real nascido na plataforma
-    if (F.origin) w.push(`${alias}.perf_status IS ${F.origin === 'migrado' ? 'NOT ' : ''}NULL`);
+    // origem estrutural (regra 20): migrado do Notion × nascido na plataforma
+    if (F.origin) w.push(`${alias}.data_origin='${F.origin === 'migrado' ? 'notion' : 'plataforma'}'`);
     if (F.status) w.push(`EXISTS (SELECT 1 FROM contents fs WHERE fs.id=${alias}.content_id AND ${STATUS_SQL[F.status]('fs')})`);
     return { sql: w.join(' AND '), p };
   };
@@ -90,7 +90,7 @@ export function tower(user, qs = {}) {
   // carteira = clientes externos (a The Bold, cliente interno, fica fora: regra oficial 16)
   const clients = all(`SELECT * FROM clients WHERE status IN (${q(OPERATING)}) AND kind<>'interno' AND ${clientScope.sql} ${F.client_id ? 'AND id=?' : ''} ORDER BY name`, ...OPERATING, ...clientScope.params, ...(F.client_id ? [F.client_id] : []));
   const C = cw();
-  const content = all(`SELECT c.*, cl.name client FROM contents c JOIN clients cl ON cl.id=c.client_id WHERE c.stage<>'cancelado' AND ${C.sql}`, ...C.p);
+  const content = all(`SELECT c.*, cl.name client FROM contents c JOIN clients cl ON cl.id=c.client_id WHERE c.stage<>'cancelado' AND (c.legacy_status IS NULL OR c.legacy_status='reprogramado') AND ${C.sql}`, ...C.p);
   const T = tw();
   const openTasks = all(`SELECT t.*, c.name client, u.name assignee FROM tasks t LEFT JOIN clients c ON c.id=t.client_id LEFT JOIN users u ON u.id=t.assignee_id
     WHERE t.status IN ('aberta','em_andamento') AND t.function<>'cliente' AND ${T.sql}`, ...T.p);
@@ -167,7 +167,9 @@ export function tower(user, qs = {}) {
 
   // ── Responsabilidades ──
   const noOwner = health.filter((h) => h.sem_funcao.length).map((h) => ({ client_id: h.id, client: h.name, functions: h.sem_funcao }));
-  const unassigned = openTasks.filter((t) => !t.assignee_id).map((t) => ({ id: t.id, title: t.title, client: t.client, client_id: t.client_id, function: t.function, content_id: t.content_id, due_at: t.due_at }));
+  // regra 19/20: tarefa migrada sem dono não vira alerta; aparece só como contagem à parte
+  const unassignedMigrated = openTasks.filter((t) => !t.assignee_id && t.data_origin === 'notion').length;
+  const unassigned = openTasks.filter((t) => !t.assignee_id && t.data_origin === 'plataforma').map((t) => ({ id: t.id, title: t.title, client: t.client, client_id: t.client_id, function: t.function, content_id: t.content_id, due_at: t.due_at }));
   const teamConflicts = one("SELECT COUNT(*) n FROM migration_issues WHERE status='aberto' AND kind='equipe'").n;
 
   // ── Pessoas ──
@@ -175,7 +177,7 @@ export function tower(user, qs = {}) {
   // CAPACIDADE: carga e alertas só com eventos operacionais reais (tarefa nascida na plataforma).
   // Tarefa herdada da migração aparece à parte ("carga herdada") e nunca vira alerta sobre a pessoa.
   const week = new Date(Date.now() + 7 * 864e5).toISOString();
-  const real = (t) => !t.perf_status;
+  const real = (t) => t.data_origin === 'plataforma';
   const people = teamLoad().filter((u) => !F.assignee_id || u.id === F.assignee_id).map((u) => {
     const open = openTasks.filter((t) => t.assignee_id === u.id);
     const op = open.filter(real);
@@ -304,7 +306,7 @@ export function tower(user, qs = {}) {
     operacao: { n: inOp.length, producao: inOp.filter((c) => PROD.includes(c.stage) && !REVIEW.includes(c.stage)).length, revisao: inOp.filter((c) => REVIEW.includes(c.stage)).length, clientes: inOp.filter((c) => WAIT.includes(c.stage)).length },
     clientes: { n: clients.length, ativos: clients.filter((c) => c.status === 'ativo').length, a_confirmar: clients.filter((c) => c.status === 'a_confirmar').length, com_operacao: new Set(inOp.map((c) => c.client_id)).size, em_risco: riskLevels.filter((r) => ['alto', 'critico'].includes(r)).length },
     producao: { n: content.filter((c) => PROD.includes(c.stage)).length, bloqueados: blocks.length, agendados: content.filter((c) => c.stage === 'agendado').length, publicados: cur.publicados },
-    prazos: { n: lateTasks.length, herdados: inheritedLate.length, hoje: openTasks.filter((t) => !t.perf_status && t.due_at && t.due_at >= nowIso && t.due_at <= endToday).length, hoje_herdados: openTasks.filter((t) => t.perf_status && t.due_at && t.due_at >= nowIso && t.due_at <= endToday).length, sem_responsavel: unassigned.length },
+    prazos: { n: lateTasks.length, herdados: inheritedLate.length, hoje: openTasks.filter((t) => t.data_origin === 'plataforma' && t.due_at && t.due_at >= nowIso && t.due_at <= endToday).length, hoje_herdados: openTasks.filter((t) => t.data_origin === 'notion' && t.due_at && t.due_at >= nowIso && t.due_at <= endToday).length, sem_responsavel: unassigned.length },
     riscos: { n: risks.length, criticas: pend ? critical.length : null, clientes: new Set(risks.map((r) => r.client_id).filter(Boolean)).size },
     pessoas: { n: people.length, sobrecarga: people.filter((p) => p.situation === 'sobrecarga').length, sem_carga: people.filter((p) => p.situation === 'sem_carga').length, abertas: totalOpen },
   };
@@ -332,13 +334,13 @@ export function tower(user, qs = {}) {
     period: P, applied: F, filters, summary, state,
     risks: risks.slice(0, 12), bottlenecks, blocks,
     stages, lanes,
-    health, responsibilities: { no_owner: noOwner, unassigned, team_conflicts: teamConflicts },
+    health, responsibilities: { no_owner: noOwner, unassigned, unassigned_migrated: unassignedMigrated, team_conflicts: teamConflicts },
     people, people_insights: peopleInsights, fn_load: fnLoad, performance_base: performanceBase(),
     performance: { current: cur, previous: prev, comparable, first_event: firstEvent, moves, moves_n: movesN, pendencias_abertas: pend ? pend.length : null },
     intel, finance: fin, crm, automations: autos, report, meetings,
     // herdados vencidos ficam fora desta lista: estão na Revisão de atrasos
     deadlines: openTasks.filter((t) => t.due_at && !(isInherited(t) && t.due_at < nowIso)).sort((a, b) => a.due_at.localeCompare(b.due_at)).slice(0, 25)
-      .map((t) => ({ id: t.id, title: t.title, client: t.client, assignee: t.assignee, due_at: t.due_at, content_id: t.content_id, client_id: t.client_id, overdue: t.due_at < nowIso && perfOK.equipe(t), inherited: !!t.perf_status })),
+      .map((t) => ({ id: t.id, title: t.title, client: t.client, assignee: t.assignee, due_at: t.due_at, content_id: t.content_id, client_id: t.client_id, overdue: t.due_at < nowIso && perfOK.equipe(t), inherited: t.data_origin === 'notion' })),
   };
 }
 

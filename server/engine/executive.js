@@ -57,7 +57,7 @@ export function executiveOverview(user, qs = {}) {
   const base = one(`SELECT COUNT(*) total, SUM(status='ativo') ativos, SUM(status='a_confirmar') a_confirmar, SUM(status='onboarding') onboarding
     FROM clients WHERE status IN (${inList(OPERATING)}) AND kind<>'interno' AND ${cScope.sql}`, ...OPERATING, ...cScope.params);
   for (const k of Object.keys(base)) base[k] = base[k] || 0;
-  base.com_conteudo = one(`SELECT COUNT(DISTINCT client_id) n FROM contents WHERE stage NOT IN ('cancelado','publicado') AND ${sc.sql}`, ...sc.params).n;
+  base.com_conteudo = one(`SELECT COUNT(DISTINCT client_id) n FROM contents WHERE stage NOT IN ('cancelado','publicado') AND (legacy_status IS NULL OR legacy_status='reprogramado') AND ${sc.sql}`, ...sc.params).n;
 
   // ── Indicadores (estado atual) ──
   const risks = all(`SELECT * FROM clients WHERE status IN (${inList(OPERATING)}) AND kind<>'interno' AND ${cScope.sql}`, ...OPERATING, ...cScope.params)
@@ -96,8 +96,8 @@ export function executiveOverview(user, qs = {}) {
   }
   // Itens herdados da migração com prazo vencido: decisão da CEO (não contam como atraso de ninguém)
   const inh = one("SELECT COUNT(*) n, COUNT(DISTINCT d.client_id) clients FROM delay_reviews d JOIN tasks t ON t.id=d.task_id WHERE d.decided_by IS NULL AND t.status IN ('aberta','em_andamento')");
-  if (inh.n && can(user, 'atrasos')) attention.push({ id: 'herdados', level: 'atencao', client: 'Migração', client_id: null, problem: `${inh.n} itens herdados do Notion com prazo vencido aguardando classificação`,
-    context: `${inh.clients} clientes · prazo calculado na importação`, impact: 'Não entram em nenhum indicador de desempenho até serem classificados.', who: 'Você', time: null, action: { label: 'Revisar itens herdados', to: '/atrasos' } });
+  if (inh.n && can(user, 'atrasos')) attention.push({ id: 'herdados', level: 'atencao', client: 'Migração', client_id: null, problem: `${inh.n} itens legados do Notion não validados`,
+    context: `${inh.clients} clientes · fora da operação`, impact: 'Não são pendência nem atraso. Reprogramar, cancelar ou manter como histórico, um a um.', who: 'Você', time: null, action: { label: 'Ver itens legados', to: '/atrasos' } });
   const issues = all("SELECT kind, COUNT(*) n, COUNT(DISTINCT client_id) clients FROM migration_issues WHERE status='aberto' GROUP BY kind");
   const byKind = Object.fromEntries(issues.map((i) => [i.kind, i]));
   for (const kind of ['status', 'equipe', 'duplicado', 'escopo']) {
@@ -174,11 +174,11 @@ export function executiveOverview(user, qs = {}) {
   const csc2 = scopeSQL(user, 'client_id');
   const cnt = (sql, ...p) => one(sql.replace('{S}', csc2.sql), ...csc2.params, ...p).n;
   const inheritedOpen = cnt("SELECT COUNT(*) n FROM delay_reviews WHERE decided_by IS NULL AND {S}");
-  const noDate = cnt("SELECT COUNT(*) n FROM contents WHERE planned_at IS NULL AND scheduled_at IS NULL AND stage NOT IN ('publicado','cancelado') AND {S}");
-  const noApproval = cnt("SELECT COUNT(*) n FROM contents WHERE stage IN ('agendamento','agendado','publicado') AND approved_version_id IS NULL AND {S}");
-  const validEvents = one("SELECT COUNT(*) n FROM tasks WHERE status='concluida' AND completed_by IS NOT NULL AND perf_status IS NULL").n;
+  const noDate = cnt("SELECT COUNT(*) n FROM contents WHERE planned_at IS NULL AND scheduled_at IS NULL AND stage NOT IN ('publicado','cancelado') AND (legacy_status IS NULL OR legacy_status='reprogramado') AND {S}");
+  const noApproval = cnt("SELECT COUNT(*) n FROM contents WHERE stage IN ('agendamento','agendado','publicado') AND approved_version_id IS NULL AND (legacy_status IS NULL OR legacy_status='reprogramado') AND {S}");
+  const validEvents = one("SELECT COUNT(*) n FROM tasks WHERE status='concluida' AND completed_by IS NOT NULL AND data_origin='plataforma'").n;
   const data_notes = [
-    inheritedOpen && { text: `${pl(inheritedOpen, 'item herdado da migração aguarda', 'itens herdados da migração aguardam')} classificação de atraso`, note: 'Fora de qualquer indicador de pessoa até você classificar.', to: can(user, 'atrasos') ? '/atrasos' : null },
+    inheritedOpen && { text: `${pl(inheritedOpen, 'item legado do Notion não validado', 'itens legados do Notion não validados')}`, note: 'Fora da operação e de qualquer indicador. Decisão individual em Itens legados.', to: can(user, 'atrasos') ? '/atrasos' : null },
     noApproval && { text: `${pl(noApproval, 'conteúdo', 'conteúdos')} em agendamento sem aprovação registrada`, note: 'Não são tratados como aprovados.', to: '/processos' },
     noDate && { text: `${pl(noDate, 'conteúdo', 'conteúdos')} sem data de publicação`, note: 'Ficam fora do calendário e da prévia do feed.', to: '/conteudos' },
     { text: validEvents ? `Performance: ${pl(validEvents, 'evento válido', 'eventos válidos')} em coleta` : 'Performance: DADOS INSUFICIENTES', note: 'Nenhuma tarefa concluída na plataforma ainda. Score individual não é calculado.', to: null },

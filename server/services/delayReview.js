@@ -1,40 +1,53 @@
-// CLASSIFICAÇÃO OPERACIONAL DE ATRASOS — atraso não é, por si só, atraso da responsável.
-// A regra levanta só FATOS (cada um com a fonte). Quem decide a categoria é uma pessoa com permissão "atrasos".
-// Até ser classificado, item herdado da migração NÃO alimenta nenhum indicador de desempenho (ver PERF_SQL).
+// ITENS LEGADOS (regra oficial 18) — os itens herdados de "Para agendamento" ficam como LEGADO / MIGRADO DO NOTION — NÃO VALIDADO.
+// Não são pendência, atraso, tarefa ativa, carga, KPI, notificação nem aprovação. A regra só levanta FATOS (com a fonte);
+// uma pessoa autorizada (permissão "atrasos") decide, item a item, uma de três ações: REPROGRAMAR · CANCELAR · MANTER COMO HISTÓRICO.
+// Origem estrutural (regra 20): tasks.data_origin / contents.data_origin = notion | plataforma — é o que todos os cálculos usam.
 import { one, all, run, insert, update, now, parseJSON, tx } from '../db.js';
 import { log } from '../lib/core.js';
 import { HttpError } from '../lib/permissions.js';
-import { STAGES, setting, cancelContent } from '../engine/process.js';
+import { STAGES, setting, cancelContent, reopenLegacy } from '../engine/process.js';
 
-export const CATEGORIES = {
-  atraso_cliente: { label: 'Atraso do cliente', attribution: 'cliente' },
-  aguardando_cliente: { label: 'Aguardando cliente', attribution: 'cliente' },
-  atraso_equipe: { label: 'Atraso da equipe', attribution: 'equipe' },
-  atraso_responsavel: { label: 'Atraso do responsável', attribution: 'responsavel' },
-  processo_antigo: { label: 'Processo antigo', attribution: 'nao_atribuido' },
-  dado_migrado: { label: 'Dado migrado', attribution: 'nao_atribuido' },
-  responsabilidade_alterada: { label: 'Responsabilidade alterada', attribution: 'nao_atribuido' },
-  sem_contexto: { label: 'Sem contexto', attribution: 'nao_atribuido' },
-  reprogramado: { label: 'Reprogramado', attribution: 'nao_atribuido' },
-  cancelado: { label: 'Cancelado', attribution: 'nao_atribuido' },
-  outro: { label: 'Outro', attribution: 'nao_atribuido' },
+export const DECISIONS = {
+  nao_validado: 'Legado · não validado',
+  reprogramado: 'Reprogramado (voltou à operação)',
+  cancelado: 'Encerrado como cancelado',
+  historico: 'Mantido como histórico',
 };
-export const ATTRIBUTIONS = { nao_atribuido: 'Não atribuído', cliente: 'Cliente', equipe: 'Equipe', responsavel: 'Responsável' };
-// perf_status da tarefa conforme a atribuição: só "responsavel" entra em indicador individual; "equipe" só no agregado da equipe
-const PERF_OF = { responsavel: 'individual', equipe: 'equipe', cliente: 'excluido', nao_atribuido: 'excluido' };
 
-// Filtros para qualquer métrica de desempenho/atraso. Tarefa nascida na plataforma (perf_status NULL) conta;
-// herdada e não classificada (migrado) ou classificada como não atribuível (excluido) não conta.
+// Performance, atraso e capacidade só com origem "plataforma" (regras 20 e 21). Mesmo filtro para SQL e para linhas carregadas.
 export const PERF_SQL = {
-  individual: (a = 't') => `(${a}.perf_status IS NULL OR ${a}.perf_status='individual')`,
-  equipe: (a = 't') => `(${a}.perf_status IS NULL OR ${a}.perf_status IN ('individual','equipe'))`,
+  individual: (a = 't') => `${a}.data_origin='plataforma'`,
+  equipe: (a = 't') => `${a}.data_origin='plataforma'`,
 };
+export const perfOK = { individual: (t) => t.data_origin === 'plataforma', equipe: (t) => t.data_origin === 'plataforma' };
+export const isInherited = (t) => t.data_origin === 'notion';
+export const NOT_ATTRIB = ['notion'];
 
 const IMPORT_TAG = '%importado-notion-%';
-// Regra determinística: tarefa criada pelo sistema (sem autor) junto com um conteúdo importado do Notion = herdada da migração
+// Origem estrutural, idempotente: conteúdo importado do Notion = notion; tarefa criada pelo sistema junto com um conteúdo importado = notion
 export function markMigratedTasks() {
-  return run(`UPDATE tasks SET perf_status='migrado' WHERE perf_status IS NULL AND created_by IS NULL AND content_id IN (SELECT id FROM contents WHERE strategy_tags LIKE ?)
-    AND EXISTS (SELECT 1 FROM contents c WHERE c.id=tasks.content_id AND abs(julianday(tasks.created_at)-julianday(c.created_at))*86400 < 120)`, IMPORT_TAG).changes;
+  run("UPDATE contents SET data_origin='notion' WHERE data_origin<>'notion' AND strategy_tags LIKE ?", IMPORT_TAG);
+  const n = run(`UPDATE tasks SET perf_status=COALESCE(perf_status,'migrado'), data_origin='notion' WHERE data_origin<>'notion' AND (perf_status IS NOT NULL OR (created_by IS NULL AND content_id IN (SELECT id FROM contents WHERE strategy_tags LIKE ?)
+    AND EXISTS (SELECT 1 FROM contents c WHERE c.id=tasks.content_id AND abs(julianday(tasks.created_at)-julianday(c.created_at))*86400 < 120)))`, IMPORT_TAG).changes;
+  return n;
+}
+
+// Regra 18: os itens em revisão ainda sem decisão viram LEGADO — NÃO VALIDADO (tarefa sai da operação; conteúdo marcado).
+// Cada item recebe o próprio registro (antes/depois). Idempotente.
+export function markLegacy() {
+  let n = 0;
+  for (const d of all("SELECT d.*, t.status task_status, c.legacy_status FROM delay_reviews d JOIN tasks t ON t.id=d.task_id LEFT JOIN contents c ON c.id=d.content_id WHERE d.decided_by IS NULL AND (t.status IN ('aberta','em_andamento') OR c.legacy_status IS NULL)")) {
+    tx(() => {
+      run("UPDATE tasks SET status='legado' WHERE id=? AND status IN ('aberta','em_andamento')", d.task_id);
+      if (d.content_id) run("UPDATE contents SET legacy_status='nao_validado' WHERE id=? AND legacy_status IS NULL", d.content_id);
+      update('delay_reviews', { task_id: d.task_id }, { category: 'nao_validado', updated_at: now() });
+      log({ kind: 'sistema', action: 'legado.marcado', entity: 'task', id: d.task_id, client: d.client_id, content: d.content_id, origin: 'automatica',
+        summary: 'Item herdado de "Para agendamento" marcado como LEGADO / MIGRADO DO NOTION — NÃO VALIDADO (regra oficial 18): fora da operação até decisão individual',
+        before: JSON.stringify({ task_status: d.task_status, legacy_status: d.legacy_status || null }), after: JSON.stringify({ task_status: 'legado', legacy_status: 'nao_validado' }) });
+    });
+    n++;
+  }
+  return n;
 }
 
 const fmtD = (iso) => (iso ? new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric' }) : null);
@@ -47,7 +60,7 @@ export function factsFor(t) {
   const cl = t.client_id ? one('SELECT name FROM clients WHERE id=?', t.client_id) : null;
   const who = t.assignee_id ? one('SELECT name, role_key FROM users WHERE id=?', t.assignee_id) : null;
   const notes = c?.internal_notes || '';
-  const migrated = t.perf_status === 'migrado' || /^Importado do Notion/.test(notes);
+  const migrated = t.data_origin === 'notion' || /^Importado do Notion/.test(notes);
   const F = [];
   const head = notes.split('\n')[0];
   F.push(fact('origem', 'Origem', migrated ? `${head || 'Importado do Notion'} — criado na migração em ${fmtD(c?.created_at)}` : `Criado na plataforma em ${fmtD(t.created_at)}`, migrated ? 'contents.internal_notes' : 'tasks.created_at'));
@@ -85,74 +98,59 @@ export function factsFor(t) {
   return F;
 }
 
-// Mantém uma linha de revisão para cada tarefa herdada que já venceu (e para as que vencerem depois). Idempotente.
-// Fatos são recalculados; categoria/atribuição de uma pessoa nunca são sobrescritas.
+// Atualiza só os FATOS das linhas existentes. Dado migrado não gera item novo automaticamente (regra 19).
 export function syncDelayReviews() {
-  const ts = now();
-  const rows = all(`SELECT t.* FROM tasks t WHERE t.perf_status='migrado' AND t.due_at < ? AND t.status IN ('aberta','em_andamento')
-    UNION SELECT t.* FROM tasks t JOIN delay_reviews d ON d.task_id=t.id`, ts);
-  let created = 0;
-  for (const t of rows) {
-    const facts = factsFor(t);
-    const ex = one('SELECT task_id FROM delay_reviews WHERE task_id=?', t.id);
-    if (ex) update('delay_reviews', { task_id: t.id }, { facts, updated_at: ts });
-    else {
-      insert('delay_reviews', { task_id: t.id, content_id: t.content_id, client_id: t.client_id, category: 'dado_migrado', attribution: 'nao_atribuido', facts, source_facts: [], created_at: ts, updated_at: ts });
-      created++;
-    }
-  }
-  return { total: rows.length, created };
+  const rows = all('SELECT t.* FROM tasks t JOIN delay_reviews d ON d.task_id=t.id');
+  for (const t of rows) update('delay_reviews', { task_id: t.id }, { facts: factsFor(t), updated_at: now() });
+  return { total: rows.length, created: 0 };
 }
 
-const summaryOf = (d) => `${CATEGORIES[d.category]?.label || d.category} · ${ATTRIBUTIONS[d.attribution]}`;
+function decide(taskId, actor, decision, note, extra, ip) {
+  const d = one('SELECT * FROM delay_reviews WHERE task_id=?', taskId);
+  if (!d) throw new HttpError(404, 'Item não encontrado.');
+  if (d.decided_by) throw new HttpError(409, `Este item já foi decidido: ${DECISIONS[d.category] || d.category}.`);
+  const c = d.content_id ? one('SELECT stage, legacy_status FROM contents WHERE id=?', d.content_id) : null;
+  const t = one('SELECT status, assignee_id, due_at FROM tasks WHERE id=?', taskId);
+  const before = { decision: d.category, task_status: t?.status, content_stage: c?.stage, legacy_status: c?.legacy_status };
+  extra?.();
+  const c2 = d.content_id ? one('SELECT stage, legacy_status FROM contents WHERE id=?', d.content_id) : null;
+  update('delay_reviews', { task_id: taskId }, { category: decision, decided_by: actor.id, decided_at: now(), note, updated_at: now() });
+  log({ actor: actor.id, action: `legado.${decision}`, entity: 'task', id: taskId, client: d.client_id, content: d.content_id, ip,
+    summary: `Item legado: ${DECISIONS[decision]}${note ? ` — ${note}` : ''}`, before: JSON.stringify(before),
+    after: JSON.stringify({ decision, task_status: one('SELECT status FROM tasks WHERE id=?', taskId)?.status, content_stage: c2?.stage, legacy_status: c2?.legacy_status }) });
+  return one('SELECT * FROM delay_reviews WHERE task_id=?', taskId);
+}
 
-export function classify(taskId, actor, { category, note }, ip) {
-  const cat = CATEGORIES[category];
-  if (!cat) throw new HttpError(422, 'Categoria inválida.');
-  if (!String(note || '').trim()) throw new HttpError(422, 'Escreva a evidência ou o motivo da classificação.');
-  if (cat.attribution === 'responsavel' && String(note).trim().length < 20) throw new HttpError(422, 'Atribuir atraso a uma pessoa exige a evidência descrita (prazo combinado, responsável na época e o que aconteceu).');
+// REPROGRAMAR: volta à operação como demanda válida (novas tarefas nascem na plataforma). Exige prazo, responsável, etapa e motivo.
+export function reprogramLegacy(taskId, actor, { due_at, assignee_id, stage, note } = {}, ip) {
+  if (!due_at || Number.isNaN(new Date(due_at).getTime()) || new Date(due_at) < new Date()) throw new HttpError(422, 'Informe um novo prazo futuro.');
+  if (!assignee_id || !one("SELECT 1 FROM users WHERE id=? AND active=1 AND role_key<>'cliente'", assignee_id)) throw new HttpError(422, 'Escolha o responsável (pessoa ativa da equipe).');
+  if (!STAGES[stage] || ['cancelado', 'publicado'].includes(stage)) throw new HttpError(422, 'Escolha a etapa em que o item volta.');
+  if (!String(note || '').trim()) throw new HttpError(422, 'Escreva o contexto/motivo da reabertura.');
+  return tx(() => {
+    const d = one('SELECT * FROM delay_reviews WHERE task_id=?', taskId);
+    if (!d?.content_id) throw new HttpError(404, 'Item não encontrado.');
+    return decide(taskId, actor, 'reprogramado', String(note).trim(), () => reopenLegacy(d.content_id, actor, { stage, assignee_id, due_at: new Date(due_at).toISOString(), reason: String(note).trim() }), ip);
+  });
+}
+// ENCERRAR COMO CANCELADO: ação explícita (permissão de cancelar conteúdo), com motivo e antes/depois
+export function cancelLegacy(taskId, actor, { note } = {}, ip) {
+  if (!String(note || '').trim()) throw new HttpError(422, 'Escreva o motivo do cancelamento.');
+  return tx(() => {
+    const d = one('SELECT * FROM delay_reviews WHERE task_id=?', taskId);
+    if (!d?.content_id) throw new HttpError(404, 'Item não encontrado.');
+    return decide(taskId, actor, 'cancelado', String(note).trim(), () => {
+      cancelContent(d.content_id, actor, `Item legado encerrado: ${String(note).trim()}`);
+      run("UPDATE contents SET legacy_status='cancelado' WHERE id=?", d.content_id);
+    }, ip);
+  });
+}
+// MANTER COMO HISTÓRICO: preservado e totalmente fora da operação
+export function keepAsHistory(taskId, actor, { note } = {}, ip) {
   return tx(() => {
     const d = one('SELECT * FROM delay_reviews WHERE task_id=?', taskId);
     if (!d) throw new HttpError(404, 'Item não encontrado.');
-    const t = one('SELECT perf_status FROM tasks WHERE id=?', taskId);
-    const next = { category, attribution: cat.attribution, decided_by: actor.id, decided_at: now(), note: String(note).trim(), updated_at: now() };
-    update('delay_reviews', { task_id: taskId }, next);
-    run('UPDATE tasks SET perf_status=? WHERE id=?', PERF_OF[cat.attribution], taskId);
-    log({ actor: actor.id, action: 'atraso.classificado', entity: 'task', id: taskId, client: d.client_id, content: d.content_id, ip,
-      summary: `Atraso classificado: ${summaryOf(next)} — ${next.note}`,
-      before: JSON.stringify({ category: d.category, attribution: d.attribution, perf_status: t?.perf_status, decided_by: d.decided_by, note: d.note }),
-      after: JSON.stringify({ category, attribution: cat.attribution, perf_status: PERF_OF[cat.attribution], note: next.note }) });
-    return one('SELECT * FROM delay_reviews WHERE task_id=?', taskId);
-  });
-}
-
-export function reschedule(taskId, actor, { due_at, note }, ip) {
-  if (!due_at || Number.isNaN(new Date(due_at).getTime())) throw new HttpError(422, 'Informe a nova data.');
-  if (new Date(due_at) < new Date()) throw new HttpError(422, 'A nova data precisa ser futura.');
-  if (!String(note || '').trim()) throw new HttpError(422, 'Escreva o motivo da reprogramação.');
-  return tx(() => {
-    const t = one('SELECT * FROM tasks WHERE id=?', taskId);
-    if (!t || !one('SELECT 1 FROM delay_reviews WHERE task_id=?', taskId)) throw new HttpError(404, 'Item não encontrado.');
-    if (['concluida', 'cancelada'].includes(t.status)) throw new HttpError(409, 'Tarefa já encerrada.');
-    const iso = new Date(due_at).toISOString();
-    run('UPDATE tasks SET due_at=? WHERE id=?', iso, taskId);
-    log({ actor: actor.id, action: 'tarefa.prazo_alterado', entity: 'task', id: taskId, client: t.client_id, content: t.content_id, ip,
-      summary: `Prazo reprogramado na revisão de atrasos: ${fmtDT(t.due_at)} → ${fmtDT(iso)} — ${String(note).trim()}`, before: t.due_at, after: iso });
-    const out = classify(taskId, actor, { category: 'reprogramado', note: `Reprogramado para ${fmtDT(iso)}: ${String(note).trim()}` }, ip);
-    // O prazo novo foi definido por uma pessoa: daqui em diante a tarefa segue a regra normal (o atraso anterior continua não atribuído no histórico)
-    run('UPDATE tasks SET perf_status=NULL WHERE id=?', taskId);
-    return out;
-  });
-}
-
-export function cancelItem(taskId, actor, { note }, ip) {
-  if (!String(note || '').trim()) throw new HttpError(422, 'Escreva o motivo do cancelamento.');
-  const d = one('SELECT * FROM delay_reviews WHERE task_id=?', taskId);
-  if (!d) throw new HttpError(404, 'Item não encontrado.');
-  if (!d.content_id) throw new HttpError(422, 'Item sem conteúdo.');
-  return tx(() => {
-    cancelContent(d.content_id, actor, `Revisão de atrasos: ${String(note).trim()}`); // checa permissão de cancelar conteúdo
-    return classify(taskId, actor, { category: 'cancelado', note: String(note).trim() }, ip);
+    return decide(taskId, actor, 'historico', String(note || '').trim() || null, () => { if (d.content_id) run("UPDATE contents SET legacy_status='historico' WHERE id=?", d.content_id); }, ip);
   });
 }
 
@@ -160,20 +158,11 @@ export function listReviews() {
   const rows = all(`SELECT d.*, t.title task_title, t.status task_status, t.due_at, t.stage, t.perf_status, u.name assignee, cl.name client, c.number, c.title content_title, c.planned_at, c.stage content_stage, du.name decided_by_name
     FROM delay_reviews d JOIN tasks t ON t.id=d.task_id LEFT JOIN users u ON u.id=t.assignee_id LEFT JOIN clients cl ON cl.id=d.client_id LEFT JOIN contents c ON c.id=d.content_id LEFT JOIN users du ON du.id=d.decided_by
     ORDER BY (d.decided_by IS NOT NULL), cl.name, c.planned_at`);
-  return rows.map((r) => ({ ...r, facts: parseJSON(r.facts, []), source_facts: parseJSON(r.source_facts, []), category_label: CATEGORIES[r.category]?.label, attribution_label: ATTRIBUTIONS[r.attribution] }));
+  return rows.map((r) => ({ ...r, facts: parseJSON(r.facts, []), source_facts: parseJSON(r.source_facts, []), decision: r.decided_by ? r.category : 'nao_validado', decision_label: DECISIONS[r.decided_by ? r.category : 'nao_validado'] }));
 }
 export function historyOf(taskId) {
-  return all("SELECT l.*, u.name actor_name FROM activity_logs l LEFT JOIN users u ON u.id=l.actor_id WHERE l.entity_type='task' AND l.entity_id=? AND l.action IN ('atraso.classificado','tarefa.prazo_alterado') ORDER BY l.created_at DESC", taskId);
+  return all("SELECT l.*, u.name actor_name FROM activity_logs l LEFT JOIN users u ON u.id=l.actor_id WHERE l.entity_type='task' AND l.entity_id=? AND (l.action LIKE 'legado.%' OR l.action IN ('atraso.classificado','tarefa.prazo_alterado')) ORDER BY l.created_at DESC", taskId);
 }
-// Mesmo filtro de PERF_SQL, para linhas de tarefa já carregadas
-export const perfOK = {
-  individual: (t) => !t.perf_status || t.perf_status === 'individual',
-  equipe: (t) => !t.perf_status || ['individual', 'equipe'].includes(t.perf_status),
-};
-// Prazo vencido que não é atraso de ninguém: herdado sem classificação (migrado) ou classificado como não atribuível (excluido)
-export const NOT_ATTRIB = ['migrado', 'excluido'];
-export const isInherited = (t) => NOT_ATTRIB.includes(t.perf_status);
-
 // BASE DE PERFORMANCE (estrutura preparada, sem score — decisão da CEO no Bloco 5).
 // Evento válido = tarefa concluída que pode ser atribuída: nasceu na plataforma ou foi classificada como do responsável/equipe.
 // Herdado da migração e não atribuível nunca entram. Nada aqui gera nota, ranking ou alerta sobre pessoas.
@@ -181,7 +170,7 @@ export function performanceBase() {
   const ev = all(`SELECT t.completed_by uid, COUNT(*) n, SUM(t.due_at IS NOT NULL AND t.completed_at <= t.due_at) no_prazo, SUM(t.due_at IS NOT NULL AND t.completed_at > t.due_at) com_atraso
     FROM tasks t WHERE t.status='concluida' AND t.completed_by IS NOT NULL AND ${PERF_SQL.individual('t')} GROUP BY t.completed_by`);
   const total = ev.reduce((s, r) => s + r.n, 0);
-  const pending = one("SELECT COUNT(*) n FROM delay_reviews WHERE decided_by IS NULL").n;
+  const pending = one("SELECT COUNT(*) n FROM delay_reviews WHERE decided_by IS NULL").n; // legados não validados: nunca entram
   return { valid_events: total, people_with_events: ev.length, pending_classification: pending, score: null,
     status: total ? 'em_coleta' : 'dados_insuficientes',
     note: 'Score individual não implementado. A coleta usa só eventos operacionais válidos e classificados; itens herdados da migração ficam fora.' };

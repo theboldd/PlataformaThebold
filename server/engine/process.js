@@ -458,6 +458,24 @@ export function commentToAdjustment(commentId, actor, { size = 'normal', track =
   });
 }
 
+// Item LEGADO reprogramado (regra 18): volta à operação na etapa escolhida, com responsável e prazo definidos por uma pessoa.
+// As tarefas novas nascem na plataforma (data_origin padrão) e passam a ser demanda válida; a tarefa legada fica guardada como "legado".
+export function reopenLegacy(contentId, actor, { stage, assignee_id, due_at, reason }) {
+  return tx(() => {
+    const c = getContent(contentId);
+    if (!can(actor, 'atrasos', 'edit')) throw new HttpError(403, 'Sem permissão para reabrir itens legados.');
+    update('contents', { id: c.id }, { legacy_status: 'reprogramado', updated_at: now() });
+    const next = enterStage(c, stage, actor, { reason: `reabertura de item legado: ${reason}` });
+    const live = all(`SELECT id FROM tasks WHERE content_id=? AND status IN ${LIVE_TASK} AND stage=?`, c.id, stage);
+    for (const t of live) update('tasks', { id: t.id }, { assignee_id, due_at, data_origin: 'plataforma', perf_status: null });
+    log({ actor: actor.id, action: 'legado.reaberto', entity: 'content', id: c.id, client: c.client_id, content: c.id,
+      summary: `Item legado reaberto em “${STAGES[stage].label}” com ${userName(assignee_id)}, prazo ${new Date(due_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })} — ${reason}`,
+      before: JSON.stringify({ stage: c.stage, legacy_status: c.legacy_status }), after: JSON.stringify({ stage, legacy_status: 'reprogramado', tasks: live.map((t) => t.id) }) });
+    if (live.length) notify(assignee_id, { level: 'info', type: 'tarefa', title: 'Item reaberto para você', body: `#${c.number} ${c.title} — ${STAGES[stage].label}`, link: `/conteudos/${c.id}`, client: c.client_id, content: c.id });
+    return next;
+  });
+}
+
 // Decisão do cliente (feed de aprovação) — tema ou conteúdo final
 export function clientDecision(contentId, actor, { decision, note, carousel_page, video_timestamp, region, size, on_behalf_note }, req) {
   return tx(() => {
@@ -651,7 +669,7 @@ export function contentRisk(c) {
   let score = 0;
   const t = Date.now();
   // herdado da migração: o prazo foi calculado na importação — não é "prazo vencido" até ser classificado
-  const tasks = all("SELECT due_at, assignee_id, kind FROM tasks WHERE content_id=? AND status IN ('aberta','em_andamento') AND (perf_status IS NULL OR perf_status NOT IN ('migrado','excluido'))", c.id);
+  const tasks = all("SELECT due_at, assignee_id, kind FROM tasks WHERE content_id=? AND status IN ('aberta','em_andamento') AND data_origin='plataforma'", c.id);
   const overdue = tasks.filter((x) => x.due_at && new Date(x.due_at).getTime() < t);
   if (overdue.length) { score += 3; reasons.push('Prazo da etapa vencido'); }
   else if (tasks.some((x) => x.due_at && new Date(x.due_at).getTime() - t < 24 * 3600e3)) { score += 1; reasons.push('Prazo vence em menos de 24h'); }

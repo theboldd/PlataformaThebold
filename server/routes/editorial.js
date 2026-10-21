@@ -17,19 +17,21 @@ export const PHASES = [
   { key: 'aprovado', label: 'Para agendar', stages: ['agendamento'] }, // aprovado só quando há registro (approved_version_id)
   { key: 'agendado', label: 'Agendado', stages: ['agendado'] },
   { key: 'publicado', label: 'Publicado', stages: ['publicado'] },
+  // regra 18: item legado não validado não é conteúdo operacional — fica num grupo à parte
+  { key: 'legado', label: 'Legado do Notion · não validado', stages: [] },
 ];
 const PHASE_OF = Object.fromEntries(PHASES.flatMap((p) => p.stages.map((s) => [s, p.key])));
 
 function item(c, user) {
   const card = contentCard(c, user);
   const notes = c.internal_notes || '';
-  const migrated = parseJSON(c.strategy_tags, []).some((t) => String(t).startsWith('importado-notion'));
+  const migrated = c.data_origin === 'notion';
   const notionPost = /Post citado no Notion:/.test(notes);
   const date = c.published_at || c.scheduled_at || c.planned_at || null;
   const live = all("SELECT t.function, t.status, u.name FROM tasks t LEFT JOIN users u ON u.id=t.assignee_id WHERE t.content_id=? AND t.status IN ('aberta','em_andamento','agendada')", c.id);
   return {
     ...card,
-    phase: PHASE_OF[c.stage] || null,
+    phase: ['nao_validado', 'historico'].includes(c.legacy_status) ? 'legado' : PHASE_OF[c.stage] || null, legacy_status: c.legacy_status || null,
     date, date_kind: c.published_at ? 'publicado' : c.scheduled_at ? 'agendado' : c.planned_at ? 'previsto' : null,
     date_source: !c.planned_at ? null : migrated && notionPost ? 'post do Notion' : migrated ? 'Notion' : 'plataforma',
     migrated, past_at_migration: migrated && !!c.planned_at && c.planned_at < c.created_at,

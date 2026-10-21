@@ -86,7 +86,7 @@ function projectTrack(clientId) {
 portal.get('/me', (req, res) => {
   const c = myClient(req);
   const team = all("SELECT DISTINCT u.id, u.name, cm.function FROM client_members cm JOIN users u ON u.id=cm.user_id WHERE cm.client_id=? AND cm.function IN ('estrategia','atendimento','design','edicao','copy','revisao') AND u.active=1", c.id);
-  const counts = one(`SELECT SUM(stage IN ('aprovacao_tema','aprovacao_cliente')) aguardando, SUM(stage='ajuste_cliente') em_ajuste, SUM(stage IN ('agendamento','agendado') AND approved_version_id IS NOT NULL) aprovados, SUM(stage='publicado') publicados FROM contents WHERE client_id=?`, c.id);
+  const counts = one(`SELECT SUM(stage IN ('aprovacao_tema','aprovacao_cliente')) aguardando, SUM(stage='ajuste_cliente') em_ajuste, SUM(stage IN ('agendamento','agendado') AND approved_version_id IS NOT NULL) aprovados, SUM(stage='publicado') publicados FROM contents WHERE (legacy_status IS NULL OR legacy_status='reprogramado') AND client_id=?`, c.id);
   const next = one("SELECT * FROM meetings WHERE client_id=? AND status='agendada' AND starts_at > ? ORDER BY starts_at LIMIT 1", c.id, now());
   const ob = one('SELECT * FROM onboarding WHERE client_id=?', c.id);
   const timeline = all("SELECT created_at, summary FROM activity_logs WHERE client_id=? AND visibility='client' ORDER BY created_at DESC LIMIT 25", c.id);
@@ -102,7 +102,7 @@ portal.get('/me', (req, res) => {
   res.json({ client: { id: c.id, name: c.name, handle: c.handle, status: c.status, services: parseJSON(c.services, []) }, team: team.map(({ id, name, function: f }) => ({ id, name, function: f })), counts, next_meeting: next, timeline, steps,
     cycle: cycle ? { month: cycle.month, status: cycle.status, milestones: Object.fromEntries(Object.entries(parseJSON(cycle.milestones, {})).filter(([k]) => ['cliente_aprova_temas', 'cliente_aprova_final', 'ajustes_cliente'].includes(k))) } : null,
     onboarding: ob ? { status: ob.status, form_status: ob.form_status } : null, track: projectTrack(c.id),
-    upcoming: all("SELECT id, title, format, COALESCE(scheduled_at, planned_at) date, stage FROM contents WHERE client_id=? AND stage IN ('aprovacao_cliente','agendamento','agendado') AND COALESCE(scheduled_at, planned_at) >= ? ORDER BY date LIMIT 4", c.id, now()).map((x) => ({ ...x, status: publicStatus(x) })),
+    upcoming: all("SELECT id, title, format, COALESCE(scheduled_at, planned_at) date, stage FROM contents WHERE client_id=? AND (legacy_status IS NULL OR legacy_status='reprogramado') AND stage IN ('aprovacao_cliente','agendamento','agendado') AND COALESCE(scheduled_at, planned_at) >= ? ORDER BY date LIMIT 4", c.id, now()).map((x) => ({ ...x, status: publicStatus(x) })),
     in_preparation: one("SELECT COUNT(*) n FROM contents WHERE client_id=? AND stage IN ('cronograma','analise_cronograma','ajuste_cronograma','producao','analise_producao','ajuste_interno')", c.id).n,
     deadlines: cycle ? Object.entries(parseJSON(cycle.milestones, {})).filter(([k, m]) => ['cliente_aprova_temas', 'cliente_aprova_final'].includes(k) && m.end >= now().slice(0, 10)).map(([k, m]) => ({ label: k === 'cliente_aprova_temas' ? 'Aprovar os temas do mês' : 'Aprovar os conteúdos do mês', date: m.end })) : [] });
 });
@@ -115,6 +115,7 @@ portal.get('/feed', (req, res) => {
   if (f === 'aprovados') where.push('approved_version_id IS NOT NULL'); // só com aprovação registrada (regra oficial 14)
   if (req.query.month) { where.push('substr(planned_at,1,7)=?'); p.push(req.query.month); }
   if (req.query.format) { where.push('format=?'); p.push(req.query.format); }
+  where.push("(legacy_status IS NULL OR legacy_status='reprogramado')"); // regra 18: item legado não é conteúdo operacional para o cliente
   const rows = all(`SELECT * FROM contents WHERE ${where.join(' AND ')} ORDER BY CASE WHEN stage IN ('aprovacao_tema','aprovacao_cliente') THEN 0 ELSE 1 END, planned_at`, ...p);
   const months = all(`SELECT DISTINCT substr(planned_at,1,7) m FROM contents WHERE client_id=? AND planned_at IS NOT NULL AND stage IN (${CLIENT_STAGES.map(() => '?').join(',')}) ORDER BY m`, c.id, ...CLIENT_STAGES).map((r) => r.m);
   res.json({ items: rows.map((x) => feedItem(x, c)), months });
@@ -202,7 +203,7 @@ portal.post('/contents/:id/comments', upload.single('file'), async (req, res) =>
 portal.post('/intent', (req, res) => res.json(detectAdjustment(req.body?.body)));
 portal.get('/calendar', (req, res) => {
   const c = myClient(req);
-  const items = all(`SELECT * FROM contents WHERE client_id=? AND stage IN (${CLIENT_STAGES.map(() => '?').join(',')}) AND planned_at IS NOT NULL ORDER BY planned_at`, c.id, ...CLIENT_STAGES)
+  const items = all(`SELECT * FROM contents WHERE client_id=? AND (legacy_status IS NULL OR legacy_status='reprogramado') AND stage IN (${CLIENT_STAGES.map(() => '?').join(',')}) AND planned_at IS NOT NULL ORDER BY planned_at`, c.id, ...CLIENT_STAGES)
     .map((x) => ({ id: x.id, title: x.title, format: x.format, date: x.scheduled_at || x.planned_at, status: publicStatus(x) }));
   const upcoming = all("SELECT COUNT(*) n FROM contents WHERE client_id=? AND stage IN ('cronograma','analise_cronograma','ajuste_cronograma','producao','analise_producao','ajuste_interno')", c.id)[0].n;
   const meetings = all("SELECT id, title, starts_at, ends_at FROM meetings WHERE client_id=? AND status='agendada'", c.id);

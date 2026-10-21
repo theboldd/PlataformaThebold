@@ -41,3 +41,7 @@
   .at-tr > span[data-l] { grid-column: 2; }
   .at-facts > div { grid-template-columns: 1fr; gap: 2px; }
 }
+.at-k-link { font: inherit; font-size: var(--fs-sm); background: none; border: 0; color: var(--ink-2); text-decoration: underline; cursor: pointer; }
+.at-k-link.on { color: var(--ink); font-weight: 600; }
+.at-cat.c-reprogramado { border-color: var(--ok); }
+.at-cat.c-cancelado { color: var(--muted); }

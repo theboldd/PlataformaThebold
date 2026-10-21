@@ -79,7 +79,7 @@ ops.get('/clients/:id', requirePerm('clientes', 'view'), (req, res) => {
   const onboarding = ob ? { ...ob, form: fst && { answered: fst.answered, total: fst.total }, items: all('SELECT * FROM onboarding_items WHERE onboarding_id=? ORDER BY sort', ob.id) } : null;
   const cycles = all('SELECT * FROM cycles WHERE client_id=? ORDER BY month DESC', c.id).map((cy) => ({ ...cy, milestones: parseJSON(cy.milestones, {}),
     counts: one("SELECT COUNT(*) total, SUM(stage IN ('agendado','publicado')) done FROM contents WHERE cycle_id=? AND stage<>'cancelado'", cy.id) }));
-  const contents = all("SELECT * FROM contents WHERE client_id=? AND stage<>'cancelado' ORDER BY planned_at", c.id).map((x) => ({ ...contentCard(x), status: publicStatus(x) }));
+  const contents = all("SELECT * FROM contents WHERE client_id=? AND stage<>'cancelado' AND (legacy_status IS NULL OR legacy_status='reprogramado') ORDER BY planned_at", c.id).map((x) => ({ ...contentCard(x), status: publicStatus(x) }));
   const meetings = all('SELECT * FROM meetings WHERE client_id=? ORDER BY starts_at DESC LIMIT 20', c.id);
   const files = all("SELECT * FROM files WHERE client_id=? ORDER BY created_at DESC LIMIT 60", c.id).map(fileDTO);
   const timeline = all('SELECT l.*, u.name actor_name FROM activity_logs l LEFT JOIN users u ON u.id=l.actor_id WHERE l.client_id=? ORDER BY l.created_at DESC LIMIT 120', c.id);
@@ -223,7 +223,7 @@ export function contentCard(c, user = null) {
 }
 ops.get('/contents', requirePerm('conteudos', 'view'), (req, res) => {
   const sc = scopeSQL(req.user, 'client_id');
-  const where = [sc.sql, "stage<>'cancelado'"]; const p = [...sc.params];
+  const where = [sc.sql, "stage<>'cancelado'", "(legacy_status IS NULL OR legacy_status='reprogramado')"]; const p = [...sc.params];
   for (const k of ['client_id', 'stage', 'format', 'cycle_month']) if (req.query[k]) { where.push(`${k}=?`); p.push(req.query[k]); }
   if (req.query.month) { where.push('substr(planned_at,1,7)=?'); p.push(req.query.month); }
   res.json(all(`SELECT * FROM contents WHERE ${where.join(' AND ')} ORDER BY planned_at LIMIT 500`, ...p).map((c) => contentCard(c, req.user)));
@@ -412,7 +412,7 @@ export function addComment(c, user, { body, visibility, parent_id, anchor, file_
 // ═════════════ PROCESSOS (quadro operacional — compartilhado com toda a equipe interna) ═════════════
 ops.get('/process/board', requirePerm('processos', 'view'), (req, res) => {
   const { client_id, assignee_id, stage, risk, priority, due, q, month, format } = req.query;
-  const where = ["c.stage NOT IN ('cancelado')"]; const p = [];
+  const where = ["c.stage NOT IN ('cancelado')", "(c.legacy_status IS NULL OR c.legacy_status='reprogramado')"]; // regra 18: legado fora do quadro const p = [];
   // Mês do ciclo (como os quadros mensais do Notion): com mês escolhido, o quadro mostra o mês inteiro, inclusive publicados
   if (month) { where.push('COALESCE(c.cycle_month, substr(c.planned_at,1,7))=?'); p.push(month); }
   else if (!req.query.include_published) where.push("NOT (c.stage='publicado' AND c.published_at < ?)"), p.push(new Date(Date.now() - 7 * 864e5).toISOString());
@@ -605,12 +605,12 @@ ops.get('/dashboard', (req, res) => {
   if (kind === 'operacoes') {
     const pend = can(u, 'pendencias') ? computePendencies() : [];
     const waitingClient = all(`SELECT * FROM contents WHERE ${sc.sql} AND stage IN ('aprovacao_tema','aprovacao_cliente') ORDER BY stage_entered_at LIMIT 12`, ...sc.params).map((c) => contentCard(c, u));
-    const waitingTeam = all(`SELECT * FROM contents WHERE ${sc.sql} AND blocked=0 AND stage IN ('producao','ajuste_interno','ajuste_cliente','analise_producao','agendamento') ORDER BY stage_entered_at LIMIT 12`, ...sc.params).map((c) => contentCard(c, u)).filter((c) => c.hours_in_stage > 24);
+    const waitingTeam = all(`SELECT * FROM contents WHERE ${sc.sql} AND (legacy_status IS NULL OR legacy_status='reprogramado') AND blocked=0 AND stage IN ('producao','ajuste_interno','ajuste_cliente','analise_producao','agendamento') ORDER BY stage_entered_at LIMIT 12`, ...sc.params).map((c) => contentCard(c, u)).filter((c) => c.hours_in_stage > 24);
     const unassigned = all(`SELECT * FROM tasks WHERE assignee_id IS NULL AND status='aberta' AND function<>'cliente' AND (client_id IS NULL OR ${sc.sql})`, ...sc.params).map(taskRow);
     const followups = all(`SELECT * FROM tasks WHERE kind='follow_up' AND status='aberta' AND (client_id IS NULL OR ${sc.sql}) ORDER BY due_at`, ...sc.params).map(taskRow);
     const stalled = all(`SELECT * FROM contents WHERE ${sc.sql} AND blocked=1 AND stage NOT IN ('publicado','cancelado')`, ...sc.params).map((c) => contentCard(c, u));
     const reviewCount = one(`SELECT COUNT(*) n FROM contents WHERE ${sc.sql} AND stage IN ('analise_cronograma','analise_producao','revisao_ajuste')`, ...sc.params).n;
-    const schedulingQueue = all(`SELECT * FROM contents WHERE ${sc.sql} AND stage='agendamento' ORDER BY planned_at`, ...sc.params).map((c) => contentCard(c, u));
+    const schedulingQueue = all(`SELECT * FROM contents WHERE ${sc.sql} AND (legacy_status IS NULL OR legacy_status='reprogramado') AND stage='agendamento' ORDER BY planned_at`, ...sc.params).map((c) => contentCard(c, u));
     return res.json({ ...base, attention: pend.slice(0, 10), critical_count: pend.filter((p) => p.severity === 'critica').length, waiting_client: waitingClient, waiting_team: waitingTeam, unassigned, followups, stalled, review_count: reviewCount, scheduling: schedulingQueue,
       insights: all("SELECT * FROM ai_insights WHERE status='aberto' ORDER BY updated_at DESC LIMIT 4"), meetings: upcomingMeetings(u, 1) });
   }
@@ -622,7 +622,7 @@ ops.get('/dashboard', (req, res) => {
     const myClients = all("SELECT c.* FROM clients c JOIN client_members cm ON cm.client_id=c.id WHERE cm.user_id=? AND cm.function='estrategia'", u.id).map(clientSummary);
     const ids = myClients.map((c) => c.id);
     const inIds = ids.length ? `client_id IN (${ids.map(() => '?').join(',')})` : '1=0';
-    const calendar = all(`SELECT * FROM contents WHERE ${inIds} AND planned_at BETWEEN ? AND ? AND stage<>'cancelado' ORDER BY planned_at`, ...ids, new Date(Date.now() - 864e5).toISOString(), new Date(Date.now() + 21 * 864e5).toISOString()).map((c) => ({ ...contentCard(c, u), status: publicStatus(c) }));
+    const calendar = all(`SELECT * FROM contents WHERE ${inIds} AND planned_at BETWEEN ? AND ? AND stage<>'cancelado' AND (legacy_status IS NULL OR legacy_status='reprogramado') ORDER BY planned_at`, ...ids, new Date(Date.now() - 864e5).toISOString(), new Date(Date.now() + 21 * 864e5).toISOString()).map((c) => ({ ...contentCard(c, u), status: publicStatus(c) }));
     const awaiting = all(`SELECT * FROM contents WHERE ${inIds} AND stage IN ('aprovacao_tema','aprovacao_cliente')`, ...ids).map((c) => contentCard(c, u));
     const adjustments = all(`SELECT a.*, c.number, c.title, cl.name client FROM adjustments a JOIN contents c ON c.id=a.content_id JOIN clients cl ON cl.id=c.client_id WHERE a.status='aberto' AND c.${inIds}`, ...ids);
     const comments = all(`SELECT cm.*, c.number, c.title, u.name author_name FROM comments cm JOIN contents c ON c.id=cm.content_id JOIN users u ON u.id=cm.author_id WHERE u.role_key='cliente' AND c.${inIds} ORDER BY cm.created_at DESC LIMIT 8`, ...ids);

@@ -7,7 +7,6 @@ import { automation, isEnabled, onceFor } from './automations.js';
 import { runDetectors } from './intelligence.js';
 import { publishDueContent } from '../integrations/meta.js';
 import { generateReport } from '../services/reports.js';
-import { syncDelayReviews } from '../services/delayReview.js';
 import { runJob } from './jobs.js';
 
 const H = 3600e3;
@@ -19,6 +18,8 @@ export function activateScheduledTasks() {
   for (const k of due) {
     update('tasks', { id: k.id }, { status: 'aberta' });
     automation('etapa.disponivel', { entity: 'task', id: k.id, client: k.client_id, detail: `${k.title} — disponível desde ${k.available_at.slice(0, 10)}` });
+    // regra 19: tarefa migrada abre normalmente, mas sem gerar aviso automático
+    if (k.data_origin === 'notion') { log({ kind: 'sistema', action: 'etapa.disponivel', entity: 'task', id: k.id, client: k.client_id, content: k.content_id, summary: `Etapa disponível (item migrado, sem aviso): ${k.title}` }); continue; }
     if (k.assignee_id) notify(k.assignee_id, { level: 'info', type: 'tarefa', title: `Disponível hoje: ${STAGES[k.stage]?.label || 'etapa'}`, body: `${k.client}: #${k.number} ${k.ctitle}`, link: k.content_id ? `/conteudos/${k.content_id}` : '/', groupKey: `abriu:${k.assignee_id}:${k.stage}:${k.available_at.slice(0, 10)}`, client: k.client_id, content: k.content_id });
     else notify(cc(), { level: 'urgente', type: 'sem_responsavel', title: `Etapa abriu sem responsável: ${k.title}`, body: `${k.client}: #${k.number} ${k.ctitle}`, link: k.content_id ? `/conteudos/${k.content_id}` : '/pendencias', client: k.client_id, content: k.content_id });
     log({ kind: 'sistema', action: 'etapa.disponivel', entity: 'task', id: k.id, client: k.client_id, content: k.content_id, summary: `Etapa disponível para execução: ${k.title}` });
@@ -42,12 +43,11 @@ export function reconcileStageWindows() {
 
 export function tick() {
   const activated = activateScheduledTasks();
-  syncDelayReviews(); // herdados que venceram hoje entram na Revisão de atrasos
   const t = Date.now();
   const nowIso = now();
   // Prazo próximo (< 24h) e vencido
   // Herdado da migração ou classificado como não atribuível não recebe aviso de prazo: o prazo foi calculado na importação, não combinado.
-  for (const k of all("SELECT t.*, c.number, c.title ctitle FROM tasks t LEFT JOIN contents c ON c.id=t.content_id WHERE t.status IN ('aberta','em_andamento') AND t.due_at IS NOT NULL AND t.assignee_id IS NOT NULL AND t.function<>'cliente' AND (t.perf_status IS NULL OR t.perf_status NOT IN ('migrado','excluido'))")) {
+  for (const k of all("SELECT t.*, c.number, c.title ctitle FROM tasks t LEFT JOIN contents c ON c.id=t.content_id WHERE t.status IN ('aberta','em_andamento') AND t.due_at IS NOT NULL AND t.assignee_id IS NOT NULL AND t.function<>'cliente' AND t.data_origin='plataforma'")) {
     const due = new Date(k.due_at).getTime();
     if (due < t) {
       if (isEnabled('prazo.vencido') && onceFor('prazo.vencido', k.id, k.due_at)) {
@@ -63,7 +63,7 @@ export function tick() {
   }
   // Régua de cobrança do cliente (PDF do processo: dia seguinte → metade do prazo → véspera → último dia)
   const [h1, h2, h3] = setting('followup_cliente_horas');
-  for (const c of all("SELECT c.*, cl.name cname FROM contents c JOIN clients cl ON cl.id=c.client_id WHERE c.stage IN ('aprovacao_tema','aprovacao_cliente') AND c.blocked=0")) {
+  for (const c of all("SELECT c.*, cl.name cname FROM contents c JOIN clients cl ON cl.id=c.client_id WHERE c.stage IN ('aprovacao_tema','aprovacao_cliente') AND c.blocked=0 AND c.data_origin='plataforma'")) {
     const waited = (t - new Date(c.stage_entered_at).getTime()) / H;
     const marker = `${c.stage}:${c.stage_entered_at}`;
     if (waited >= h1 && isEnabled('cliente.sem_resposta_24h') && onceFor('cliente.sem_resposta_24h', c.id, marker)) {
@@ -98,7 +98,7 @@ export function tick() {
     }
   }
   // Processo parado (> 3 dias na mesma etapa interna)
-  for (const c of all("SELECT c.*, cl.name cname FROM contents c JOIN clients cl ON cl.id=c.client_id WHERE c.blocked=0 AND c.stage IN ('cronograma','analise_cronograma','ajuste_cronograma','producao','analise_producao','ajuste_interno','ajuste_cliente','revisao_ajuste','agendamento') AND c.stage_entered_at < ?", new Date(t - 3 * 864e5).toISOString())) {
+  for (const c of all("SELECT c.*, cl.name cname FROM contents c JOIN clients cl ON cl.id=c.client_id WHERE c.blocked=0 AND c.data_origin='plataforma' AND c.stage IN ('cronograma','analise_cronograma','ajuste_cronograma','producao','analise_producao','ajuste_interno','ajuste_cliente','revisao_ajuste','agendamento') AND c.stage_entered_at < ?", new Date(t - 3 * 864e5).toISOString())) {
     if (isEnabled('processo.parado') && onceFor('processo.parado', c.id, c.stage_entered_at)) {
       automation('processo.parado', { entity: 'content', id: c.id, client: c.client_id, detail: c.stage_entered_at });
       notify(cc(), { level: 'atencao', type: 'parado', title: 'Conteúdos parados há mais de 3 dias', body: `${c.cname} · #${c.number} em ${STAGES[c.stage].label}`, link: '/processos', groupKey: 'parado:cc' });

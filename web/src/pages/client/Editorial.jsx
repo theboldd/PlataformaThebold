@@ -51,8 +51,9 @@ export default function Editorial({ clientId }) {
         </div>
       </div>
       {view === 'fases' && <Phases phases={data.phases} items={items} />}
-      {view === 'mes' && <Month month={m} setMonth={setMonth} items={items} clientId={clientId} />}
-      {view === 'feed' && <Feed items={items} />}
+      {/* legado não validado não é conteúdo operacional: só aparece no grupo próprio em Fases */}
+      {view === 'mes' && <Month month={m} setMonth={setMonth} items={items.filter((i) => i.phase !== 'legado')} clientId={clientId} />}
+      {view === 'feed' && <Feed items={items.filter((i) => i.phase !== 'legado')} />}
       {view === 'notion' && <NotionHistory clientId={clientId} />}
     </div>
   );

@@ -196,6 +196,7 @@ CREATE TABLE IF NOT EXISTS contents (
   blocked INTEGER NOT NULL DEFAULT 0, block_reason TEXT, waiting_on TEXT, -- informacao | cliente | equipe
   cycle_month TEXT, revision_rounds INTEGER NOT NULL DEFAULT 0, client_adjust_rounds INTEGER NOT NULL DEFAULT 0,
   scheduled_at TEXT, schedule_mode TEXT, external_post_id TEXT, published_at TEXT,
+  -- data_origin (ALTER, regra 20): notion | plataforma · legacy_status (ALTER, regra 18): NULL | nao_validado | historico | reprogramado | cancelado
   created_by TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_contents_client ON contents(client_id, stage);
@@ -237,6 +238,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   origin TEXT NOT NULL DEFAULT 'engine', -- engine | manual | reuniao | chat | automacao
   source_type TEXT, source_id TEXT, priority TEXT NOT NULL DEFAULT 'media',
   due_at TEXT, created_by TEXT, created_at TEXT NOT NULL, started_at TEXT, completed_at TEXT, completed_by TEXT
+  -- data_origin (ALTER, regra 20): notion | plataforma — origem estrutural usada por todos os cálculos
   -- perf_status (ALTER): NULL = nasceu na plataforma · migrado = herdado, fora da performance até classificar · excluido | equipe | individual = classificado
 );
 CREATE INDEX IF NOT EXISTS ix_tasks_assignee ON tasks(assignee_id, status);
@@ -418,7 +420,7 @@ CREATE TABLE IF NOT EXISTS reports (
 `;
 db.exec(SCHEMA);
 // Migrações leves (colunas adicionadas depois da primeira versão)
-for (const sql of ['ALTER TABLE adjustments ADD COLUMN reapproval INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE clients ADD COLUMN notion_url TEXT', 'ALTER TABLE clients ADD COLUMN notion_section TEXT', 'ALTER TABLE clients ADD COLUMN aliases TEXT', "ALTER TABLE onboarding ADD COLUMN form_status TEXT NOT NULL DEFAULT 'nao_iniciado'", 'ALTER TABLE onboarding ADD COLUMN form_submitted_at TEXT', 'ALTER TABLE client_brain_entries ADD COLUMN source_url TEXT', 'ALTER TABLE contents ADD COLUMN material_url TEXT', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'", 'ALTER TABLE tasks ADD COLUMN available_at TEXT', 'ALTER TABLE users ADD COLUMN email_source TEXT', 'ALTER TABLE users ADD COLUMN email_source_url TEXT', 'ALTER TABLE tasks ADD COLUMN perf_status TEXT', "ALTER TABLE clients ADD COLUMN kind TEXT NOT NULL DEFAULT 'externo'"]) { try { db.exec(sql); } catch { /* já existe */ } }
+for (const sql of ['ALTER TABLE adjustments ADD COLUMN reapproval INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE clients ADD COLUMN notion_url TEXT', 'ALTER TABLE clients ADD COLUMN notion_section TEXT', 'ALTER TABLE clients ADD COLUMN aliases TEXT', "ALTER TABLE onboarding ADD COLUMN form_status TEXT NOT NULL DEFAULT 'nao_iniciado'", 'ALTER TABLE onboarding ADD COLUMN form_submitted_at TEXT', 'ALTER TABLE client_brain_entries ADD COLUMN source_url TEXT', 'ALTER TABLE contents ADD COLUMN material_url TEXT', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'", 'ALTER TABLE tasks ADD COLUMN available_at TEXT', 'ALTER TABLE users ADD COLUMN email_source TEXT', 'ALTER TABLE users ADD COLUMN email_source_url TEXT', 'ALTER TABLE tasks ADD COLUMN perf_status TEXT', "ALTER TABLE clients ADD COLUMN kind TEXT NOT NULL DEFAULT 'externo'", "ALTER TABLE contents ADD COLUMN data_origin TEXT NOT NULL DEFAULT 'plataforma'", "ALTER TABLE tasks ADD COLUMN data_origin TEXT NOT NULL DEFAULT 'plataforma'", 'ALTER TABLE contents ADD COLUMN legacy_status TEXT']) { try { db.exec(sql); } catch { /* já existe */ } }
 
 // ── helpers ───────────────────────────────────────────
 export const one = (sql, ...p) => db.prepare(sql).get(...p);

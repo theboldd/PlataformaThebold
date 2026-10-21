@@ -20,7 +20,7 @@ import { pendencias } from './routes/pendencias.js';
 import { divisao } from './routes/divisao.js';
 import { atrasos } from './routes/atrasos.js';
 import { editorial } from './routes/editorial.js';
-import { markMigratedTasks, syncDelayReviews } from './services/delayReview.js';
+import { markMigratedTasks, markLegacy, syncDelayReviews } from './services/delayReview.js';
 import { review } from './routes/review.js';
 import { reconcileMigratedForms } from './services/onboarding.js';
 
@@ -55,6 +55,7 @@ export function bootstrap() {
   activateScheduledTasks();
   classifyInternalClient();
   markMigratedTasks(); // tarefas herdadas da migração ficam fora da performance até serem classificadas
+  markLegacy(); // regra 18: itens herdados sem decisão = LEGADO — NÃO VALIDADO, fora da operação
   syncDelayReviews();
 }
 

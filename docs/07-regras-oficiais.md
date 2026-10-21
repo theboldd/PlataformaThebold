@@ -1,6 +1,6 @@
 # THE BOLD OS — Regras oficiais do projeto
 
-Decisões tomadas pela CEO (Rebeca) em 21/10/2026 (regras 1–10) e complementadas no mesmo dia (11–17). Valem para todo o código, os dados e os próximos blocos.
+Decisões tomadas pela CEO (Rebeca) em 21/10/2026 (regras 1–10) e complementadas no mesmo dia (11–22). Valem para todo o código, os dados e os próximos blocos.
 Quando uma regra daqui conflitar com um pedido antigo, **esta vale**.
 
 ## 1. Hospedagem: Railway
@@ -116,6 +116,35 @@ Nunca se avança sobre uma decisão que ainda depende da CEO.
 ## 17. Dreams Brand
 - `dreamsbrand.pi@gmail.com` é **E-MAIL CANDIDATO / AGUARDANDO CONFIRMAÇÃO**.
 - Não é e-mail oficial de acesso: não se cria login e não se envia convite até a confirmação explícita da CEO.
+
+## 18. Itens legados (os 144 herdados de "Para agendamento")
+- Ficam como **LEGADO / MIGRADO DO NOTION — NÃO VALIDADO**.
+- **Não** são: pendência, atraso, tarefa ativa, tarefa vencida, carga, sobrecarga, evento de performance, KPI, produtividade, capacidade, notificação, aprovação nem conteúdo operacional atual.
+- Não se presume que foram cancelados, concluídos ou abandonados. Não há classificação em massa.
+- Na Revisão de atrasos, uma pessoa autorizada analisa um a um. São só três ações:
+  - **REPROGRAMAR:** volta à operação. Exige novo prazo, responsável, etapa e motivo, e registra quem fez e quando. A partir daí, é demanda operacional válida.
+  - **ENCERRAR COMO CANCELADO:** ação explícita. Registra motivo, usuário, data, estado anterior e estado posterior.
+  - **MANTER COMO HISTÓRICO:** o item fica preservado e totalmente fora da operação.
+
+## 19. Dados migrados não geram nada automaticamente
+- **DADOS MIGRADOS NÃO GERAM PENDÊNCIA AUTOMATICAMENTE.**
+- Também não geram notificação, alerta, KPI, performance, capacidade nem inteligência, salvo regra explícita escrita aqui.
+- Calendários históricos do Notion (CR EDITORIAL e equivalentes auditados) seguem a regra 15. Linhas vazias ficam guardadas no banco e só aparecem com o filtro "Mostrar registros vazios" (desligado por padrão).
+
+## 20. Origem estrutural: migrado do Notion × nascido na plataforma
+- Toda tarefa e todo conteúdo têm a origem gravada no banco: `data_origin = notion | plataforma`.
+- KPIs, detectores, alertas, performance, capacidade e inteligência usam esse campo e não misturam as duas origens sem regra explícita.
+- Item legado reprogramado passa a ter tarefa nascida na plataforma. O conteúdo continua com origem Notion, e o histórico registra a reabertura.
+
+## 21. Evento válido de performance
+- Só conta evento operacional de tarefa com `data_origin = plataforma`, com a definição auditável em `server/services/perfEvents.js`.
+- Eventos migrados nunca entram automaticamente.
+- Sem eventos válidos, a tela mostra **DADOS INSUFICIENTES**. Não há score nem ranking, e não se infere produtividade.
+- Capacidade **configurada** (cadastro) ≠ capacidade **medida** (histórico). A utilização real só é afirmada com histórico suficiente.
+
+## 22. Hospedagem
+- Nada vai para o Railway até a CEO aprovar.
+- A auditoria arquitetural fica em `docs/08-arquitetura-railway.md`, no formato ATUAL → DESTINO → MOTIVO → RISCO → IMPACTO/CUSTO → PLANO → ROLLBACK.
 
 ## Regras anteriores que continuam valendo
 - Regra determinística decide status, prazos, permissões, tarefas, atribuições, sincronização e **todo cálculo financeiro**. A IA interpreta e sugere, mas não decide estado crítico, valores nem nada sobre pessoas.

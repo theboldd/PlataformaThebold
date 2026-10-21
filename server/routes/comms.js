@@ -137,7 +137,7 @@ comms.get('/calendar', requireInternal, async (req, res) => {
   const cf = req.query.client_id ? ' AND c.client_id=?' : '';
   const cp = req.query.client_id ? [req.query.client_id] : [];
   const items = [];
-  for (const c of all(`SELECT c.*, cl.name client FROM contents c JOIN clients cl ON cl.id=c.client_id WHERE ${sc.sql}${cf} AND c.stage<>'cancelado' AND COALESCE(c.scheduled_at,c.planned_at) BETWEEN ? AND ?`, ...sc.params, ...cp, start, end)) {
+  for (const c of all(`SELECT c.*, cl.name client FROM contents c JOIN clients cl ON cl.id=c.client_id WHERE ${sc.sql}${cf} AND c.stage<>'cancelado' AND (c.legacy_status IS NULL OR c.legacy_status='reprogramado') AND COALESCE(c.scheduled_at,c.planned_at) BETWEEN ? AND ?`, ...sc.params, ...cp, start, end)) {
     items.push({ id: `c:${c.id}`, type: 'conteudo', title: `${c.client} — ${c.title}`, start: c.scheduled_at || c.planned_at, format: c.format, status: publicStatus(c), stage: STAGES[c.stage].label, client_id: c.client_id, link: `/conteudos/${c.id}` });
   }
   const sct = scopeSQL(req.user, 't.client_id');

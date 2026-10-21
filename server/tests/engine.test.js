@@ -162,26 +162,41 @@ test('rotinas: trava impede execução simultânea, timeout registra erro e leas
   assert.equal(one("SELECT COUNT(*) n FROM job_runs WHERE job='t3' AND status='expirado'").n, 1);
 });
 
-test('atrasos: herdado da migração fica fora da performance; classificar exige evidência e registra antes/depois', async () => {
+test('legado (regra 18): fora da operação; só reprogramar, cancelar ou manter histórico, um a um', async () => {
   const D = await import('../services/delayReview.js');
-  const c = P.createContent({ client_id: client.id, title: 'Herdado', format: 'estatico', stage: 'agendamento', strategy_tags: ['importado-notion-outubro'], internal_notes: 'Importado do Notion · quadro X' }, null);
-  D.markMigratedTasks();
-  const t = one("SELECT * FROM tasks WHERE content_id=? AND status='aberta'", c.id);
-  assert.equal(t.perf_status, 'migrado');
-  run('UPDATE tasks SET due_at=? WHERE id=?', new Date(Date.now() - 864e5).toISOString(), t.id);
-  D.syncDelayReviews();
-  const d = one('SELECT * FROM delay_reviews WHERE task_id=?', t.id);
-  assert.equal(d.category, 'dado_migrado'); assert.equal(d.attribution, 'nao_atribuido'); assert.equal(d.decided_by, null);
-  const { teamLoad } = await import('../engine/intelligence.js');
-  const me = teamLoad().find((u) => u.id === t.assignee_id);
-  assert.equal(me.late, 0); assert.ok(me.inherited >= 1);
-  assert.throws(() => D.classify(t.id, U.ceo, { category: 'atraso_responsavel', note: '' }), /evidência/);
-  assert.throws(() => D.classify(t.id, U.ceo, { category: 'atraso_responsavel', note: 'curto' }), /evidência/);
-  D.classify(t.id, U.ceo, { category: 'aguardando_cliente', note: 'Cliente não enviou o material (mensagem de 10/10).' });
-  assert.equal(one('SELECT perf_status FROM tasks WHERE id=?', t.id).perf_status, 'excluido');
-  const lg = one("SELECT * FROM activity_logs WHERE entity_id=? AND action='atraso.classificado'", t.id);
-  assert.match(lg.before, /dado_migrado/); assert.match(lg.after, /aguardando_cliente/);
-  assert.equal(can(U.ops, 'atrasos'), false, 'Operações não classifica atraso sem liberação da CEO');
+  const { computePendencies, teamLoad } = await import('../engine/intelligence.js');
+  const mk = (title) => {
+    const c = P.createContent({ client_id: client.id, title, format: 'estatico', stage: 'agendamento', strategy_tags: ['importado-notion-outubro'], internal_notes: 'Importado do Notion · quadro X' }, null);
+    D.markMigratedTasks();
+    const t = one("SELECT * FROM tasks WHERE content_id=? AND status='aberta'", c.id);
+    run('UPDATE tasks SET due_at=? WHERE id=?', new Date(Date.now() - 864e5).toISOString(), t.id);
+    insert('delay_reviews', { task_id: t.id, content_id: c.id, client_id: client.id, category: 'dado_migrado', attribution: 'nao_atribuido', facts: '[]', source_facts: '[]', created_at: now(), updated_at: now() });
+    return { c, t };
+  };
+  const a = mk('Legado A'), b = mk('Legado B'), h = mk('Legado C');
+  assert.equal(one('SELECT data_origin FROM tasks WHERE id=?', a.t.id).data_origin, 'notion');
+  assert.equal(one('SELECT data_origin FROM contents WHERE id=?', a.c.id).data_origin, 'notion');
+  D.markLegacy();
+  assert.equal(one('SELECT status FROM tasks WHERE id=?', a.t.id).status, 'legado');
+  assert.equal(one('SELECT legacy_status FROM contents WHERE id=?', a.c.id).legacy_status, 'nao_validado');
+  assert.ok(!computePendencies().some((p) => p.content_id === a.c.id), 'legado não é pendência');
+  assert.equal(teamLoad().find((u) => u.id === a.t.assignee_id)?.late || 0, 0);
+  // reprogramar exige prazo, responsável, etapa e motivo
+  assert.throws(() => D.reprogramLegacy(a.t.id, U.ceo, { note: 'x' }), /prazo/);
+  assert.throws(() => D.reprogramLegacy(a.t.id, U.ceo, { due_at: new Date(Date.now() + 864e5).toISOString(), stage: 'agendamento', note: 'x' }), /responsável/);
+  D.reprogramLegacy(a.t.id, U.ceo, { due_at: new Date(Date.now() + 2 * 864e5).toISOString(), assignee_id: U.gestao.id, stage: 'agendamento', note: 'Cliente confirmou que ainda quer o post' });
+  const nt = one("SELECT * FROM tasks WHERE content_id=? AND status='aberta'", a.c.id);
+  assert.equal(nt.data_origin, 'plataforma'); assert.equal(nt.assignee_id, U.gestao.id);
+  assert.equal(one('SELECT legacy_status FROM contents WHERE id=?', a.c.id).legacy_status, 'reprogramado');
+  assert.throws(() => D.keepAsHistory(a.t.id, U.ceo, {}), /já foi decidido/);
+  assert.throws(() => D.cancelLegacy(b.t.id, U.ceo, {}), /motivo/);
+  D.cancelLegacy(b.t.id, U.ceo, { note: 'Post da campanha já encerrada' });
+  assert.equal(one('SELECT stage FROM contents WHERE id=?', b.c.id).stage, 'cancelado');
+  D.keepAsHistory(h.t.id, U.ceo, {});
+  assert.equal(one('SELECT legacy_status FROM contents WHERE id=?', h.c.id).legacy_status, 'historico');
+  const lg = one("SELECT * FROM activity_logs WHERE entity_id=? AND action='legado.cancelado'", b.t.id);
+  assert.match(lg.before, /agendamento/); assert.match(lg.after, /cancelado/);
+  assert.equal(can(U.ops, 'atrasos'), false, 'Operações não decide legado sem liberação da CEO');
 });
 
 test('comentário vira ajuste: só onde a equipe está com o conteúdo, uma vez, ligado ao comentário', async () => {
@@ -217,8 +232,8 @@ test('regra 14: "aprovado" só com registro de aprovação; etapa não prova apr
 test('causa raiz: fato, padrão, hipótese marcada como não verificada; carga ignora herdados', async () => {
   const I = await import('../engine/intelligence.js');
   const before = all("SELECT fingerprint FROM ai_insights WHERE detector='carga' AND status='aberto'").length;
-  run("UPDATE tasks SET perf_status='migrado' WHERE assignee_id=?", U.des.id);
-  for (let i = 0; i < 12; i++) insert('tasks', { id: uid('t_'), title: `Herdada ${i}`, client_id: client.id, assignee_id: U.des.id, status: 'aberta', kind: 'etapa', function: 'design', perf_status: 'migrado', created_at: now() });
+  run("UPDATE tasks SET data_origin='notion' WHERE assignee_id=?", U.des.id);
+  for (let i = 0; i < 12; i++) insert('tasks', { id: uid('t_'), title: `Herdada ${i}`, client_id: client.id, assignee_id: U.des.id, status: 'aberta', kind: 'etapa', function: 'design', data_origin: 'notion', created_at: now() });
   I.runDetectors();
   assert.ok(!one("SELECT 1 FROM ai_insights WHERE fingerprint=? AND status='aberto'", `carga:${U.des.id}`), 'herdadas não geram alerta de carga');
   for (const i of all("SELECT * FROM ai_insights WHERE status='aberto'")) {
