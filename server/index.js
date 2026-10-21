@@ -7,7 +7,7 @@ import { db, one, run, insert } from './db.js';
 import { loadUser, csrf } from './lib/auth.js';
 import { ROLE_DEFS, HttpError } from './lib/permissions.js';
 import { seedAutomations } from './engine/automations.js';
-import { startScheduler } from './engine/scheduler.js';
+import { startScheduler, tick, reconcileStageWindows, activateScheduledTasks } from './engine/scheduler.js';
 import { core } from './routes/core.js';
 import { ops } from './routes/ops.js';
 import { comms } from './routes/comms.js';
@@ -32,6 +32,8 @@ export function bootstrap() {
     run('INSERT INTO settings (key,value,updated_at) VALUES (?,?,?)', flag, 'true', new Date().toISOString());
   }
   seedAutomations();
+  reconcileStageWindows(); // regra pronto ≠ disponível aplicada às tarefas que já existiam
+  activateScheduledTasks();
 }
 
 export function createApp() {
@@ -51,6 +53,15 @@ export function createApp() {
   app.use(express.json({ limit: '2mb' }));
   app.use(loadUser);
   app.use(csrf);
+  // Rotina agendada chamada de fora (Vercel Cron, cron do servidor): o mesmo agendador do processo contínuo.
+  // Protegida por CRON_SECRET (a Vercel envia "Authorization: Bearer <CRON_SECRET>").
+  app.get('/api/cron/tick', (req, res) => {
+    if (!process.env.CRON_SECRET) return res.status(503).json({ error: 'CRON_SECRET não configurado.' });
+    if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) return res.status(401).json({ error: 'Não autorizado.' });
+    const activated = activateScheduledTasks();
+    tick();
+    res.json({ ok: true, activated, at: new Date().toISOString() });
+  });
   app.get('/api/health', (_req, res) => res.json({ ok: true, db: !!one('SELECT 1 ok'), version: (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || null }));
   app.get('/api/integrations/:provider/callback', (req, res) => oauthCallback(req.params.provider, req, res));
   app.use('/api', core);

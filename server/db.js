@@ -115,6 +115,14 @@ CREATE TABLE IF NOT EXISTS migration_issues (
   kind TEXT NOT NULL, description TEXT NOT NULL, source TEXT, status TEXT NOT NULL DEFAULT 'aberto', created_at TEXT NOT NULL
 );
 
+-- Movimentos de etapa feitos por pessoas (o engine registra os automáticos em activity_logs)
+CREATE TABLE IF NOT EXISTS stage_moves (
+  id TEXT PRIMARY KEY, content_id TEXT NOT NULL REFERENCES contents(id) ON DELETE CASCADE, client_id TEXT,
+  from_stage TEXT NOT NULL, to_stage TEXT NOT NULL,
+  kind TEXT NOT NULL, -- manual | retorno | reabertura | correcao | excecao
+  reason TEXT, actor_id TEXT, prev_assignees TEXT, new_assignees TEXT, impacts TEXT, created_at TEXT NOT NULL
+);
+
 -- ───────────── ONBOARDING ─────────────
 CREATE TABLE IF NOT EXISTS onboarding (
   id TEXT PRIMARY KEY, client_id TEXT NOT NULL UNIQUE REFERENCES clients(id) ON DELETE CASCADE,
@@ -188,7 +196,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT,
   client_id TEXT REFERENCES clients(id) ON DELETE CASCADE, content_id TEXT REFERENCES contents(id) ON DELETE CASCADE,
   stage TEXT, function TEXT, assignee_id TEXT REFERENCES users(id), -- assignee nulo = sem responsável (gera pendência)
-  status TEXT NOT NULL DEFAULT 'aberta', -- aberta | em_andamento | concluida | cancelada
+  status TEXT NOT NULL DEFAULT 'aberta', -- aberta | em_andamento | agendada (etapa ainda não abriu: available_at) | concluida | cancelada
   kind TEXT NOT NULL DEFAULT 'etapa', -- etapa | ajuste | follow_up | onboarding | reuniao | manual | agendamento
   origin TEXT NOT NULL DEFAULT 'engine', -- engine | manual | reuniao | chat | automacao
   source_type TEXT, source_id TEXT, priority TEXT NOT NULL DEFAULT 'media',
@@ -373,7 +381,7 @@ CREATE TABLE IF NOT EXISTS reports (
 `;
 db.exec(SCHEMA);
 // Migrações leves (colunas adicionadas depois da primeira versão)
-for (const sql of ['ALTER TABLE adjustments ADD COLUMN reapproval INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE clients ADD COLUMN notion_url TEXT', 'ALTER TABLE clients ADD COLUMN notion_section TEXT', 'ALTER TABLE clients ADD COLUMN aliases TEXT', "ALTER TABLE onboarding ADD COLUMN form_status TEXT NOT NULL DEFAULT 'nao_iniciado'", 'ALTER TABLE onboarding ADD COLUMN form_submitted_at TEXT', 'ALTER TABLE client_brain_entries ADD COLUMN source_url TEXT', 'ALTER TABLE contents ADD COLUMN material_url TEXT', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'"]) { try { db.exec(sql); } catch { /* já existe */ } }
+for (const sql of ['ALTER TABLE adjustments ADD COLUMN reapproval INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE clients ADD COLUMN notion_url TEXT', 'ALTER TABLE clients ADD COLUMN notion_section TEXT', 'ALTER TABLE clients ADD COLUMN aliases TEXT', "ALTER TABLE onboarding ADD COLUMN form_status TEXT NOT NULL DEFAULT 'nao_iniciado'", 'ALTER TABLE onboarding ADD COLUMN form_submitted_at TEXT', 'ALTER TABLE client_brain_entries ADD COLUMN source_url TEXT', 'ALTER TABLE contents ADD COLUMN material_url TEXT', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'", 'ALTER TABLE tasks ADD COLUMN available_at TEXT']) { try { db.exec(sql); } catch { /* já existe */ } }
 
 // ── helpers ───────────────────────────────────────────
 export const one = (sql, ...p) => db.prepare(sql).get(...p);

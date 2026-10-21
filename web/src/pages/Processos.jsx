@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useApi } from '../lib/hooks.js';
+import { useApi, useAuth } from '../lib/hooks.js';
+import { MoveStageModal } from '../components/MoveStage.jsx';
 import { useCrumbs } from '../components/Shell.jsx';
 import { Drawer, ErrorBox, Loading } from '../components/ui.jsx';
 import { I } from '../components/Icons.jsx';
@@ -26,7 +27,10 @@ export default function Processos() {
   const view = params.get('visao') || 'equipe';
   const qs = new URLSearchParams();
   FILTER_KEYS.forEach((k) => params.get(k) && qs.set(k, params.get(k)));
-  const { data, error, loading } = useApi(`/process/board?${qs}`, []);
+  const { data, error, loading, reload } = useApi(`/process/board?${qs}`, []);
+  const auth = useAuth();
+  const canMove = auth.can('processos', 'edit');
+  const [moving, setMoving] = useState(null); // { content, targets }
   const prevLane = useRef(new Map());
   const [moved, setMoved] = useState(new Set());
 
@@ -116,7 +120,7 @@ export default function Processos() {
             </select>
           </div>
         </div>
-        <div className="jb-auto"><span className="jb-pulse" aria-hidden />Automático: os cards mudam de coluna sozinhos quando a etapa é concluída. Ninguém precisa arrastar.</div>
+        <div className="jb-auto"><span className="jb-pulse" aria-hidden />Automático: os cards mudam de coluna sozinhos quando a etapa é concluída. Se precisar, arraste o card: o sistema mostra o impacto, pede o motivo quando é relevante e avisa os responsáveis.</div>
       </div>
 
       <ErrorBox error={error} />
@@ -126,12 +130,15 @@ export default function Processos() {
             <div key={sw.key} className="jb-swim">
               {sw.label && <div className="jb-swim-head"><span className="jb-label" style={{ background: toneOf(sw.label) }}>{cleanName(sw.label)}</span><span className="jb-swim-count">{sw.lanes.reduce((n, l) => n + l.cards.length, 0)} itens{group === 'client' ? ` · ${byFormat(sw.lanes)}` : ''}</span></div>}
               <div className="jb-board">
-                {sw.lanes.map((lane) => <Column key={lane.key} lane={lane} moved={moved} showHead={sw === swimlanes[0] || !!sw.label} />)}
+                {sw.lanes.map((lane) => <Column key={lane.key} lane={lane} moved={moved} showHead={sw === swimlanes[0] || !!sw.label} onDropCard={canMove ? (card) => setMoving({ content: card, targets: lane.targets || (lane.stages || []).map((x) => x.key) }) : null} />)}
               </div>
             </div>
           ))}
         </div>
       )}
+      <MoveStageModal open={!!moving} content={moving?.content} targets={moving?.targets?.length ? moving.targets.filter((k) => k !== moving.content.stage) : null}
+        initialTo={moving?.targets?.filter((k) => k !== moving.content.stage).length === 1 ? moving.targets.filter((k) => k !== moving.content.stage)[0] : ''}
+        onClose={() => setMoving(null)} onDone={() => { setMoving(null); reload(); }} />
       <HowItWorks open={howOpen} onClose={() => setHowOpen(false)} />
       <Drawer open={actOpen} onClose={() => setActOpen(false)} title="Atividade" kicker="Movimentos do Process Engine">
         <ol className="list">{(data?.recent || []).map((r, i) => (
@@ -148,15 +155,15 @@ export default function Processos() {
 const TRACK_LABEL = { design: 'Design', edicao: 'Edição de vídeo', copy: 'Legenda' };
 function teamLanes(data) {
   const all = data.lanes.flatMap((l) => l.cards);
-  const col = (key, label, stages, filter) => ({ key, label, stages: [], cards: all.filter((c) => !c.blocked && stages.includes(c.stage) && (!filter || filter(c))) });
+  const col = (key, label, stages, filter) => ({ key, label, stages: [], targets: stages, cards: all.filter((c) => !c.blocked && stages.includes(c.stage) && (!filter || filter(c))) });
   const people = data.filters.people || [];
   const prod = all.filter((c) => !c.blocked && c.stage === 'producao');
   const personCols = [];
   for (const fn of ['design', 'edicao', 'copy']) {
     const holders = people.filter((p) => p.functions?.includes(fn) || prod.some((c) => c.tracks?.some((t) => t.fn === fn && t.assignee_id === p.id)));
-    for (const p of holders) personCols.push({ key: `p:${fn}:${p.id}`, label: TRACK_LABEL[fn], person: { id: p.id, name: p.name }, fn, stages: [], cards: prod.filter((c) => c.tracks?.some((t) => t.fn === fn && t.assignee_id === p.id)) });
+    for (const p of holders) personCols.push({ key: `p:${fn}:${p.id}`, label: TRACK_LABEL[fn], person: { id: p.id, name: p.name }, fn, stages: [], targets: ['producao'], cards: prod.filter((c) => c.tracks?.some((t) => t.fn === fn && t.assignee_id === p.id)) });
     const orphan = prod.filter((c) => c.tracks?.some((t) => t.fn === fn && !t.assignee_id));
-    if (orphan.length) personCols.push({ key: `p:${fn}:none`, label: TRACK_LABEL[fn], person: { id: null, name: 'Sem responsável' }, fn, stages: [], cards: orphan });
+    if (orphan.length) personCols.push({ key: `p:${fn}:none`, label: TRACK_LABEL[fn], person: { id: null, name: 'Sem responsável' }, fn, stages: [], targets: ['producao'], cards: orphan });
   }
   return [
     col('cronograma', 'Cronograma', ['cronograma', 'ajuste_cronograma']),
@@ -173,10 +180,17 @@ function teamLanes(data) {
   ];
 }
 
-function Column({ lane, moved, showHead }) {
+function Column({ lane, moved, showHead, onDropCard }) {
+  const [over, setOver] = useState(false);
+  const droppable = !!onDropCard && (lane.targets || lane.stages || []).length > 0;
+  const dropProps = droppable ? {
+    onDragOver: (e) => { if (e.dataTransfer.types.includes('application/x-bold-card')) { e.preventDefault(); setOver(true); } },
+    onDragLeave: () => setOver(false),
+    onDrop: (e) => { e.preventDefault(); setOver(false); try { const card = JSON.parse(e.dataTransfer.getData('application/x-bold-card')); onDropCard(card); } catch { /* arraste inválido */ } },
+  } : {};
   const counts = Object.fromEntries((lane.stages || []).map((s) => [s.key, lane.cards.filter((c) => c.stage === s.key).length]));
   return (
-    <section className={`jb-col ${!lane.cards.length && !lane.person ? 'jb-col-min' : ''}`} aria-label={lane.label}>
+    <section className={`jb-col ${!lane.cards.length && !lane.person ? 'jb-col-min' : ''} ${over ? 'drop-over' : ''}`} aria-label={lane.label} {...dropProps}>
       {showHead && (
         <div className="jb-col-head">
           <span className="jb-col-title">{lane.label}</span><span className="jb-col-count">{lane.cards.length}</span>
@@ -186,7 +200,7 @@ function Column({ lane, moved, showHead }) {
         </div>
       )}
       <div className="jb-col-body">
-        {lane.cards.map((c) => <Card key={c.id} c={c} moved={moved.has(c.id)} track={lane.fn ? c.tracks?.find((t) => t.fn === lane.fn && (t.assignee_id || null) === (lane.person?.id || null)) : null} />)}
+        {lane.cards.map((c) => <Card key={c.id} c={c} moved={moved.has(c.id)} draggable={!!onDropCard} track={lane.fn ? c.tracks?.find((t) => t.fn === lane.fn && (t.assignee_id || null) === (lane.person?.id || null)) : null} />)}
         {!lane.cards.length && lane.person && <div className="jb-col-empty">Nada com {lane.person.id ? lane.person.name.split(' ')[0] : 'ninguém'} agora</div>}
       </div>
     </section>
@@ -201,7 +215,7 @@ function byFormat(lanes) {
   return Object.entries(m).map(([f, n]) => `${n} ${n === 1 ? (FORMATS[f] || f).toLowerCase() : PL[f] || f}`).join(' · ');
 }
 
-function Card({ c, moved, track }) {
+function Card({ c, moved, track, draggable }) {
   // na coluna de uma pessoa, o card mostra o prazo e o responsável DAQUELA trilha
   const due = track ? track.due_at : c.due_at;
   const ownerName = track ? track.name : c.owner === 'SEM RESPONSÁVEL' ? null : c.owner;
@@ -218,6 +232,7 @@ function Card({ c, moved, track }) {
         {c.material_url && <button type="button" className="jb-mat" title={c.material_url} onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(c.material_url, '_blank', 'noopener'); }}>Material ↗</button>}
       </div>
       {c.blocked && <div className="jb-block">{c.block_reason}</div>}
+      {c.opens_at && !c.blocked && <div className="jb-opens" title="Pronto para a próxima etapa; a etapa só abre nesta data (sem atraso até lá)">Pronto · etapa abre {new Date(c.opens_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' })}</div>}
       <div className="jb-card-foot">
         <span className={`jb-type t-${c.format}`} title={FORMATS[c.format]}>{FORMATS[c.format]?.[0]}</span>
         <span className="jb-key">TB-{String(c.number).padStart(3, '0')}</span>
@@ -236,7 +251,9 @@ function Card({ c, moved, track }) {
     </>
   );
   const cls = `jb-card ${moved ? 'moved' : ''} ${c.restricted ? 'restricted' : ''} ${c.risk === 'critico' ? 'crit' : ''}`;
-  return c.restricted ? <div className={cls} title="Detalhes restritos: você não está vinculado(a) a este cliente.">{body}</div> : <Link to={`/conteudos/${c.id}`} className={cls} data-cursor="ABRIR">{body}</Link>;
+  // arrastar para outra coluna abre "Mover etapa" (com impacto e motivo); nada muda sem confirmação
+  const drag = draggable && !c.restricted ? { draggable: true, onDragStart: (e) => { e.dataTransfer.setData('application/x-bold-card', JSON.stringify({ id: c.id, number: c.number, title: c.title, stage: c.stage })); e.dataTransfer.effectAllowed = 'move'; } } : {};
+  return c.restricted ? <div className={cls} title="Detalhes restritos: você não está vinculado(a) a este cliente.">{body}</div> : <Link to={`/conteudos/${c.id}`} className={cls} data-cursor="ABRIR" {...drag}>{body}</Link>;
 }
 
 function HowItWorks({ open, onClose }) {

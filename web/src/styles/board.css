@@ -98,3 +98,5 @@
 .jb-key, .jb-due { white-space: nowrap; }
 /* Etiqueta: equipe precisa que o cliente envie material */
 .jb-matreq { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 4px; background: #F6E3B8; color: #6B4A00; font-size: 11px; font-weight: 700; letter-spacing: .02em; }
+.jb-opens { font-size: 11px; font-weight: 600; color: var(--info); background: var(--info-soft); border-radius: 4px; padding: 3px 7px; align-self: flex-start; margin-top: 2px; }
+.jb-col.drop-over { outline: 2px dashed var(--primary-text); outline-offset: -4px; }

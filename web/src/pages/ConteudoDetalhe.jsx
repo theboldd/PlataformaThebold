@@ -14,6 +14,7 @@ import { Comments } from './production/Comments.jsx';
 import { Dropzone } from './production/Dropzone.jsx';
 import '../styles/production.css';
 import { useUrlState } from '../lib/nav.jsx';
+import { MoveStageModal } from '../components/MoveStage.jsx';
 
 const toLocalInput = (iso) => { if (!iso) return ''; const d = new Date(iso); const off = d.getTimezoneOffset(); return new Date(d.getTime() - off * 60e3).toISOString().slice(0, 16); };
 const REVIEW_STAGES = ['analise_cronograma', 'analise_producao', 'revisao_ajuste'];
@@ -169,7 +170,7 @@ export default function ConteudoDetalhe() {
       <BlockModal open={modal === 'block'} onClose={() => setModal(null)} busy={busy} onSave={(b) => act(() => api.post(`/contents/${c.id}/block`, b), 'Conteúdo bloqueado — pendência criada.')} />
       <ScheduleModal open={modal === 'schedule'} onClose={() => setModal(null)} c={c} meta={data.meta_connected} busy={busy} onSave={(b) => act(() => api.post(`/contents/${c.id}/schedule`, b), b.mode === 'meta' ? 'Agendado para publicação via Meta.' : 'Marcado como agendado externamente.')} />
       <ReasonModal open={modal === 'cancel'} title="Cancelar conteúdo" label="Motivo do cancelamento" danger onClose={() => setModal(null)} busy={busy} onSave={(reason) => act(() => api.post(`/contents/${c.id}/cancel`, { reason }), 'Conteúdo cancelado.')} />
-      <ReturnModal open={modal === 'return'} onClose={() => setModal(null)} c={c} busy={busy} onSave={(b) => act(() => api.post(`/contents/${c.id}/return`, b), 'Conteúdo devolvido.')} />
+      <MoveStageModal open={modal === 'return'} content={c} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />
     </div>
   );
 }
@@ -199,7 +200,7 @@ function ActionsPanel({ data, myOpen, busy, onComplete, setModal, act }) {
   if (pm.edit && !final && !waitingMaterial) secondary.push(c.blocked
     ? <Button key="ub" size="sm" disabled={busy} onClick={() => act(() => api.post(`/contents/${c.id}/unblock`, { note: 'destravado manualmente' }), 'Conteúdo desbloqueado.')}>Desbloquear</Button>
     : <Button key="bl" size="sm" variant="ghost" disabled={busy} onClick={() => setModal('block')}>Bloquear</Button>);
-  if (pm.approve && !final && c.stage !== 'cronograma') secondary.push(<Button key="rt" size="sm" variant="ghost" onClick={() => setModal('return')}>Devolver etapa</Button>);
+  if (pm.move) secondary.push(<Button key="rt" size="sm" variant="ghost" onClick={() => setModal('return')}>Mover etapa</Button>);
   if (pm.approve && !final) secondary.push(<Button key="cn" size="sm" variant="ghost" className="btn-danger" onClick={() => setModal('cancel')}>Cancelar</Button>);
   return (
     <section>
@@ -391,17 +392,3 @@ function ReasonModal({ open, onClose, title, label, onSave, busy, danger }) {
   );
 }
 
-function ReturnModal({ open, onClose, c, onSave, busy }) {
-  const { data } = useApi(open ? '/process/definition' : null, [open], { live: false });
-  const [stage, setStage] = useState('');
-  const [reason, setReason] = useState('');
-  const prev = data ? data.order.slice(0, data.order.indexOf(c.stage)).filter((k) => !data.stages[k].final) : [];
-  return (
-    <Modal open={open} onClose={onClose} title="Devolver para etapa anterior" footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" disabled={busy || !stage || !reason.trim()} onClick={() => onSave({ stage, reason })}>Devolver</Button></>}>
-      <div className="col gap-4">
-        <Field label="Etapa"><select className="select" value={stage} onChange={(e) => setStage(e.target.value)}><option value="">Selecione…</option>{prev.map((k) => <option key={k} value={k}>{data.stages[k].label}</option>)}</select></Field>
-        <Field label="Motivo" hint="Fica registrado no histórico e o responsável da etapa recebe a tarefa."><textarea className="textarea" value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
-      </div>
-    </Modal>
-  );
-}

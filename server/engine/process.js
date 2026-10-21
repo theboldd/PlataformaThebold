@@ -59,6 +59,9 @@ export const DEFAULT_SETTINGS = {
   cc_roles: ['operacoes'],             // Vitória recebe cópia das etapas-chave
   agendamento_roles: ['gestao'],       // Vivian agenda
   followup_cliente_horas: [24, 48, 72],
+  // Etapas que só ABREM na data do marco do ciclo: o conteúdo pode chegar pronto antes, mas a tarefa operacional
+  // fica agendada (sem atraso, sem pendência, sem evento) até o início da janela. Ex.: revisão de produção abre dia 23.
+  janela_etapas: ['analise_cronograma', 'analise_producao'],
 };
 export function setting(key) {
   const r = one('SELECT value FROM settings WHERE key=?', key);
@@ -86,6 +89,18 @@ export function ensureCycle(clientId, month) {
   return c;
 }
 const endOfDayBR = (d) => new Date(`${d}T18:00:00-03:00`).toISOString();
+const startOfDayBR = (d) => new Date(`${d}T08:00:00-03:00`).toISOString();
+// Tarefas "vivas" = abertas + agendadas (as agendadas ainda não contam como trabalho de hoje, mas a etapa as reconhece)
+export const LIVE_TASK = "('aberta','em_andamento','agendada')";
+// Data em que a etapa abre para execução (início do marco do ciclo), quando ainda está no futuro e a etapa usa janela.
+export function stageOpensAt(content, stage) {
+  const def = STAGES[stage];
+  if (!def?.milestone || !content.cycle_id || !setting('janela_etapas').includes(stage)) return null;
+  const ms = parseJSON(one('SELECT milestones FROM cycles WHERE id=?', content.cycle_id)?.milestones, {})[def.milestone];
+  if (!ms) return null;
+  const at = startOfDayBR(ms.start);
+  return at > now() ? at : null;
+}
 
 // Prazo da etapa: marco do ciclo (se ainda no futuro) → senão SLA em dias úteis. Nunca depois da data de publicação.
 export function dueFor(content, stage) {
@@ -177,17 +192,24 @@ function enterStage(content, stage, actor, ctx = {}) {
   update('contents', { id: content.id }, { stage, stage_entered_at: ts, updated_at: ts });
   content = one('SELECT * FROM contents WHERE id=?', content.id);
   // Fecha tarefas de etapa abertas da etapa anterior (a ação já foi realizada)
-  run("UPDATE tasks SET status='cancelada', completed_at=? WHERE content_id=? AND kind IN ('etapa','aprovacao','agendamento') AND status IN ('aberta','em_andamento') AND stage<>?", ts, content.id, stage);
+  run(`UPDATE tasks SET status='cancelada', completed_at=? WHERE content_id=? AND kind IN ('etapa','aprovacao','agendamento') AND status IN ${LIVE_TASK} AND stage<>?`, ts, content.id, stage);
   if (!ctx.initial) {
     log({ actor: actor?.id, action: 'etapa.alterada', entity: 'content', id: content.id, client: content.client_id, content: content.id,
       summary: `#${content.number} ${STAGES[prev]?.label} → ${def.label}${ctx.reason ? ` (${ctx.reason})` : ''}`, before: prev, after: stage, origin: 'automatica',
       visibility: def.client ? 'client' : 'internal' });
   }
   const due = dueFor(content, stage);
+  // Pronto para a próxima etapa ≠ etapa disponível: se a janela da etapa ainda não abriu, a tarefa nasce AGENDADA
+  const opensAt = stageOpensAt(content, stage);
   const mk = (title, fn, kind = 'etapa', extra = {}) => {
     const assignee = fn === 'cliente' ? (clientUsers(content.client_id)[0] || null) : resolveAssignee(content.client_id, fn);
+    const scheduled = !!opensAt && kind === 'etapa' && fn !== 'cliente';
     const t = insert('tasks', { id: uid('t_'), title, client_id: content.client_id, content_id: content.id, stage, function: fn, assignee_id: assignee,
-      status: 'aberta', kind, origin: 'engine', priority: content.priority, due_at: due, created_by: actor?.id || null, created_at: ts, ...extra });
+      status: scheduled ? 'agendada' : 'aberta', available_at: scheduled ? opensAt : null, kind, origin: 'engine', priority: content.priority, due_at: due, created_by: actor?.id || null, created_at: ts, ...extra });
+    if (scheduled) {
+      automation('etapa.agendada', { entity: 'task', id: t.id, client: content.client_id, detail: `${title} — abre em ${opensAt.slice(0, 10)}` });
+      return t; // sem aviso de tarefa agora: quem recebe é avisado quando a etapa abrir
+    }
     automation('tarefa.atribuida', { entity: 'task', id: t.id, client: content.client_id, detail: `${title} → ${userName(assignee) || 'SEM RESPONSÁVEL'}` });
     if (!assignee) {
       notify(ccUsers(), { level: 'urgente', type: 'sem_responsavel', title: `Tarefa sem responsável: ${title}`, body: `#${content.number} ${content.title} — função “${fn}” sem pessoa vinculada ao cliente.`, link: `/conteudos/${content.id}`, client: content.client_id, content: content.id });
@@ -206,7 +228,11 @@ function enterStage(content, stage, actor, ctx = {}) {
       if (stage !== 'analise_cronograma') lockVersion(v?.id, 'em_revisao');
       if (v && stage !== 'analise_cronograma') insert('reviews', { id: uid('r_'), content_id: content.id, version_id: v.id, kind: stage === 'revisao_ajuste' ? 'ajuste_cliente' : content.revision_rounds > 0 ? 'ajuste_interno' : 'producao', status: 'pendente', created_at: ts });
       const t = mk(`${def.action} — ${content.title}`, def.fn);
-      if (stage !== 'revisao_ajuste') notify(reviewersFor(content.client_id).filter((id) => id !== t.assignee_id), { level: 'info', type: 'revisao', title: 'Conteúdos aguardando revisão', body: `${clientName}: #${content.number} ${content.title}`, link: '/revisao', groupKey: `revisao:${content.client_id}`, client: content.client_id });
+      if (t.status === 'agendada') {
+        // Aviso antecipado (sem tarefa, sem atraso): "X conteúdos prontos para revisão a partir de DD/MM"
+        const day = new Date(opensAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' });
+        notify([...new Set([...reviewersFor(content.client_id), ...ccUsers()])], { level: 'info', type: 'pronto_para_etapa', title: `Prontos para ${def.label.toLowerCase()} a partir de ${day}`, body: `${clientName}: #${content.number} ${content.title}`, link: '/revisao', groupKey: `pronto:${content.client_id}:${stage}:${opensAt.slice(0, 10)}`, client: content.client_id });
+      } else if (stage !== 'revisao_ajuste') notify(reviewersFor(content.client_id).filter((id) => id !== t.assignee_id), { level: 'info', type: 'revisao', title: 'Conteúdos aguardando revisão', body: `${clientName}: #${content.number} ${content.title}`, link: '/revisao', groupKey: `revisao:${content.client_id}`, client: content.client_id });
       break;
     }
     case 'aprovacao_tema': case 'aprovacao_cliente': {
@@ -291,7 +317,7 @@ export function completeTask(taskId, actor, meta = {}) {
       run("UPDATE adjustments SET status='concluido', done_at=?, resolved_version_id=? WHERE task_id=?", now(), c?.current_version_id, t.id);
     }
     if (!c) return { task: t };
-    const pending = one("SELECT COUNT(*) n FROM tasks WHERE content_id=? AND stage=? AND kind IN ('etapa','ajuste') AND status IN ('aberta','em_andamento')", c.id, c.stage).n;
+    const pending = one(`SELECT COUNT(*) n FROM tasks WHERE content_id=? AND stage=? AND kind IN ('etapa','ajuste') AND status IN ${LIVE_TASK}`, c.id, c.stage).n;
     if (pending === 0) advance(c, actor, meta);
     return { task: t, content: one('SELECT * FROM contents WHERE id=?', c.id) };
   });
@@ -362,7 +388,7 @@ export function reviewDecision(contentId, actor, { decision, note, adjustments =
     const v = currentVersion(c.id);
     const review = one("SELECT * FROM reviews WHERE content_id=? AND status='pendente' ORDER BY created_at DESC LIMIT 1", c.id);
     if (review) update('reviews', { id: review.id }, { status: decision === 'aprovar' ? 'aprovada' : 'ajuste', reviewer_id: actor.id, note, decided_at: now() });
-    run("UPDATE tasks SET status='concluida', completed_at=?, completed_by=? WHERE content_id=? AND stage=? AND kind='etapa' AND status IN ('aberta','em_andamento')", now(), actor.id, c.id, c.stage);
+    run(`UPDATE tasks SET status='concluida', completed_at=?, completed_by=? WHERE content_id=? AND stage=? AND kind='etapa' AND status IN ${LIVE_TASK}`, now(), actor.id, c.id, c.stage);
     insert('approvals', { id: uid('ap_'), content_id: c.id, version_id: v?.id || null, kind: c.stage === 'analise_cronograma' ? 'tema' : 'interna', decision: decision === 'aprovar' ? 'aprovado' : 'ajuste', user_id: actor.id, note, ip: req?.ip, user_agent: req?.headers?.['user-agent']?.slice(0, 200), created_at: now() });
     log({ actor: actor.id, action: decision === 'aprovar' ? 'revisao.aprovada' : 'revisao.ajuste', entity: 'content', id: c.id, client: c.client_id, content: c.id, summary: `${STAGES[c.stage].label}: ${decision === 'aprovar' ? 'aprovado' : 'ajuste solicitado'}${v ? ` (V${v.number})` : ''}${note ? ` — “${note}”` : ''}` });
     if (decision === 'aprovar') {
@@ -502,7 +528,7 @@ export function cancelContent(contentId, actor, reason) {
   return tx(() => {
     const c = getContent(contentId);
     if (!can(actor, 'conteudos', 'approve')) throw new HttpError(403, 'Sem permissão para cancelar.');
-    run("UPDATE tasks SET status='cancelada', completed_at=? WHERE content_id=? AND status IN ('aberta','em_andamento')", now(), c.id);
+    run(`UPDATE tasks SET status='cancelada', completed_at=? WHERE content_id=? AND status IN ${LIVE_TASK}`, now(), c.id);
     log({ actor: actor.id, action: 'conteudo.cancelado', entity: 'content', id: c.id, client: c.client_id, content: c.id, summary: `Cancelado: ${reason || 'sem motivo informado'}` });
     return enterStage(c, 'cancelado', actor, { reason: reason || 'cancelado' });
   });
@@ -519,12 +545,71 @@ export function returnToStage(contentId, actor, stage, reason) {
   });
 }
 
+// ── Movimento manual de etapa ────────────────────────────
+// Toda a equipe vê; quem pode editar processos move. O sistema não assume que mover é erro: classifica,
+// mostra o impacto antes, pede motivo quando o movimento é relevante e avisa quem precisa saber.
+export const MOVE_KINDS = { normal: 'Movimento normal', manual: 'Avanço manual', retorno: 'Retorno', reabertura: 'Reabertura', correcao: 'Correção', excecao: 'Exceção', bloqueio: 'Bloqueio' };
+const FLOW = ['cronograma', 'analise_cronograma', 'aprovacao_tema', 'producao', 'analise_producao', 'aprovacao_cliente', 'agendamento'];
+const fmtDia = (iso) => new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' });
+const liveAssignees = (contentId) => all(`SELECT DISTINCT u.name FROM tasks t JOIN users u ON u.id=t.assignee_id WHERE t.content_id=? AND t.status IN ${LIVE_TASK}`, contentId).map((r) => r.name);
+
+export function movePreview(c, to, chosenKind) {
+  if (!STAGES[to] || to === 'cancelado') throw new HttpError(422, 'Etapa inválida (para cancelar, use “Cancelar”).');
+  if (to === c.stage) throw new HttpError(422, 'O conteúdo já está nesta etapa.');
+  const iFrom = STAGE_ORDER.indexOf(c.stage), iTo = STAGE_ORDER.indexOf(to);
+  const auto = STAGES[c.stage].final ? 'reabertura' : iTo < iFrom ? 'retorno' : iTo === iFrom + 1 ? 'manual' : 'excecao';
+  const kind = ['correcao', 'excecao'].includes(chosenKind) ? chosenKind : auto;
+  const impacts = [];
+  // prazo de publicação: caminho mínimo da etapa de destino até o agendamento (SLA em dias úteis)
+  if (c.planned_at && iTo < STAGE_ORDER.indexOf('agendado')) {
+    const startIdx = FLOW.indexOf(to) >= 0 ? FLOW.indexOf(to) : FLOW.findIndex((k) => STAGE_ORDER.indexOf(k) > iTo);
+    const days = (FLOW.includes(to) ? 0 : STAGES[to].sla || 0) + FLOW.slice(Math.max(startIdx, 0)).reduce((n, k) => n + (STAGES[k].sla || 0), 0);
+    const ready = businessDaysFrom(new Date(now()), days);
+    if (ready.toISOString() > c.planned_at) impacts.push({ type: 'prazo', level: 'alto', text: `Publicação de ${fmtDia(c.planned_at)} em risco: daqui até o agendamento são ~${days} dias úteis de etapas.` });
+  }
+  if (c.approved_version_id && iTo < STAGE_ORDER.indexOf('aprovacao_cliente')) impacts.push({ type: 'aprovacao', level: 'medio', text: 'O cliente já tinha aprovado: a aprovação precisará ser feita de novo.' });
+  if (c.scheduled_at && iTo < STAGE_ORDER.indexOf('agendado')) impacts.push({ type: 'agendamento', level: 'alto', text: `Havia agendamento para ${fmtDia(c.scheduled_at)}: confira e desfaça na ferramenta de publicação, se for o caso.` });
+  const opens = stageOpensAt(c, to);
+  if (opens) impacts.push({ type: 'janela', level: 'info', text: `A etapa só abre em ${fmtDia(opens)}: a tarefa fica agendada até lá (sem atraso).` });
+  if (c.blocked) impacts.push({ type: 'bloqueio', level: 'medio', text: `Continua bloqueado: ${c.block_reason}.` });
+  const openAdj = one("SELECT COUNT(*) n FROM adjustments WHERE content_id=? AND status='aberto'", c.id).n;
+  if (openAdj) impacts.push({ type: 'ajustes', level: 'info', text: `${openAdj} ajuste(s) em aberto continuam valendo.` });
+  return { from: c.stage, from_label: STAGES[c.stage].label, to, to_label: STAGES[to].label, kind, kind_label: MOVE_KINDS[kind], auto_kind: auto,
+    reason_required: kind !== 'manual', impacts, prev_assignees: liveAssignees(c.id) };
+}
+
+export function moveContent(contentId, actor, { to, reason, kind }) {
+  if (!can(actor, 'processos', 'edit')) throw new HttpError(403, 'Sem permissão para mover etapas.');
+  return tx(() => {
+    const c = getContent(contentId);
+    const pv = movePreview(c, to, kind);
+    const why = String(reason || '').trim();
+    if (pv.reason_required && !why) throw new HttpError(422, `${pv.kind_label}: informe o motivo do movimento.`);
+    const prevIds = all(`SELECT DISTINCT assignee_id FROM tasks WHERE content_id=? AND status IN ${LIVE_TASK} AND assignee_id IS NOT NULL`, c.id).map((r) => r.assignee_id);
+    enterStage(c, to, actor, { reason: `${pv.kind_label.toLowerCase()}${why ? `: ${why}` : ''}` });
+    const newIds = all(`SELECT DISTINCT assignee_id FROM tasks WHERE content_id=? AND status IN ${LIVE_TASK} AND assignee_id IS NOT NULL`, c.id).map((r) => r.assignee_id);
+    insert('stage_moves', { id: uid('sm_'), content_id: c.id, client_id: c.client_id, from_stage: c.stage, to_stage: to, kind: pv.kind, reason: why || null, actor_id: actor.id,
+      prev_assignees: JSON.stringify(prevIds), new_assignees: JSON.stringify(newIds), impacts: JSON.stringify(pv.impacts), created_at: now() });
+    automation('etapa.movida_manual', { entity: 'content', id: c.id, client: c.client_id, detail: `${pv.kind}: ${c.stage} → ${to}` });
+    log({ actor: actor.id, action: 'etapa.movida', entity: 'content', id: c.id, client: c.client_id, content: c.id,
+      summary: `#${c.number} ${pv.kind_label}: ${pv.from_label} → ${pv.to_label}${why ? ` — ${why}` : ''}`, before: c.stage, after: to });
+    // quem precisa saber: quem estava com o conteúdo, quem passa a estar, e Operações se houver impacto
+    const body = `#${c.number} ${c.title} · ${pv.from_label} → ${pv.to_label}${why ? ` · ${why}` : ''}`;
+    const touched = [...new Set([...prevIds, ...newIds])].filter((id) => id !== actor.id);
+    if (touched.length) notify(touched, { level: pv.kind === 'manual' ? 'info' : 'atencao', type: 'etapa_movida', title: `${pv.kind_label} por ${actor.name}`, body, link: `/conteudos/${c.id}`, client: c.client_id, content: c.id });
+    if (pv.impacts.some((i) => i.level === 'alto')) notify(ccUsers().filter((id) => id !== actor.id), { level: 'atencao', type: 'etapa_movida', title: `Movimento com impacto: ${pv.impacts.filter((i) => i.level === 'alto').map((i) => i.type).join(', ')}`, body, link: `/conteudos/${c.id}`, client: c.client_id, content: c.id });
+    return { ...pv, ok: true };
+  });
+}
+
 // O que a etapa atual espera, de quem, e qual a próxima ação — usado em toda a interface.
 export function nextAction(c) {
   const def = STAGES[c.stage];
   if (c.blocked) return { who: c.waiting_on, text: `Destravar: ${c.block_reason}` };
   const open = all("SELECT t.title, t.assignee_id, u.name FROM tasks t LEFT JOIN users u ON u.id=t.assignee_id WHERE t.content_id=? AND t.status IN ('aberta','em_andamento')", c.id);
   if (def.final) return { who: null, text: def.label };
+  const sched = !open.length && one("SELECT t.available_at, u.name FROM tasks t LEFT JOIN users u ON u.id=t.assignee_id WHERE t.content_id=? AND t.status='agendada' ORDER BY t.available_at LIMIT 1", c.id);
+  if (sched) return { who: sched.name || null, text: `Pronto para ${def.label.toLowerCase()} — a etapa abre em ${new Date(sched.available_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' })}`, opens_at: sched.available_at };
   if (!open.length) return { who: null, text: def.action };
   const names = [...new Set(open.map((o) => o.name || 'SEM RESPONSÁVEL'))];
   return { who: names.join(', '), text: def.action, unassigned: open.some((o) => !o.assignee_id) };

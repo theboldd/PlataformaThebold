@@ -5,7 +5,7 @@ import { requireInternal, requirePerm } from '../lib/auth.js';
 import { can, canAccessClient, assertClient, assertCan, scopeSQL, clientScope, HttpError, PENDENCIAS_ROLES, roleOf } from '../lib/permissions.js';
 import { log, notify, parseMentions, recordMentions, userName, businessDaysFrom } from '../lib/core.js';
 import { STAGES, LANES, STAGE_ORDER, publicStatus, productionTracks, createContent, completeTask, reviewDecision, clientDecision, schedule, confirmPublished,
-  blockContent, unblockContent, cancelContent, returnToStage, nextAction, contentRisk, editableVersion, currentVersion, versionMedia, resolveAssignee, ensureCycle, setting, DEFAULT_SETTINGS, buildMilestones } from '../engine/process.js';
+  blockContent, unblockContent, cancelContent, returnToStage, movePreview, moveContent, MOVE_KINDS, nextAction, contentRisk, editableVersion, currentVersion, versionMedia, resolveAssignee, ensureCycle, setting, DEFAULT_SETTINGS, buildMilestones } from '../engine/process.js';
 import { automation, automationStats } from '../engine/automations.js';
 import { computePendencies, clientSummary, clientRisk, runDetectors, opsMetrics, stageDistribution, teamLoad, OPERATING } from '../engine/intelligence.js';
 import { executiveOverview } from '../engine/executive.js';
@@ -208,7 +208,8 @@ export function contentCard(c, user = null) {
   const v = currentVersion(c.id);
   const thumb = v ? versionMedia(v.id)[0] : null;
   const risk = contentRisk(c);
-  return { id: c.id, number: c.number, title: c.title, format: c.format, client_id: c.client_id, client: cl?.name, client_color: cl?.color, stage: c.stage, stage_label: STAGES[c.stage].label, lane: STAGES[c.stage].lane,
+  const opens = !owner ? one("SELECT available_at FROM tasks WHERE content_id=? AND status='agendada' ORDER BY available_at LIMIT 1", c.id)?.available_at || null : null;
+  return { opens_at: opens, id: c.id, number: c.number, title: c.title, format: c.format, client_id: c.client_id, client: cl?.name, client_color: cl?.color, stage: c.stage, stage_label: STAGES[c.stage].label, lane: STAGES[c.stage].lane,
     priority: c.priority, planned_at: c.planned_at, blocked: !!c.blocked, block_reason: c.block_reason, waiting_on: c.waiting_on, owner: owner?.name || (owner ? 'SEM RESPONSÁVEL' : null), owner_id: owner?.assignee_id,
     due_at: owner?.due_at, hours_in_stage: hoursSince(c.stage_entered_at), risk: risk.level, risk_reasons: risk.reasons, version: v?.number || null, thumb: thumb ? fileDTO(thumb).urls.thumb : null,
     restricted: user ? !canAccessClient(user, c.client_id) : false, rounds: c.revision_rounds + c.client_adjust_rounds, month: c.cycle_month || c.planned_at?.slice(0, 7) || null,
@@ -249,7 +250,7 @@ ops.get('/contents/:id', requirePerm('conteudos', 'view'), (req, res) => {
     comments: all('SELECT cm.*, u.name author_name, u.role_key author_role, v.number version_number FROM comments cm JOIN users u ON u.id=cm.author_id LEFT JOIN content_versions v ON v.id=cm.version_id WHERE cm.content_id=? ORDER BY cm.created_at', c.id).map((x) => ({ ...x, anchor: parseJSON(x.anchor) })),
     history: all('SELECT l.*, u.name actor_name FROM activity_logs l LEFT JOIN users u ON u.id=l.actor_id WHERE l.content_id=? ORDER BY l.created_at DESC', c.id),
     tracks: productionTracks(c.format),
-    permissions: { edit: can(req.user, 'conteudos', 'edit'), approve: can(req.user, 'conteudos', 'approve'), review: can(req.user, 'revisao', 'approve'), admin: can(req.user, 'conteudos', 'admin') },
+    permissions: { move: can(req.user, 'processos', 'edit'), edit: can(req.user, 'conteudos', 'edit'), approve: can(req.user, 'conteudos', 'approve'), review: can(req.user, 'revisao', 'approve'), admin: can(req.user, 'conteudos', 'admin') },
     meta_connected: integrationStatus('meta').status === 'conectado',
   });
 });
@@ -341,6 +342,24 @@ ops.post('/contents/:id/material', requirePerm('conteudos', 'edit'), (req, res) 
 ops.post('/contents/:id/unblock', requirePerm('conteudos', 'edit'), (req, res) => { unblockContent(req.params.id, req.user, req.body?.note); res.json({ ok: true }); });
 ops.post('/contents/:id/cancel', (req, res) => res.json(cancelContent(req.params.id, req.user, req.body?.reason)));
 ops.post('/contents/:id/return', (req, res) => res.json(returnToStage(req.params.id, req.user, req.body?.stage, req.body?.reason)));
+// Mover etapa manualmente: prévia do impacto (antes de confirmar) e o movimento registrado
+ops.get('/contents/:id/move-preview', requirePerm('processos', 'view'), (req, res) => {
+  const c = getContentOr404(req.params.id);
+  assertClient(req.user, c.client_id);
+  res.json({ ...movePreview(c, String(req.query.to || ''), req.query.kind), can_move: can(req.user, 'processos', 'edit') });
+});
+ops.post('/contents/:id/move', requirePerm('processos', 'edit'), (req, res) => {
+  const c = getContentOr404(req.params.id);
+  assertClient(req.user, c.client_id);
+  res.json(moveContent(c.id, req.user, { to: req.body?.to, reason: req.body?.reason, kind: req.body?.kind }));
+});
+ops.get('/contents/:id/moves', requirePerm('processos', 'view'), (req, res) => {
+  const c = getContentOr404(req.params.id);
+  assertClient(req.user, c.client_id);
+  res.json(all('SELECT m.*, u.name actor FROM stage_moves m LEFT JOIN users u ON u.id=m.actor_id WHERE m.content_id=? ORDER BY m.created_at DESC', c.id)
+    .map((m) => ({ ...m, kind_label: MOVE_KINDS[m.kind] || m.kind, from_label: STAGES[m.from_stage]?.label, to_label: STAGES[m.to_stage]?.label, impacts: parseJSON(m.impacts, []),
+      prev: parseJSON(m.prev_assignees, []).map(userName), next: parseJSON(m.new_assignees, []).map(userName) })));
+});
 ops.post('/contents/:id/duplicate', requirePerm('conteudos', 'create'), (req, res) => {
   const c = getContentOr404(req.params.id);
   assertClient(req.user, c.client_id);

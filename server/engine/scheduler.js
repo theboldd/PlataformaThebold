@@ -2,7 +2,7 @@
 // Idempotente: cada disparo é registrado em automation_runs e não se repete para o mesmo marcador.
 import { one, all, insert, update, run, uid, now } from '../db.js';
 import { notify, log } from '../lib/core.js';
-import { STAGES, resolveAssignee, clientUsers, setting } from './process.js';
+import { STAGES, resolveAssignee, clientUsers, setting, stageOpensAt } from './process.js';
 import { automation, isEnabled, onceFor } from './automations.js';
 import { runDetectors } from './intelligence.js';
 import { publishDueContent } from '../integrations/meta.js';
@@ -11,7 +11,35 @@ import { generateReport } from '../services/reports.js';
 const H = 3600e3;
 const cc = () => all("SELECT id FROM users WHERE active=1 AND role_key IN ('operacoes','ceo')").map((r) => r.id);
 
+// Etapas que abriram hoje: tarefa agendada vira tarefa de verdade (com aviso a quem executa)
+export function activateScheduledTasks() {
+  const due = all("SELECT t.*, c.number, c.title ctitle, cl.name client FROM tasks t LEFT JOIN contents c ON c.id=t.content_id LEFT JOIN clients cl ON cl.id=t.client_id WHERE t.status='agendada' AND t.available_at <= ?", now());
+  for (const k of due) {
+    update('tasks', { id: k.id }, { status: 'aberta' });
+    automation('etapa.disponivel', { entity: 'task', id: k.id, client: k.client_id, detail: `${k.title} — disponível desde ${k.available_at.slice(0, 10)}` });
+    if (k.assignee_id) notify(k.assignee_id, { level: 'info', type: 'tarefa', title: `Disponível hoje: ${STAGES[k.stage]?.label || 'etapa'}`, body: `${k.client}: #${k.number} ${k.ctitle}`, link: k.content_id ? `/conteudos/${k.content_id}` : '/', groupKey: `abriu:${k.assignee_id}:${k.stage}:${k.available_at.slice(0, 10)}`, client: k.client_id, content: k.content_id });
+    else notify(cc(), { level: 'urgente', type: 'sem_responsavel', title: `Etapa abriu sem responsável: ${k.title}`, body: `${k.client}: #${k.number} ${k.ctitle}`, link: k.content_id ? `/conteudos/${k.content_id}` : '/pendencias', client: k.client_id, content: k.content_id });
+    log({ kind: 'sistema', action: 'etapa.disponivel', entity: 'task', id: k.id, client: k.client_id, content: k.content_id, summary: `Etapa disponível para execução: ${k.title}` });
+  }
+  return due.length;
+}
+
+// Ajuste único: tarefas criadas antes da regra de janela, em etapas que ainda não abriram, passam a agendadas
+export function reconcileStageWindows() {
+  if (one("SELECT 1 FROM settings WHERE key='janela_reconciliada'")) return 0;
+  let n = 0;
+  for (const t of all(`SELECT t.id, t.stage, t.content_id FROM tasks t WHERE t.status='aberta' AND t.kind='etapa' AND t.started_at IS NULL AND t.stage IN (${setting('janela_etapas').map(() => '?').join(',') || "''"})`, ...setting('janela_etapas'))) {
+    const c = one('SELECT * FROM contents WHERE id=?', t.content_id);
+    const at = c && stageOpensAt(c, t.stage);
+    if (at) { update('tasks', { id: t.id }, { status: 'agendada', available_at: at }); n++; }
+  }
+  run('INSERT INTO settings (key,value,updated_at) VALUES (?,?,?)', 'janela_reconciliada', JSON.stringify(n), now());
+  if (n) log({ kind: 'sistema', action: 'etapa.janela_aplicada', entity: 'sistema', summary: `${n} tarefa(s) de etapas que ainda não abriram passaram para "agendada" (regra: pronto ≠ disponível)` });
+  return n;
+}
+
 export function tick() {
+  activateScheduledTasks();
   const t = Date.now();
   const nowIso = now();
   // Prazo próximo (< 24h) e vencido
