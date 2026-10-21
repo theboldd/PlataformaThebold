@@ -100,13 +100,52 @@ export function clientSummary(client) {
   const counts = one(`SELECT COUNT(*) total, SUM(stage IN ('aprovacao_tema','aprovacao_cliente')) aguardando_cliente, SUM(stage IN ('producao','ajuste_interno','ajuste_cliente')) em_producao,
     SUM(stage='publicado') publicados,
     SUM(stage IN ('cronograma','analise_cronograma','ajuste_cronograma')) rascunho, SUM(stage IN ('producao','analise_producao')) producao,
-    SUM(stage IN ('ajuste_interno','ajuste_cliente','revisao_ajuste')) ajuste, SUM(stage IN ('agendamento','agendado','publicado')) aprovados,
+    SUM(stage IN ('ajuste_interno','ajuste_cliente','revisao_ajuste')) ajuste, SUM(approved_version_id IS NOT NULL AND stage IN ('agendamento','agendado','publicado')) aprovados, SUM(approved_version_id IS NULL AND stage IN ('agendamento','agendado','publicado')) sem_registro_aprovacao,
     SUM(stage IN ('analise_cronograma','analise_producao','revisao_ajuste')) em_revisao
     FROM contents WHERE client_id=? AND stage<>'cancelado'`, client.id);
   for (const k of Object.keys(counts)) counts[k] = counts[k] || 0;
   const strategist = one("SELECT u.name FROM client_members cm JOIN users u ON u.id=cm.user_id WHERE cm.client_id=? AND cm.function='estrategia' LIMIT 1", client.id)?.name;
   return { ...client, services: parseJSON(client.services, []), risk, counts, strategist,
     next: nextC ? { content: `#${nextC.number} ${nextC.title}`, content_id: nextC.id, stage: STAGES[nextC.stage].label, ...nextAction(nextC) } : null };
+}
+
+// ── CAUSA RAIZ: separa FATO (medido) · PADRÃO OBSERVADO (calculado agora, com amostra) · HIPÓTESE (não verificada) · RECOMENDAÇÃO.
+// Correlação nunca vira causa: a hipótese é sempre rotulada como tal e nunca aponta uma pessoa ou um cliente como causa.
+const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+export function explain(i) {
+  const nowIso = now();
+  let pattern = null;
+  if (i.detector === 'gargalo') {
+    const st = i.fingerprint.split(':')[1];
+    const rows = all(`SELECT c.name, COUNT(*) n FROM tasks t LEFT JOIN clients c ON c.id=t.client_id WHERE t.status IN ('aberta','em_andamento') AND t.due_at < ? AND t.stage=? AND ${PERF_SQL.equipe('t')} GROUP BY c.name ORDER BY n DESC`, nowIso, st);
+    const tot = rows.reduce((s, r) => s + r.n, 0);
+    if (tot) pattern = `As ${tot} tarefas atrasadas desta etapa estão em ${rows.length} cliente(s); a maior parte (${pct(rows[0].n, tot)}%) em um só. Isso descreve onde está, não por quê.`;
+  } else if (i.detector === 'carga') {
+    const uid = i.fingerprint.split(':')[1];
+    const r = one(`SELECT COUNT(*) n, SUM(perf_status IS NOT NULL) herdadas, SUM(due_at < ?) vencidas, COUNT(DISTINCT client_id) clientes FROM tasks WHERE assignee_id=? AND status IN ('aberta','em_andamento')`, nowIso, uid);
+    const op = one("SELECT COUNT(*) n FROM tasks WHERE status IN ('aberta','em_andamento') AND perf_status IS NULL AND function<>'cliente'").n;
+    pattern = `${pct(i.metric, op)}% das tarefas abertas da operação (nascidas na plataforma) estão com esta pessoa, em ${r.clientes} cliente(s).${r.herdadas ? ` Além delas, ${r.herdadas} tarefa(s) herdada(s) da migração — fora desta conta.` : ''}`;
+  } else if (i.detector === 'material') {
+    const r = one("SELECT COUNT(DISTINCT client_id) cl, MIN(updated_at) since FROM contents WHERE blocked=1 AND waiting_on='cliente' AND stage NOT IN ('publicado','cancelado')");
+    pattern = `Distribuído em ${r.cl} cliente(s); o pedido mais antigo está parado desde ${r.since ? new Date(r.since).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—'}.`;
+  } else if (i.detector === 'tempo_aprovacao') {
+    const n = one("SELECT COUNT(*) n FROM approvals WHERE kind IN ('cliente','tema') AND created_at > ?", new Date(Date.now() - 60 * 864e5).toISOString()).n;
+    pattern = `Média calculada sobre ${n} aprovação(ões) dos últimos 60 dias.`;
+  } else if (i.detector === 'retrabalho') {
+    const cid = i.fingerprint.split(':')[1];
+    const r = one("SELECT SUM(origin='cliente') cli, SUM(origin='interno') itn FROM adjustments WHERE content_id=?", cid);
+    pattern = `Pedidos de ajuste deste conteúdo: ${r.cli || 0} do cliente e ${r.itn || 0} internos.`;
+  } else if (i.detector === 'dependencia') {
+    pattern = `Medido sobre as intervenções manuais registradas nos últimos 30 dias.`;
+  }
+  const hyp = i.cause && i.cause !== 'Dentro do esperado.' ? i.cause : null;
+  return {
+    fact: i.problem,
+    pattern,
+    hypothesis: hyp ? { text: hyp, verified: false } : null,
+    recommendation: i.suggestion || null,
+    impact: i.impact || null,
+  };
 }
 
 // ── Detectores de gargalo e padrões → AIInsights (PROBLEMA → CAUSA → IMPACTO → SUGESTÃO → AÇÃO) ──
@@ -143,9 +182,10 @@ export function runDetectors() {
       suggestion: avg > 2 ? 'Ativar régua de cobrança automática no portal e reduzir o lote enviado por vez.' : 'Manter régua atual.', action: 'Ver automações', action_payload: JSON.stringify({ link: '/automacoes' }) });
   }
   // 4. Sobrecarga por pessoa (tarefas abertas vs. capacidade semanal)
-  for (const u of all(`SELECT u.id, u.name, u.capacity, COUNT(t.id) n FROM users u JOIN tasks t ON t.assignee_id=u.id AND t.status IN ('aberta','em_andamento') AND t.function<>'cliente'
+  // Só eventos operacionais reais: tarefa herdada da migração não vira alerta sobre a pessoa (regras 12, 13 e Bloco 5)
+  for (const u of all(`SELECT u.id, u.name, u.capacity, COUNT(t.id) n FROM users u JOIN tasks t ON t.assignee_id=u.id AND t.status IN ('aberta','em_andamento') AND t.function<>'cliente' AND t.perf_status IS NULL
     WHERE u.role_key<>'cliente' GROUP BY u.id HAVING n > u.capacity`)) {
-    put(`carga:${u.id}`, { detector: 'carga', severity: u.n > u.capacity * 1.5 ? 'alta' : 'media', metric: u.n, problem: `${u.name} está com ${u.n} tarefas abertas (capacidade ${u.capacity}/semana).`,
+    put(`carga:${u.id}`, { detector: 'carga', severity: u.n > u.capacity * 1.5 ? 'alta' : 'media', metric: u.n, problem: `${u.name} está com ${u.n} tarefas abertas nascidas na plataforma (capacidade configurada: ${u.capacity}/semana).`,
       cause: 'Atribuição por função concentra clientes na mesma pessoa.', impact: 'Risco de atraso em cadeia e queda de qualidade.', suggestion: 'Vincular outra pessoa da mesma função a parte dos clientes.', action: 'Ver pessoas', action_payload: JSON.stringify({ link: '/torre?tab=pessoas' }) });
   }
   // 5. Produção esperando material do cliente
@@ -178,7 +218,7 @@ export function opsMetrics(user) {
   const nowIso = now();
   const today = new Date(); today.setHours(23, 59, 59, 999);
   return {
-    clientes_ativos: one(`SELECT COUNT(*) n FROM clients WHERE status IN (${OP_SQL}) AND ${scopeSQL(user, 'id').sql}`, ...scopeSQL(user, 'id').params).n,
+    clientes_ativos: one(`SELECT COUNT(*) n FROM clients WHERE status IN (${OP_SQL}) AND kind<>'interno' AND ${scopeSQL(user, 'id').sql}`, ...scopeSQL(user, 'id').params).n,
     em_producao: q("SELECT COUNT(*) n FROM contents WHERE {S} AND stage IN ('producao','analise_producao','ajuste_interno','ajuste_cliente','revisao_ajuste')").n,
     aguardando_cliente: q("SELECT COUNT(*) n FROM contents WHERE {S} AND stage IN ('aprovacao_tema','aprovacao_cliente')").n,
     em_revisao: q("SELECT COUNT(*) n FROM contents WHERE {S} AND stage IN ('analise_cronograma','analise_producao','revisao_ajuste')").n,

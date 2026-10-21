@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import fs from 'node:fs';
 import { db, one, run, insert, uid } from './db.js';
+import { log } from './lib/core.js';
 import { loadUser, csrf } from './lib/auth.js';
 import { ROLE_DEFS, HttpError, can } from './lib/permissions.js';
 import { runJob, lastRuns } from './engine/jobs.js';
@@ -18,10 +19,23 @@ import { ficha } from './routes/ficha.js';
 import { pendencias } from './routes/pendencias.js';
 import { divisao } from './routes/divisao.js';
 import { atrasos } from './routes/atrasos.js';
+import { editorial } from './routes/editorial.js';
 import { markMigratedTasks, syncDelayReviews } from './services/delayReview.js';
 import { review } from './routes/review.js';
 import { clientOps } from './routes/client-ops.js';
 import { reconcileMigratedForms } from './services/onboarding.js';
+
+// Regra oficial 16: a própria The Bold fica na base como CLIENTE INTERNO (decisão da CEO, aplicada uma vez e registrada)
+function classifyInternalClient() {
+  if (one("SELECT 1 FROM settings WHERE key='cliente_interno_aplicado'")) return;
+  const c = one("SELECT id, name, kind FROM clients WHERE upper(trim(name))='THE BOLD'");
+  if (c && c.kind !== 'interno') {
+    run("UPDATE clients SET kind='interno' WHERE id=?", c.id);
+    log({ kind: 'sistema', action: 'cliente.classificado_interno', entity: 'client', id: c.id, client: c.id, origin: 'automatica', before: c.kind, after: 'interno',
+      summary: 'THE BOLD classificada como CLIENTE INTERNO (decisão da CEO, regra oficial 16): fica fora das métricas de carteira, comerciais e de clientes externos' });
+  }
+  run('INSERT INTO settings (key,value,updated_at) VALUES (?,?,?)', 'cliente_interno_aplicado', JSON.stringify(c?.id || null), new Date().toISOString());
+}
 
 export function bootstrap() {
   for (const r of ROLE_DEFS) {
@@ -50,6 +64,7 @@ export function bootstrap() {
   reconcileStageWindows(); // regra pronto ≠ disponível aplicada às tarefas que já existiam
   reconcileMigratedForms(); // onboarding migrado parcial não fica como "concluído"
   activateScheduledTasks();
+  classifyInternalClient();
   markMigratedTasks(); // tarefas herdadas da migração ficam fora da performance até serem classificadas
   syncDelayReviews();
 }
@@ -94,6 +109,7 @@ export function createApp() {
   app.use('/api', divisao);
   app.use('/api', clientOps);
   app.use('/api', atrasos);
+  app.use('/api', editorial);
   app.use('/api', ops);
   app.use('/api', business);
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'Rota não encontrada.')));

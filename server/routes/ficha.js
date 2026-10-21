@@ -3,10 +3,10 @@
 import { Router } from 'express';
 import { one, all, insert, update, uid, now, parseJSON } from '../db.js';
 import { requireInternal, requirePerm } from '../lib/auth.js';
-import { assertClient, can, HttpError } from '../lib/permissions.js';
+import { assertClient, can, scopeSQL, HttpError } from '../lib/permissions.js';
 import { log } from '../lib/core.js';
 import { open } from '../integrations/vault.js';
-import { activeForm, formStatus } from '../services/onboarding.js';
+import { activeForm, formStatus, onboardingCard } from '../services/onboarding.js';
 import { BRAIN_SECTIONS } from '../ai/memory.js';
 
 export const ficha = Router();
@@ -81,4 +81,15 @@ ficha.patch('/migration-issues/:id', requireInternal, requirePerm('clientes', 'e
   update('migration_issues', { id: i.id }, { status });
   log({ actor: req.user.id, action: 'migracao.revisao', entity: 'client', id: i.client_id, client: i.client_id, summary: `Ponto de migração marcado como ${status}: ${i.description.slice(0, 90)}`, before: i.status, after: status });
   res.json({ ok: true });
+});
+
+// Cards de onboarding: um por cliente (escopo da pessoa), com o formulário por seção e a origem das respostas
+ficha.get('/onboarding/cards', requireInternal, requirePerm('clientes', 'view'), (req, res) => {
+  const sc = scopeSQL(req.user, 'id');
+  const clients = all(`SELECT id, name, status, notion_url FROM clients WHERE status<>'encerrado' AND ${sc.sql} ORDER BY name`, ...sc.params);
+  res.json(clients.map((c) => ({ client: c, ...onboardingCard(c.id) })));
+});
+ficha.get('/clients/:id/onboarding-card', requireInternal, requirePerm('clientes', 'view'), (req, res) => {
+  assertClient(req.user, req.params.id);
+  res.json(onboardingCard(req.params.id));
 });

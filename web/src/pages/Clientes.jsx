@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { useApi, useAuth, useToast } from '../lib/hooks.js';
 import { useCrumbs } from '../components/Shell.jsx';
-import { Button, Empty, ErrorBox, Field, Loading, Modal, PageHead } from '../components/ui.jsx';
+import { Button, Empty, ErrorBox, Field, Loading, Modal, PageHead, Seg } from '../components/ui.jsx';
+import OnboardingBoard from './client/OnboardingCards.jsx';
 import { I } from '../components/Icons.jsx';
 import { cleanName } from '../lib/format.js';
 import { FUNCTIONS } from '../lib/status.js';
@@ -22,6 +23,7 @@ export default function Clientes() {
   const ql = q.toLowerCase().replace(/^@/, '');
   const list = (data || []).filter((c) => !ql || c.name.toLowerCase().includes(ql) || (c.segment || '').toLowerCase().includes(ql) || (c.handle || '').toLowerCase().includes(ql));
   const [sort, setSort] = useUrlState('ordem', 'nome');
+  const [view, setView] = useUrlState('ver', 'carteira');
   const SORTS = {
     nome: (a, b) => cleanName(a.name).localeCompare(cleanName(b.name)),
     aprovacao: (a, b) => (b.counts.aprovacao || 0) - (a.counts.aprovacao || 0),
@@ -34,6 +36,8 @@ export default function Clientes() {
       <PageHead kicker={auth.role.all_clients ? 'Todos os clientes' : 'Seus clientes vinculados'} title="Clientes" sub="Gerencie seus clientes e conteúdos.">
         {auth.can('carteira', 'create') && <Button variant="ink" size="lg" magnetic icon={<I.plus size={16} />} onClick={() => setOpen(true)} data-cursor="CRIAR">Novo cliente</Button>}
       </PageHead>
+      <div className="mb-5"><Seg label="Visualização" value={view} onChange={setView} options={[{ value: 'carteira', label: 'Carteira' }, { value: 'onboarding', label: 'Onboarding' }]} /></div>
+      {view === 'onboarding' ? <OnboardingBoard /> : <>
       <div className="ct-toolbar">
         <label className="ct-search"><I.search size={16} /><input placeholder="Buscar por nome, @usuário ou segmento…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Buscar cliente" /></label>
         <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Ordenar">
@@ -44,7 +48,7 @@ export default function Clientes() {
       {loading && !data ? <Loading rows={6} /> : !sorted.length ? <Empty title="Nenhum cliente encontrado." /> : (
         <div className="ct-grid">
           {sorted.map((c) => (
-            <ClientTile key={c.id} to={`/clientes/${c.id}`} name={c.name} segment={c.segment} status={{ key: c.status, label: STATUS[c.status] }}
+            <ClientTile key={c.id} to={`/clientes/${c.id}`} name={c.name} segment={c.segment} status={{ key: c.status, label: c.kind === 'interno' ? `Cliente interno · ${STATUS[c.status]}` : STATUS[c.status] }}
               chips={[
                 { label: 'Rascunho', n: c.counts.rascunho, tone: 'neutral' },
                 { label: 'Ajuste', n: c.counts.ajuste, tone: 'adjust' },
@@ -56,6 +60,7 @@ export default function Clientes() {
           ))}
         </div>
       )}
+      </>}
       <NewClient open={open} onClose={() => setOpen(false)} onCreated={reload} />
     </div>
   );

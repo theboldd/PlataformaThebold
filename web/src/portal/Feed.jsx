@@ -35,12 +35,12 @@ export default function Feed() {
   const items = feed.data?.items || [];
   const pending = items.filter((x) => x.can_like).length;
   const replace = (it) => { feed.setData((d) => (d ? { ...d, items: d.items.map((x) => (x.id === it.id ? it : x)) } : d)); if (single?.id === it.id) setSingle(it); reloadMe?.(); };
-  useEffect(() => { const c = params.get('c'); if (c) setOpenId(c); }, [params]);
+  useEffect(() => { const c = params.get('c') || params.get('post'); if (c) setOpenId(c); }, [params]); // ?post= é o link usado pelo calendário editorial interno
   useEffect(() => {
     if (!openId || !feed.data || items.some((x) => x.id === openId)) { setSingle(null); return; }
     api.get(`/portal/contents/${openId}`).then(setSingle).catch(() => setOpenId(null));
   }, [openId, feed.data]); // eslint-disable-line react-hooks/exhaustive-deps
-  const close = () => { setOpenId(null); setSingle(null); if (params.get('c')) { params.delete('c'); setParams(params, { replace: true }); } };
+  const close = () => { setOpenId(null); setSingle(null); if (params.get('c') || params.get('post')) { params.delete('c'); params.delete('post'); setParams(params, { replace: true }); } };
 
   const months = [...new Set(items.map((x) => (x.planned_at || '').slice(0, 7)).filter(Boolean))].sort();
   const firstPending = items.find((x) => x.can_like)?.planned_at?.slice(0, 7);

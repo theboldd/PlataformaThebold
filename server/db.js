@@ -144,6 +144,14 @@ CREATE TABLE IF NOT EXISTS delay_reviews (
   decided_by TEXT, -- NULL = só a regra (fatos); preenchido quando uma pessoa classifica
   decided_at TEXT, note TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
+-- HISTÓRICO DO NOTION · SOMENTE LEITURA (regra oficial 15): itens dos calendários "CR EDITORIAL".
+-- Não geram tarefa, pendência, atraso nem cobrança; não alteram etapas; não são o calendário ativo. Nenhuma rota escreve aqui.
+CREATE TABLE IF NOT EXISTS notion_history (
+  id TEXT PRIMARY KEY, client_id TEXT REFERENCES clients(id) ON DELETE CASCADE, source TEXT NOT NULL, source_db_url TEXT,
+  notion_url TEXT UNIQUE, title TEXT, date_start TEXT, date_end TEXT, date_property TEXT, properties TEXT NOT NULL DEFAULT '{}',
+  created_time TEXT, last_edited_time TEXT, extracted_at TEXT, imported_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_notion_history ON notion_history(client_id, date_start);
 -- Controle de execução das rotinas automáticas (cron idempotente com trava e timeout)
 CREATE TABLE IF NOT EXISTS job_runs (
   id TEXT PRIMARY KEY, job TEXT NOT NULL, status TEXT NOT NULL, -- rodando | ok | erro | ignorado | expirado
@@ -495,7 +503,7 @@ db.exec(SCHEMA_PORTAL);
 for (const sql of ['ALTER TABLE adjustments ADD COLUMN aspect TEXT', 'ALTER TABLE client_brain_entries ADD COLUMN shared INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE messages ADD COLUMN ref_type TEXT', 'ALTER TABLE messages ADD COLUMN ref_id TEXT',
   'ALTER TABLE notifications ADD COLUMN cta TEXT', 'ALTER TABLE files ADD COLUMN category TEXT', 'ALTER TABLE files ADD COLUMN context_type TEXT', 'ALTER TABLE files ADD COLUMN context_id TEXT', 'ALTER TABLE meetings ADD COLUMN agenda TEXT',
   'ALTER TABLE comments ADD COLUMN kind TEXT', 'ALTER TABLE adjustments ADD COLUMN comment_id TEXT']) { try { db.exec(sql); } catch { /* já existe */ } }
-for (const sql of ['ALTER TABLE adjustments ADD COLUMN reapproval INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE clients ADD COLUMN notion_url TEXT', 'ALTER TABLE clients ADD COLUMN notion_section TEXT', 'ALTER TABLE clients ADD COLUMN aliases TEXT', "ALTER TABLE onboarding ADD COLUMN form_status TEXT NOT NULL DEFAULT 'nao_iniciado'", 'ALTER TABLE onboarding ADD COLUMN form_submitted_at TEXT', 'ALTER TABLE client_brain_entries ADD COLUMN source_url TEXT', 'ALTER TABLE contents ADD COLUMN material_url TEXT', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'", 'ALTER TABLE tasks ADD COLUMN available_at TEXT', 'ALTER TABLE users ADD COLUMN email_source TEXT', 'ALTER TABLE users ADD COLUMN email_source_url TEXT', 'ALTER TABLE tasks ADD COLUMN perf_status TEXT']) { try { db.exec(sql); } catch { /* já existe */ } }
+for (const sql of ['ALTER TABLE adjustments ADD COLUMN reapproval INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE clients ADD COLUMN notion_url TEXT', 'ALTER TABLE clients ADD COLUMN notion_section TEXT', 'ALTER TABLE clients ADD COLUMN aliases TEXT', "ALTER TABLE onboarding ADD COLUMN form_status TEXT NOT NULL DEFAULT 'nao_iniciado'", 'ALTER TABLE onboarding ADD COLUMN form_submitted_at TEXT', 'ALTER TABLE client_brain_entries ADD COLUMN source_url TEXT', 'ALTER TABLE contents ADD COLUMN material_url TEXT', "ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT 'system'", 'ALTER TABLE tasks ADD COLUMN available_at TEXT', 'ALTER TABLE users ADD COLUMN email_source TEXT', 'ALTER TABLE users ADD COLUMN email_source_url TEXT', 'ALTER TABLE tasks ADD COLUMN perf_status TEXT', "ALTER TABLE clients ADD COLUMN kind TEXT NOT NULL DEFAULT 'externo'"]) { try { db.exec(sql); } catch { /* já existe */ } }
 
 // ── helpers ───────────────────────────────────────────
 export const one = (sql, ...p) => db.prepare(sql).get(...p);

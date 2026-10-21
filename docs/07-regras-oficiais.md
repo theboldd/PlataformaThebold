@@ -1,6 +1,6 @@
 # THE BOLD OS — Regras oficiais do projeto
 
-Decisões tomadas pela CEO (Rebeca) em 21/10/2026 (regras 1–10) e complementadas no mesmo dia (11–13). Valem para todo o código, os dados e os próximos blocos.
+Decisões tomadas pela CEO (Rebeca) em 21/10/2026 (regras 1–10) e complementadas no mesmo dia (11–17). Valem para todo o código, os dados e os próximos blocos.
 Quando uma regra daqui conflitar com um pedido antigo, **esta vale**.
 
 ## 1. Hospedagem: Railway
@@ -92,7 +92,32 @@ Nunca se avança sobre uma decisão que ainda depende da CEO.
 - Só entram em indicador individual as tarefas nascidas na plataforma e as classificadas como ATRASO DO RESPONSÁVEL. ATRASO DA EQUIPE conta só no agregado da equipe.
 - Na operação, esses itens continuam visíveis, à parte, como "herdados da migração".
 
-## Aprovação do cliente e versões (decisão de 21/10/2026)
+## 14. Aprovação do cliente
+- Só existe **APROVADO** quando há **registro de aprovação do cliente na plataforma** (`contents.approved_version_id` + linha em `approvals`).
+- Aprovação não registrada aparece como **APROVAÇÃO NÃO REGISTRADA**.
+- Estar em "Para agendar" **não** significa que o cliente aprovou. A aprovação nunca é deduzida de etapa, de coluna antiga do Notion nem de qualquer outro sinal indireto.
+- Os 144 conteúdos herdados de "Para agendamento" continuam **sem aprovação registrada**. Ficam fora das métricas de performance até a classificação (regras 12 e 13).
+
+## 15. CR EDITORIAL do Notion = histórico somente leitura
+- Os calendários "CR EDITORIAL" do Notion entram como **HISTÓRICO DO NOTION · SOMENTE LEITURA**, com a origem e o link de cada item.
+- Eles **não**:
+  - geram pendência, atraso, cobrança ou tarefa;
+  - alteram etapas;
+  - viram calendário editorial ativo;
+  - substituem o calendário do The Bold OS.
+- O calendário editorial oficial e operacional é o do The Bold OS. Não existe sincronização com esses calendários históricos.
+
+## 16. THE BOLD = cliente interno
+- "THE BOLD" continua na base, classificada como **CLIENTE INTERNO** (`clients.kind = interno`).
+- Pode ter conteúdos, processos e histórico próprios, para a operação institucional da agência.
+- **Não** aparece para clientes externos.
+- **Não** conta como cliente externo em métricas comerciais, de carteira, de retenção, de receita ou de performance de clientes.
+
+## 17. Dreams Brand
+- `dreamsbrand.pi@gmail.com` é **E-MAIL CANDIDATO / AGUARDANDO CONFIRMAÇÃO**.
+- Não é e-mail oficial de acesso: não se cria login e não se envia convite até a confirmação explícita da CEO.
+
+## 18. Aprovação do cliente e versões (decisão de 21/10/2026, complementa a regra 14)
 - `V1 → APROVADA PELO CLIENTE` só com registro explícito de aprovação do cliente: usuário, data e hora, IP e **versão exata**.
 - Ajuste do cliente: `V1 → AJUSTE SOLICITADO → V2 → AGUARDANDO APROVAÇÃO DO CLIENTE`. A V2 **sempre volta** para o cliente (`reenviar_cliente_apos_ajuste = true`).
 - Só um novo registro de aprovação do cliente muda a V2 para `APROVADA`. Nunca inferir aprovação:
@@ -102,7 +127,7 @@ Nunca se avança sobre uma decisão que ainda depende da CEO.
 - Versão tecnicamente pronta sem o cliente: `LIBERADA PELA EQUIPE` (status `liberada`). **Não equivale** a `APROVADA PELO CLIENTE`.
 - Quando nasce uma versão nova, a anterior vira `SUBSTITUÍDA`. Uma versão antiga nunca aparece como aprovada depois disso.
 
-## Conversão em ajuste (idempotente)
+## 19. Conversão em ajuste (idempotente)
 - Uma mesma mensagem ou comentário gera um ajuste **uma única vez**. Uma nova tentativa devolve o ajuste que já existe e não cria outro.
 - O registro preserva:
   - o comentário original;
@@ -112,14 +137,14 @@ Nunca se avança sobre uma decisão que ainda depende da CEO.
   - conteúdo e versão;
   - página ou timestamp, quando houver.
 
-## Pronto ≠ disponível (estrito)
+## 20. Pronto ≠ disponível (estrito)
 - Etapa com janela (`janela_etapas`: análise do cronograma, revisão de produção) fica `AGENDADA` até a data do marco do ciclo.
 - Enquanto está agendada:
   - **nenhuma ação operacional a executa**: revisar ou concluir a tarefa retorna 409 no Process Engine, para qualquer pessoa, inclusive CEO;
   - a interface mostra quando a etapa fica disponível e não oferece o botão.
 - Na data do marco, a tarefa abre, o responsável é avisado e então pode agir.
 
-## Onboarding
+## 21. Onboarding: obrigatórias
 - Hoje **nenhuma pergunta obrigatória está configurada** (`required_keys` vazio, igual ao Notion).
 - A definição das obrigatórias é uma decisão de produto posterior. Não se inventam obrigatoriedades.
 

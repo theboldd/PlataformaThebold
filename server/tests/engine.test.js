@@ -222,3 +222,53 @@ test('pronto ≠ disponível (regra oficial): revisão agendada não pode ser an
     assert.equal(fresh(c).stage, 'aprovacao_cliente');
   } finally { setClock(null); }
 });
+
+test('comentário vira ajuste: só onde a equipe está com o conteúdo, uma vez, ligado ao comentário', async () => {
+  const { addComment } = await import('../routes/ops.js');
+  const prod = P.createContent({ client_id: client.id, title: 'Com comentário', format: 'estatico', stage: 'producao' }, U.est);
+  const cm = addComment(prod, U.rev, { body: 'Trocar a cor do título', visibility: 'internal' });
+  const adj = P.commentToAdjustment(cm.id, U.est, { size: 'simples' });
+  assert.equal(adj.origin, 'interno'); assert.equal(adj.size, 'simples');
+  assert.equal(one('SELECT adjustment_id FROM comments WHERE id=?', cm.id).adjustment_id, adj.id);
+  assert.ok(one("SELECT 1 FROM tasks WHERE id=? AND kind='ajuste' AND status='aberta'", adj.task_id));
+  const again = P.commentToAdjustment(cm.id, U.est);
+  assert.equal(again.id, adj.id, 'segunda conversão devolve o mesmo ajuste'); assert.equal(again.already, true);
+  assert.equal(one('SELECT COUNT(*) n FROM adjustments WHERE comment_id=?', cm.id).n, 1, 'sem ajuste duplicado');
+  // cliente comentou: vira ajuste "do cliente"; página do carrossel vem da âncora
+  const cc = addComment(prod, cu, { body: 'Pode aumentar a foto?', anchor: { page: 2 } });
+  const a2 = P.commentToAdjustment(cc.id, U.est);
+  assert.equal(a2.origin, 'cliente'); assert.equal(a2.carousel_page, 2);
+  // conteúdo com o cliente: a mudança passa pela decisão do cliente, não pela conversão
+  const wait = P.createContent({ client_id: client.id, title: 'Esperando cliente', format: 'estatico', stage: 'aprovacao_cliente' }, U.est);
+  const cw = addComment(wait, cu, { body: 'Não gostei da cor' });
+  assert.throws(() => P.commentToAdjustment(cw.id, U.est), /decisão do cliente/);
+  // sem permissão de editar conteúdo ou sem acesso ao cliente
+  const cx = addComment(prod, U.rev, { body: 'Outro ponto', visibility: 'internal' });
+  assert.throws(() => P.commentToAdjustment(cx.id, U.out), /Sem permissão/);
+  assert.ok(one("SELECT 1 FROM activity_logs WHERE action='comentario.virou_ajuste' AND entity_id=?", cm.id));
+});
+
+test('regra 14: "aprovado" só com registro de aprovação; etapa não prova aprovação', () => {
+  const c = P.createContent({ client_id: client.id, title: 'Sem registro', format: 'estatico', stage: 'agendamento' }, U.est);
+  assert.equal(P.publicStatus(one('SELECT * FROM contents WHERE id=?', c.id)), 'aprovacao_nao_registrada');
+  run('UPDATE contents SET approved_version_id=? WHERE id=?', 'v_fake', c.id);
+  assert.equal(P.publicStatus(one('SELECT * FROM contents WHERE id=?', c.id)), 'aprovado');
+});
+
+test('causa raiz: fato, padrão, hipótese marcada como não verificada; carga ignora herdados', async () => {
+  const I = await import('../engine/intelligence.js');
+  const before = all("SELECT fingerprint FROM ai_insights WHERE detector='carga' AND status='aberto'").length;
+  run("UPDATE tasks SET perf_status='migrado' WHERE assignee_id=?", U.des.id);
+  for (let i = 0; i < 12; i++) insert('tasks', { id: uid('t_'), title: `Herdada ${i}`, client_id: client.id, assignee_id: U.des.id, status: 'aberta', kind: 'etapa', function: 'design', perf_status: 'migrado', created_at: now() });
+  I.runDetectors();
+  assert.ok(!one("SELECT 1 FROM ai_insights WHERE fingerprint=? AND status='aberto'", `carga:${U.des.id}`), 'herdadas não geram alerta de carga');
+  for (const i of all("SELECT * FROM ai_insights WHERE status='aberto'")) {
+    const e = I.explain(i);
+    assert.ok(e.fact);
+    if (e.hypothesis) {
+      assert.equal(e.hypothesis.verified, false);
+      for (const u of all("SELECT name FROM users WHERE role_key<>'cliente'")) assert.ok(!e.hypothesis.text.includes(u.name), 'hipótese não aponta pessoa');
+    }
+  }
+  assert.ok(before >= 0);
+});

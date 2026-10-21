@@ -5,7 +5,7 @@ import { Avatar, Button, Empty } from '../../components/ui.jsx';
 import { ago, firstName } from '../../lib/format.js';
 
 // Comentários da equipe: visibilidade "cliente vê" ou "interno". @Nome / @Designer notificam.
-export function Comments({ contentId, comments, onChange, mediaCount = 0 }) {
+export function Comments({ contentId, comments, onChange, mediaCount = 0, adjustments = [], canAdjust = false, onAdjustTab }) {
   const toast = useToast();
   const { data: people } = useApi('/users/directory', [], { live: false });
   const [body, setBody] = useState('');
@@ -13,6 +13,13 @@ export function Comments({ contentId, comments, onChange, mediaCount = 0 }) {
   const [page, setPage] = useState('');
   const [replyTo, setReplyTo] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [toAdj, setToAdj] = useState(null); // { id, size, track }
+  const convert = async () => {
+    setBusy(true);
+    try { await api.post(`/comments/${toAdj.id}/ajuste`, { size: toAdj.size, track: toAdj.track }); toast('Comentário virou ajuste — quem produz foi avisado.'); setToAdj(null); onChange?.(); }
+    catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
+  };
+  const adjOf = (id) => adjustments.find((a) => a.id === id);
   const send = async () => {
     if (!body.trim()) return;
     setBusy(true);
@@ -36,7 +43,21 @@ export function Comments({ contentId, comments, onChange, mediaCount = 0 }) {
         <span className="faint" style={{ marginLeft: 'auto' }}>{ago(c.created_at)}</span>
       </div>
       <div className="body">{c.body}</div>
-      {!reply && <button className="btn btn-ghost btn-sm" style={{ marginTop: 4, marginLeft: -10 }} onClick={() => setReplyTo(c)}>Responder</button>}
+      {c.adjustment_id && (
+        <button className="cm-adj" onClick={onAdjustTab} title="Ver no histórico de ajustes">↺ virou ajuste{adjOf(c.adjustment_id) ? ` · ${adjOf(c.adjustment_id).status}${adjOf(c.adjustment_id).assigned_name ? ` · com ${adjOf(c.adjustment_id).assigned_name}` : ''}` : ''}</button>
+      )}
+      {toAdj?.id === c.id && (
+        <div className="cm-adj-form">
+          <span className="xs">Virar ajuste {c.author_role === 'cliente' ? 'do cliente' : 'interno'}:</span>
+          <select className="select" value={toAdj.track} onChange={(e) => setToAdj({ ...toAdj, track: e.target.value })} aria-label="O que ajustar"><option value="visual">Arte / vídeo</option><option value="legenda">Legenda</option></select>
+          <select className="select" value={toAdj.size} onChange={(e) => setToAdj({ ...toAdj, size: e.target.value })} aria-label="Tamanho"><option value="normal">Normal</option><option value="simples">Simples</option></select>
+          <Button size="sm" variant="ink" disabled={busy} onClick={convert}>Criar ajuste</Button><Button size="sm" variant="ghost" onClick={() => setToAdj(null)}>Cancelar</Button>
+        </div>
+      )}
+      {!reply && <div className="row gap-1" style={{ marginTop: 4, marginLeft: -10 }}>
+        <button className="btn btn-ghost btn-sm" onClick={() => setReplyTo(c)}>Responder</button>
+        {canAdjust && !c.adjustment_id && toAdj?.id !== c.id && <button className="btn btn-ghost btn-sm" onClick={() => setToAdj({ id: c.id, size: 'normal', track: 'visual' })}>Virar ajuste</button>}
+      </div>}
       {replies(c.id).map((r) => one(r, true))}
     </div>
   );

@@ -99,13 +99,13 @@ const candidates = all(`SELECT c.id, c.name, c.status, o.form_status,
     (SELECT COUNT(DISTINCT function) FROM client_members m JOIN users u ON u.id=m.user_id WHERE m.client_id=c.id AND u.active=1 AND m.function IN ('estrategia','design','edicao','copy','revisao','agendamento','atendimento')) roles,
     (SELECT COUNT(*) FROM client_members m WHERE m.client_id=c.id AND m.function='cliente') portal_users,
     (SELECT COUNT(*) FROM contents x WHERE x.client_id=c.id) contents
-  FROM clients c JOIN onboarding o ON o.client_id=c.id WHERE c.status='ativo' AND COALESCE(c.is_demo,0)=0 ORDER BY (o.form_status='migrado_parcial') DESC, roles DESC, notion_answers DESC, contents DESC`);
+  FROM clients c JOIN onboarding o ON o.client_id=c.id WHERE c.status='ativo' AND COALESCE(c.is_demo,0)=0 AND COALESCE(c.kind,'externo')<>'interno' ORDER BY (o.form_status='migrado_parcial') DESC, roles DESC, notion_answers DESC, contents DESC`);
 const chosenId = arg('--client') || candidates[0]?.id;
 const C = one('SELECT * FROM clients WHERE id=?', chosenId);
 if (!C) { console.error('Nenhum cliente ativo disponível.'); process.exit(2); }
 R.client = { id: C.id, name: C.name, criteria: candidates.find((x) => x.id === C.id), alternatives: candidates.slice(0, 6) };
 console.log(`Cliente de teste: ${C.name} (${C.id})`, R.client.criteria);
-const OTHER = one("SELECT * FROM clients WHERE id<>? AND status='ativo' ORDER BY name LIMIT 1", C.id);
+const OTHER = one("SELECT * FROM clients WHERE id<>? AND status='ativo' AND COALESCE(kind,'externo')<>'interno' ORDER BY name LIMIT 1", C.id); // regra 16: THE BOLD (interno) fora
 const otherContent = OTHER ? one('SELECT id FROM contents WHERE client_id=? LIMIT 1', OTHER.id) : null;
 
 // ── Servidor e sessões ──

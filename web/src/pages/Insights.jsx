@@ -23,7 +23,7 @@ export default function Insights() {
   const mark = async (id, s) => { try { await api.post(`/insights/${id}/status`, { status: s }); toast(s === 'aplicado' ? 'Marcado como aplicado.' : s === 'descartado' ? 'Descartado.' : 'Reaberto.'); reload(); } catch (e) { toast(e.message, 'err'); } };
   return (
     <div className="page">
-      <PageHead kicker="Inteligência de gestão" title="Problema, causa, impacto — e o que fazer." sub="Detectores determinísticos leem o banco a cada 15 minutos. Quando o Claude estiver configurado, ele narra e aprofunda — os números nunca vêm da IA.">
+      <PageHead kicker="Inteligência de gestão" title="Fato, padrão, hipótese — e o que fazer." sub="Detectores determinísticos leem o banco a cada 15 minutos. Quando o Claude estiver configurado, ele narra e aprofunda — os números nunca vêm da IA.">
         <Button variant="primary" magnetic onClick={run} disabled={busy}>{busy ? 'Analisando…' : 'Rodar detectores agora'}</Button>
       </PageHead>
       <Tabs tabs={[{ key: 'aberto', label: 'Abertos' }, { key: 'aplicado', label: 'Aplicados' }, { key: 'descartado', label: 'Descartados' }, { key: 'resolvido', label: 'Resolvidos sozinhos' }]} value={status} onChange={setStatus} />
@@ -39,7 +39,8 @@ export default function Insights() {
             {x.metric != null && <span className="metric-badge num" title="Métrica do detector">{x.metric}{['dependencia'].includes(x.detector) ? '%' : ''}</span>}
           </div>
           <div className="chain">
-            <div><span className="caps">Causa provável</span><p>{x.cause || '—'}</p></div>
+            <div><span className="caps">Padrão observado</span><p>{x.pattern || '—'}</p></div>
+            <div><span className="caps">Hipótese · não verificada</span><p>{x.hypothesis?.text || '—'}</p></div>
             <div><span className="caps">Impacto</span><p>{x.impact || '—'}</p></div>
             <div><span className="caps bordo">Sugestão</span><p>{x.suggestion || '—'}</p></div>
             <div><span className="caps">Ação possível</span>
