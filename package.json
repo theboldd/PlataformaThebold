@@ -15,7 +15,8 @@
     "test": "node --no-warnings=ExperimentalWarning --test server/tests/*.test.js",
     "migrar:notion": "node --no-warnings=ExperimentalWarning server/migration/import-notion.js",
     "base:real": "BOLD_SEED=equipe node --no-warnings=ExperimentalWarning server/seed.js && npm run migrar:notion && npm run migrar:quadros",
-    "migrar:quadros": "node --no-warnings=ExperimentalWarning server/migration/import-notion-quadro.js outubro && node --no-warnings=ExperimentalWarning server/migration/import-notion-quadro.js novembro"
+    "migrar:quadros": "node --no-warnings=ExperimentalWarning server/migration/import-notion-quadro.js outubro && node --no-warnings=ExperimentalWarning server/migration/import-notion-quadro.js novembro",
+    "ux": "npm run build && node --no-warnings=ExperimentalWarning scripts/ux-portal.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

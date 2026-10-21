@@ -38,8 +38,17 @@ export const CATALOG = [
   // ── Reuniões / agenda ──
   ['reuniao.reservada', 'Cliente reservou horário', 'Horário livre (sem conflito)', 'Criar reunião, convidados, evento Google Calendar (se conectado)', 'Equipe da conta', 'Participantes + cliente', '—', 'regra', 2, 'MVP', 1],
   ['reuniao.itens', 'Ata registrada com ações', 'Ação com responsável', 'Criar tarefa com origem reunião', 'Responsável', 'Responsável', 'Prazo informado', 'regra', 2, 'MVP', 1],
-  ['reuniao.extracao_ia', 'Transcrição disponível', 'Consentimento registrado', 'Claude extrai decisões/ações/prazos (sugestões) + resumos', 'Anfitrião confirma', 'Anfitrião', '24h úteis', 'ia', 3, 'V2', 0],
-  ['reuniao.resumo_cliente', 'Resumo do cliente aprovado', 'Aprovação interna', 'Publicar no portal e notificar', 'Aprovador', 'Cliente', '—', 'humano', 4, 'V2', 0],
+  ['reuniao.extracao_ia', 'Transcrição disponível', 'Transcrição registrada e IA configurada', 'Claude gera rascunhos: resumo do cliente + resumo interno (decisões, tarefas, bloqueios, riscos)', 'Anfitrião confirma', 'Anfitrião', '24h úteis', 'ia', 3, 'MVP', 1],
+  ['reuniao.transcricao_detectada', 'Reunião realizada com evento no Google Calendar', 'Google conectado', 'Procurar transcrição anexada ao evento; sem acesso ao Drive, pedir que a equipe cole/envie', 'Anfitrião', 'Anfitrião', '1 dia', 'regra', 2, 'MVP', 1],
+  ['reuniao.resumo_cliente', 'Resumo do cliente aprovado', 'Verificação de vazamento sem alertas', 'Publicar no portal e notificar o cliente', 'Aprovador', 'Cliente', '—', 'humano', 4, 'MVP', 1],
+  ['reuniao.resumo_interno', 'Resumo interno aplicado', 'Confirmação humana item a item', 'Criar tarefas, decisões e memória do cliente (Client Brain / The Bold Brain)', 'Anfitrião', 'Responsáveis', 'Prazo informado', 'humano', 4, 'MVP', 1],
+  // ── Área do cliente ──
+  ['solicitacao.criada', 'Cliente abriu uma solicitação', '—', 'Criar solicitação + tarefa, atribuir por tipo (estratégia/atendimento/financeiro), prazo esperado', 'Por tipo', 'Responsável + equipe da conta', '1–3 dias úteis', 'regra', 2, 'MVP', 1],
+  ['decisao.pedida', 'Equipe pediu uma decisão ao cliente', '—', 'Entrar na Central de Decisões do cliente e notificar', 'Cliente', 'Cliente', 'Prazo definido', 'regra', 1, 'MVP', 1],
+  ['decisao.respondida', 'Cliente decidiu', '—', 'Registrar decisão, memória do cliente, Client Brain (quando aplicável) e tarefa de sequência', 'Quem pediu', 'Quem pediu + equipe', '1 dia útil', 'regra', 2, 'MVP', 1],
+  ['pergunta.cliente', 'Cliente fez uma pergunta em um conteúdo', '—', 'Pendência para a estrategista até a equipe responder no fio', 'Estrategista', 'Estrategista (atenção)', '1 dia útil', 'regra', 2, 'MVP', 1],
+  ['cliente.prazo_vencido', 'Prazo de aprovação do cliente passou', 'Etapa de cliente', 'Registrar atraso, lembrar o cliente (respeitando intervalo e limite), avisar o atendimento e avaliar impacto na publicação', 'Atendimento', 'Cliente (lembrete) + atendimento; Operações se a publicação estiver em risco', '—', 'regra', 2, 'MVP', 1],
+  ['saude.calcular', 'Diário', '—', 'Calcular a saúde de cada cliente com evidências e registrar mudanças de nível', 'Sistema', 'CEO + Operações quando piora', '—', 'regra', 2, 'MVP', 1],
   // ── Comercial / financeiro ──
   ['crm.followup', 'Próxima ação do negócio venceu', 'Negócio aberto', 'Criar tarefa de follow-up para o dono', 'Comercial', 'Dono do negócio', 'Hoje', 'regra', 2, 'V2', 1],
   ['crm.fechado', 'Negócio fechado', '—', 'Criar cliente e iniciar onboarding', 'Operações', 'Rebeca + Vitória', '—', 'humano', 4, 'V2', 1],

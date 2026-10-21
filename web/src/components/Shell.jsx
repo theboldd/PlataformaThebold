@@ -142,6 +142,7 @@ export function Notifications({ open, onClose }) {
           <div className="grow">
             <div className="t sm">{n.title}{n.count > 1 && <span className="count">×{n.count}</span>}</div>
             {n.body && <div className="sm muted">{n.body}</div>}
+            {n.cta && n.link && <div className="notif-cta sm mt-2">{n.cta.toUpperCase()} →</div>}
             <div className="xs faint mt-2">{LEVEL[n.level]} · {ago(n.updated_at)}</div>
           </div>
         </div>

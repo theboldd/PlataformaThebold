@@ -371,9 +371,94 @@ CREATE TABLE IF NOT EXISTS reports (
   data TEXT NOT NULL, narrative TEXT, generated_by TEXT NOT NULL DEFAULT 'sistema', created_at TEXT NOT NULL
 );
 `;
+// ───────────── ÁREA DO CLIENTE (experiência premium) ─────────────
+// Toda ação do cliente gera registro → processo → responsável → próximo passo → notificação → histórico.
+const SCHEMA_PORTAL = `
+-- Solicitações do cliente ("+ NOVA SOLICITAÇÃO"). status_cliente é a linguagem simples mostrada ao cliente.
+CREATE TABLE IF NOT EXISTS client_requests (
+  id TEXT PRIMARY KEY, number INTEGER NOT NULL, client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL, -- conteudo | alteracao | material | duvida | reuniao | estrategia | financeiro | outro
+  title TEXT NOT NULL, description TEXT, status TEXT NOT NULL DEFAULT 'recebido', -- recebido | em_analise | em_andamento | aguardando_cliente | concluido | cancelado
+  assigned_to TEXT REFERENCES users(id), task_id TEXT, next_action TEXT, expected_at TEXT,
+  ref_type TEXT, ref_id TEXT, -- contexto (conteúdo, reunião…)
+  requested_by TEXT NOT NULL REFERENCES users(id), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, closed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_requests_client ON client_requests(client_id, status);
+-- Linha do tempo da solicitação. visibility='client' aparece para o cliente; 'internal' só para a equipe.
+CREATE TABLE IF NOT EXISTS client_request_updates (
+  id TEXT PRIMARY KEY, request_id TEXT NOT NULL REFERENCES client_requests(id) ON DELETE CASCADE,
+  author_id TEXT REFERENCES users(id), body TEXT, status_from TEXT, status_to TEXT, file_id TEXT,
+  visibility TEXT NOT NULL DEFAULT 'client', created_at TEXT NOT NULL
+);
+-- Decisões que a equipe pede ao cliente (escolha entre opções, confirmação, resposta estratégica, data…)
+CREATE TABLE IF NOT EXISTS client_decisions (
+  id TEXT PRIMARY KEY, client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL, -- escolha | confirmacao | resposta | data | outro
+  title TEXT NOT NULL, context TEXT, consequence TEXT, options TEXT NOT NULL DEFAULT '[]', due_at TEXT,
+  brain_section TEXT, -- quando preenchido, a resposta entra no Client Brain (origem: decisão do cliente)
+  ref_type TEXT, ref_id TEXT, status TEXT NOT NULL DEFAULT 'pendente', -- pendente | respondida | cancelada
+  answer TEXT, answer_note TEXT, answered_by TEXT REFERENCES users(id), answered_at TEXT,
+  owner_id TEXT REFERENCES users(id), task_id TEXT, created_by TEXT REFERENCES users(id), created_at TEXT NOT NULL
+);
+-- "Isso ainda está correto?" — confirmação ou pedido de atualização sobre o que a The Bold entende da marca
+CREATE TABLE IF NOT EXISTS brand_confirmations (
+  id TEXT PRIMARY KEY, client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE, entry_id TEXT NOT NULL,
+  decision TEXT NOT NULL, -- confirmado | atualizar
+  note TEXT, entry_content TEXT NOT NULL, user_id TEXT NOT NULL REFERENCES users(id), task_id TEXT, created_at TEXT NOT NULL
+);
+-- Versões anteriores de cada informação do Client Brain (nunca sobrescrever em silêncio)
+CREATE TABLE IF NOT EXISTS client_brain_history (
+  id TEXT PRIMARY KEY, entry_id TEXT NOT NULL, client_id TEXT NOT NULL, content_before TEXT, content_after TEXT,
+  changed_by TEXT, origin TEXT, reason TEXT, created_at TEXT NOT NULL
+);
+-- Pulso da marca: estado estratégico atual, escrito pela equipe e publicado ao cliente
+CREATE TABLE IF NOT EXISTS brand_pulse (
+  client_id TEXT PRIMARY KEY REFERENCES clients(id) ON DELETE CASCADE,
+  focus TEXT, objective TEXT, direction TEXT, learning TEXT, next_focus TEXT,
+  status TEXT NOT NULL DEFAULT 'rascunho', -- rascunho | publicado
+  updated_by TEXT, updated_at TEXT, published_by TEXT, published_at TEXT
+);
+-- Satisfação contextual: um convite por momento relevante, com intervalo mínimo
+CREATE TABLE IF NOT EXISTS satisfaction_prompts (
+  id TEXT PRIMARY KEY, client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  moment TEXT NOT NULL, -- aprovacao_ciclo | reuniao | onboarding | solicitacao
+  label TEXT NOT NULL, ref_type TEXT, ref_id TEXT, created_at TEXT NOT NULL, answered_at TEXT, dismissed_at TEXT,
+  UNIQUE (client_id, moment, ref_id)
+);
+CREATE TABLE IF NOT EXISTS satisfaction_responses (
+  id TEXT PRIMARY KEY, prompt_id TEXT REFERENCES satisfaction_prompts(id) ON DELETE SET NULL, client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  moment TEXT NOT NULL, rating TEXT NOT NULL, -- excelente | boa | poderia_melhorar
+  comment TEXT, user_id TEXT NOT NULL REFERENCES users(id), created_at TEXT NOT NULL
+);
+-- Saúde do cliente (interno): fotografia diária para detectar mudança de nível com evidências
+CREATE TABLE IF NOT EXISTS client_health_snapshots (
+  id TEXT PRIMARY KEY, client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE, level TEXT NOT NULL, signals TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_health_client ON client_health_snapshots(client_id, created_at);
+-- Pós-reunião: transcrição e resumos separados por público (o do cliente só aparece depois de aprovado)
+CREATE TABLE IF NOT EXISTS meeting_transcripts (
+  id TEXT PRIMARY KEY, meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+  source TEXT NOT NULL, -- upload | colado | google_calendar
+  status TEXT NOT NULL DEFAULT 'pronta', -- pronta | detectada_sem_acesso | erro
+  body TEXT, source_ref TEXT, created_by TEXT, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS meeting_summaries (
+  id TEXT PRIMARY KEY, meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+  audience TEXT NOT NULL, -- internal | client
+  version INTEGER NOT NULL DEFAULT 1, content TEXT NOT NULL, -- JSON estruturado
+  status TEXT NOT NULL DEFAULT 'rascunho', -- rascunho | publicado | substituido
+  generated_by TEXT NOT NULL DEFAULT 'humano', -- ia | humano
+  ai_action_id TEXT, edited_by TEXT, approved_by TEXT, approved_at TEXT, published_at TEXT, leak_check TEXT,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+`;
 db.exec(SCHEMA);
+db.exec(SCHEMA_PORTAL);
 // Migrações leves (colunas adicionadas depois da primeira versão)
-for (const sql of ['ALTER TABLE adjustments ADD COLUMN reapproval INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE clients ADD COLUMN notion_url TEXT', 'ALTER TABLE clients ADD COLUMN notion_section TEXT', 'ALTER TABLE clients ADD COLUMN aliases TEXT', "ALTER TABLE onboarding ADD COLUMN form_status TEXT NOT NULL DEFAULT 'nao_iniciado'", 'ALTER TABLE onboarding ADD COLUMN form_submitted_at TEXT', 'ALTER TABLE client_brain_entries ADD COLUMN source_url TEXT', 'ALTER TABLE contents ADD COLUMN material_url TEXT']) { try { db.exec(sql); } catch { /* já existe */ } }
+for (const sql of ['ALTER TABLE adjustments ADD COLUMN aspect TEXT', 'ALTER TABLE client_brain_entries ADD COLUMN shared INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE messages ADD COLUMN ref_type TEXT', 'ALTER TABLE messages ADD COLUMN ref_id TEXT',
+  'ALTER TABLE notifications ADD COLUMN cta TEXT', 'ALTER TABLE files ADD COLUMN category TEXT', 'ALTER TABLE files ADD COLUMN context_type TEXT', 'ALTER TABLE files ADD COLUMN context_id TEXT', 'ALTER TABLE meetings ADD COLUMN agenda TEXT',
+  'ALTER TABLE comments ADD COLUMN kind TEXT', 'ALTER TABLE adjustments ADD COLUMN comment_id TEXT']) { try { db.exec(sql); } catch { /* já existe */ } }
+for (const sql of ['ALTER TABLE adjustments ADD COLUMN reapproval INTEGER NOT NULL DEFAULT 0','ALTER TABLE clients ADD COLUMN notion_url TEXT', 'ALTER TABLE clients ADD COLUMN notion_section TEXT', 'ALTER TABLE clients ADD COLUMN aliases TEXT', "ALTER TABLE onboarding ADD COLUMN form_status TEXT NOT NULL DEFAULT 'nao_iniciado'", 'ALTER TABLE onboarding ADD COLUMN form_submitted_at TEXT', 'ALTER TABLE client_brain_entries ADD COLUMN source_url TEXT', 'ALTER TABLE contents ADD COLUMN material_url TEXT']) { try { db.exec(sql); } catch { /* já existe */ } }
 
 // ── helpers ───────────────────────────────────────────
 export const one = (sql, ...p) => db.prepare(sql).get(...p);

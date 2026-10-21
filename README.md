@@ -11,7 +11,8 @@ npm run base:real   # cria o banco com a equipe e importa os clientes reais do N
 npm run build       # compila o frontend
 npm start           # http://localhost:4000
 # desenvolvimento: npm run dev  (API :4000 + Vite :5173)
-npm test            # testes do engine, permissões, auditoria e mídia
+npm test            # testes do engine, permissões, auditoria, mídia e área do cliente (HTTP real)
+npm run ux          # roteiro de UX da área do cliente no Chromium (celular e desktop)
 ```
 Não existe base de exemplo: nenhum cliente, conteúdo ou texto fictício. Sem o levantamento do Notion, `npm run seed` cria só a equipe.
 Acesso da equipe: e-mail `<primeiro-nome>@thebold.demo` (provisório). Senha inicial local `thebold2026`; na cópia publicada, a senha forte de `storage/.team-password`.
@@ -37,6 +38,7 @@ Sem essas credenciais, as integrações aparecem **desconectadas**. Nada é simu
 - [`docs/02-arquitetura.md`](docs/02-arquitetura.md): dados, Process Engine, permissões, regra × IA, mídia, integrações, segurança, migração
 - [`docs/03-automacoes.md`](docs/03-automacoes.md): todas as automações mapeadas (MVP/V2/V3), gerado do código
 - [`docs/04-mvp-e-roadmap.md`](docs/04-mvp-e-roadmap.md): o que está pronto, próximos passos e decisões em aberto
+- [`docs/06-area-do-cliente.md`](docs/06-area-do-cliente.md): área do cliente premium — auditoria, regra central, procedência, testes e pendências
 - [`docs/integracoes/google-drive.md`](docs/integracoes/google-drive.md): especificação da integração com o Google Drive
 - [`docs/modulos/reunioes.md`](docs/modulos/reunioes.md): especificação do módulo de Reuniões e videoconferência
 

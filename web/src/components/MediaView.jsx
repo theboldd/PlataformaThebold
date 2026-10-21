@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { I } from './Icons.jsx';
 
-export function MediaView({ media = [], aspect, onPage, dark, rounded = true, page: controlledPage }) {
+// pins: [{ page, x, y, n, open }] (x/y de 0 a 1 sobre a imagem) · onPick: modo anotação — tocar marca um ponto em vez de ampliar
+export function MediaView({ media = [], aspect, onPage, dark, rounded = true, page: controlledPage, pins = [], onPick = null }) {
   const [page, setPage] = useState(0);
   const [zoom, setZoom] = useState(null);
   const track = useRef(null);
@@ -21,8 +22,17 @@ export function MediaView({ media = [], aspect, onPage, dark, rounded = true, pa
         {media.map((m, i) => (
           <div className="mv-slide" key={m.id + i}>
             {m.kind === 'video' ? <Video m={m} /> : (
-              <img src={m.urls.preview || m.urls.original} alt={`${m.name} (${i + 1}/${media.length})`} loading={i === 0 ? 'eager' : 'lazy'} decoding="async" draggable={false}
-                onClick={() => setZoom(m)} data-cursor="VER" style={{ cursor: 'zoom-in' }} />
+              <div className={`mv-pinbox ${onPick ? 'picking' : ''}`} style={m.width && m.height ? { aspectRatio: `${m.width} / ${m.height}` } : undefined}>
+                <img src={m.urls.preview || m.urls.original} alt={`${m.name} (${i + 1}/${media.length})`} loading={i === 0 ? 'eager' : 'lazy'} decoding="async" draggable={false}
+                  onClick={(e) => {
+                    if (!onPick) return setZoom(m);
+                    const r = e.currentTarget.getBoundingClientRect();
+                    onPick({ page: i + 1, x: Math.round(((e.clientX - r.left) / r.width) * 1000) / 1000, y: Math.round(((e.clientY - r.top) / r.height) * 1000) / 1000 });
+                  }} data-cursor={onPick ? 'MARCAR' : 'VER'} style={{ cursor: onPick ? 'crosshair' : 'zoom-in' }} />
+                {pins.filter((pin) => (pin.page || 1) === i + 1).map((pin, k) => (
+                  <span key={k} className={`mv-pin ${pin.open ? 'open' : ''} ${pin.draft ? 'draft' : ''}`} style={{ left: `${pin.x * 100}%`, top: `${pin.y * 100}%` }} title={pin.label || ''} aria-label={pin.label ? `Marcação: ${pin.label}` : 'Marcação'}>{pin.n ?? ''}</span>
+                ))}
+              </div>
             )}
           </div>
         ))}

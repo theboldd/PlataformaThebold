@@ -4,7 +4,7 @@ Gerado de `server/engine/automations.js` (`node scripts/gen-automations-doc.mjs`
 
 Classes: 1 = simples · 2 = baseada em regras · 3 = precisa de IA · 4 = precisa de aprovação humana.
 
-## MVP (30)
+## MVP (40)
 
 | Evento | Condição | Ação | Responsável | Notificação | Prazo | Motor | Classe | Status |
 |---|---|---|---|---|---|---|---|---|
@@ -37,14 +37,22 @@ Classes: 1 = simples · 2 = baseada em regras · 3 = precisa de IA · 4 = precis
 | **Cliente comentou em conteúdo**<br><sub>`comentario.cliente`</sub> | — | Notificar estrategista da conta (agrupado) | Estrategista | Estrategista | — | Regra determinística | Simples | ✅ implementada |
 | **Cliente reservou horário**<br><sub>`reuniao.reservada`</sub> | Horário livre (sem conflito) | Criar reunião, convidados, evento Google Calendar (se conectado) | Equipe da conta | Participantes + cliente | — | Regra determinística | Regras | ✅ implementada |
 | **Ata registrada com ações**<br><sub>`reuniao.itens`</sub> | Ação com responsável | Criar tarefa com origem reunião | Responsável | Responsável | Prazo informado | Regra determinística | Regras | ✅ implementada |
+| **Transcrição disponível**<br><sub>`reuniao.extracao_ia`</sub> | Transcrição registrada e IA configurada | Claude gera rascunhos: resumo do cliente + resumo interno (decisões, tarefas, bloqueios, riscos) | Anfitrião confirma | Anfitrião | 24h úteis | Claude (IA) | IA | ✅ implementada |
+| **Reunião realizada com evento no Google Calendar**<br><sub>`reuniao.transcricao_detectada`</sub> | Google conectado | Procurar transcrição anexada ao evento; sem acesso ao Drive, pedir que a equipe cole/envie | Anfitrião | Anfitrião | 1 dia | Regra determinística | Regras | ✅ implementada |
+| **Resumo do cliente aprovado**<br><sub>`reuniao.resumo_cliente`</sub> | Verificação de vazamento sem alertas | Publicar no portal e notificar o cliente | Aprovador | Cliente | — | Humano | Aprovação humana | ✅ implementada |
+| **Resumo interno aplicado**<br><sub>`reuniao.resumo_interno`</sub> | Confirmação humana item a item | Criar tarefas, decisões e memória do cliente (Client Brain / The Bold Brain) | Anfitrião | Responsáveis | Prazo informado | Humano | Aprovação humana | ✅ implementada |
+| **Cliente abriu uma solicitação**<br><sub>`solicitacao.criada`</sub> | — | Criar solicitação + tarefa, atribuir por tipo (estratégia/atendimento/financeiro), prazo esperado | Por tipo | Responsável + equipe da conta | 1–3 dias úteis | Regra determinística | Regras | ✅ implementada |
+| **Equipe pediu uma decisão ao cliente**<br><sub>`decisao.pedida`</sub> | — | Entrar na Central de Decisões do cliente e notificar | Cliente | Cliente | Prazo definido | Regra determinística | Simples | ✅ implementada |
+| **Cliente decidiu**<br><sub>`decisao.respondida`</sub> | — | Registrar decisão, memória do cliente, Client Brain (quando aplicável) e tarefa de sequência | Quem pediu | Quem pediu + equipe | 1 dia útil | Regra determinística | Regras | ✅ implementada |
+| **Cliente fez uma pergunta em um conteúdo**<br><sub>`pergunta.cliente`</sub> | — | Pendência para a estrategista até a equipe responder no fio | Estrategista | Estrategista (atenção) | 1 dia útil | Regra determinística | Regras | ✅ implementada |
+| **Prazo de aprovação do cliente passou**<br><sub>`cliente.prazo_vencido`</sub> | Etapa de cliente | Registrar atraso, lembrar o cliente (respeitando intervalo e limite), avisar o atendimento e avaliar impacto na publicação | Atendimento | Cliente (lembrete) + atendimento; Operações se a publicação estiver em risco | — | Regra determinística | Regras | ✅ implementada |
+| **Diário**<br><sub>`saude.calcular`</sub> | — | Calcular a saúde de cada cliente com evidências e registrar mudanças de nível | Sistema | CEO + Operações quando piora | — | Regra determinística | Regras | ✅ implementada |
 | **A cada 15 minutos**<br><sub>`insights.detectar`</sub> | — | Detectores determinísticos de gargalo, retrabalho, carga, espera | Sistema | Torre de Controle | — | Regra determinística | Regras | ✅ implementada |
 
-## V2 (12)
+## V2 (10)
 
 | Evento | Condição | Ação | Responsável | Notificação | Prazo | Motor | Classe | Status |
 |---|---|---|---|---|---|---|---|---|
-| **Transcrição disponível**<br><sub>`reuniao.extracao_ia`</sub> | Consentimento registrado | Claude extrai decisões/ações/prazos (sugestões) + resumos | Anfitrião confirma | Anfitrião | 24h úteis | Claude (IA) | IA | ◻ planejada |
-| **Resumo do cliente aprovado**<br><sub>`reuniao.resumo_cliente`</sub> | Aprovação interna | Publicar no portal e notificar | Aprovador | Cliente | — | Humano | Aprovação humana | ◻ planejada |
 | **Próxima ação do negócio venceu**<br><sub>`crm.followup`</sub> | Negócio aberto | Criar tarefa de follow-up para o dono | Comercial | Dono do negócio | Hoje | Regra determinística | Regras | ✅ implementada |
 | **Negócio fechado**<br><sub>`crm.fechado`</sub> | — | Criar cliente e iniciar onboarding | Operações | Rebeca + Vitória | — | Humano | Aprovação humana | ✅ implementada |
 | **Parcela vencida sem pagamento**<br><sub>`financeiro.atraso`</sub> | — | Marcar atrasada, alertar financeiro | Comercial/Financeiro | Financeiro + Rebeca | — | Regra determinística | Regras | ✅ implementada |

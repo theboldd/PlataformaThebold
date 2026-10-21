@@ -83,7 +83,7 @@ ops.get('/clients/:id', requirePerm('clientes', 'view'), (req, res) => {
   const timeline = all('SELECT l.*, u.name actor_name FROM activity_logs l LEFT JOIN users u ON u.id=l.actor_id WHERE l.client_id=? ORDER BY l.created_at DESC LIMIT 120', c.id);
   const finance = can(req.user, 'financeiro') ? { contracts: all('SELECT * FROM contracts WHERE client_id=?', c.id), invoices: all('SELECT * FROM invoices WHERE client_id=? ORDER BY due_at DESC', c.id) } : null;
   const channel = one("SELECT id FROM channels WHERE client_id=? AND kind='cliente'", c.id);
-  res.json({ client: clientSummary(c), team, brain, memories, onboarding, cycles, contents, meetings, files, timeline, finance, channel_id: channel?.id, can_edit: can(req.user, 'clientes', 'edit') });
+  res.json({ client: clientSummary(c), team, brain, memories, onboarding, cycles, contents, meetings, files, timeline, finance, channel_id: channel?.id, open_requests: one("SELECT COUNT(*) n FROM client_requests WHERE client_id=? AND status NOT IN ('concluido','cancelado')", c.id).n, can_edit: can(req.user, 'clientes', 'edit') });
 });
 ops.patch('/clients/:id', requirePerm('clientes', 'edit'), (req, res) => {
   assertClient(req.user, req.params.id);
@@ -353,12 +353,12 @@ ops.post('/contents/:id/comments', requirePerm('conteudos', 'view'), (req, res) 
   assertClient(req.user, c.client_id);
   res.json(addComment(c, req.user, req.body || {}));
 });
-export function addComment(c, user, { body, visibility, parent_id, anchor, file_id }) {
+export function addComment(c, user, { body, visibility, parent_id, anchor, file_id, kind = null }) {
   if (!body?.trim()) throw new HttpError(422, 'Escreva o comentário.');
   const vis = user.role_key === 'cliente' ? 'client' : visibility === 'internal' ? 'internal' : 'client';
   if (parent_id) { const p = one('SELECT * FROM comments WHERE id=? AND content_id=?', parent_id, c.id); if (!p || (user.role_key === 'cliente' && p.visibility !== 'client')) throw new HttpError(404, 'Comentário não encontrado.'); }
   const v = currentVersion(c.id);
-  const cm = insert('comments', { id: uid('cm_'), content_id: c.id, version_id: v?.id || null, parent_id: parent_id || null, author_id: user.id, body: body.trim(), visibility: vis, anchor: anchor ? JSON.stringify(anchor) : null, file_id: file_id || null, created_at: now() });
+  const cm = insert('comments', { id: uid('cm_'), content_id: c.id, version_id: v?.id || null, parent_id: parent_id || null, author_id: user.id, body: body.trim(), visibility: vis, anchor: anchor ? JSON.stringify(anchor) : null, file_id: file_id || null, kind, created_at: now() });
   // Menções: cliente só pode mencionar a equipe vinculada a ele; equipe interna pode mencionar internos. Comentário interno nunca notifica cliente.
   const linkedTeam = all("SELECT DISTINCT u.id, u.name FROM client_members cm JOIN users u ON u.id=cm.user_id WHERE cm.client_id=? AND u.active=1 AND u.role_key<>'cliente'", c.client_id);
   const internals = all("SELECT id, name FROM users WHERE active=1 AND role_key<>'cliente'");
@@ -367,7 +367,7 @@ export function addComment(c, user, { body, visibility, parent_id, anchor, file_
   const mentioned = parseMentions(body, allowed, c.client_id).filter((id) => id !== user.id);
   recordMentions('comment', cm.id, mentioned, user.id);
   const isClientAuthor = user.role_key === 'cliente';
-  notify(mentioned, { level: 'atencao', type: 'mencao', title: `${user.name} mencionou você`, body: `#${c.number} ${c.title}: ${body.slice(0, 140)}`, link: one('SELECT role_key FROM users WHERE id=?', mentioned[0] || '')?.role_key === 'cliente' ? '/portal/conteudos' : `/conteudos/${c.id}`, content: c.id, client: c.client_id });
+  notify(mentioned, { level: 'atencao', type: 'mencao', title: `${user.name} mencionou você`, body: `#${c.number} ${c.title}: ${body.slice(0, 140)}`, link: one('SELECT role_key FROM users WHERE id=?', mentioned[0] || '')?.role_key === 'cliente' ? `/portal/conteudos?c=${c.id}` : `/conteudos/${c.id}`, content: c.id, client: c.client_id });
   if (mentioned.length) automation('mencao', { entity: 'comment', id: cm.id, client: c.client_id, detail: `${mentioned.length}` });
   if (isClientAuthor) {
     const team = all("SELECT user_id FROM client_members WHERE client_id=? AND function IN ('estrategia','atendimento')", c.client_id).map((r) => r.user_id).filter((id) => !mentioned.includes(id));
@@ -375,7 +375,13 @@ export function addComment(c, user, { body, visibility, parent_id, anchor, file_
     automation('comentario.cliente', { entity: 'comment', id: cm.id, client: c.client_id });
   } else if (vis === 'client' && parent_id) {
     const parent = one('SELECT author_id FROM comments WHERE id=?', parent_id);
-    if (parent && parent.author_id !== user.id && !mentioned.includes(parent.author_id)) notify(parent.author_id, { level: 'info', type: 'resposta', title: `${user.name} respondeu seu comentário`, body: body.slice(0, 140), link: one('SELECT role_key FROM users WHERE id=?', parent.author_id).role_key === 'cliente' ? '/portal/conteudos' : `/conteudos/${c.id}`, content: c.id, client: c.client_id });
+    const toClient = parent && one('SELECT role_key FROM users WHERE id=?', parent.author_id)?.role_key === 'cliente';
+    if (parent && parent.author_id !== user.id && !mentioned.includes(parent.author_id)) notify(parent.author_id, { level: 'info', type: 'resposta', title: toClient ? 'A The Bold respondeu seu comentário' : `${user.name} respondeu seu comentário`, body: `${c.title}: ${body.slice(0, 140)}`, cta: toClient ? 'Ver resposta' : null, link: toClient ? `/portal/conteudos?c=${c.id}` : `/conteudos/${c.id}`, content: c.id, client: c.client_id });
+    // Pergunta do cliente respondida pela equipe → a pendência interna é retirada
+    if (toClient && one("SELECT 1 FROM comments WHERE id=? AND kind='pergunta'", parent_id)) {
+      run("UPDATE tasks SET status='concluida', completed_at=?, completed_by=? WHERE source_type='comment' AND source_id=? AND status IN ('aberta','em_andamento')", now(), user.id, parent_id);
+      log({ actor: user.id, action: 'pergunta.respondida', entity: 'comment', id: parent_id, client: c.client_id, content: c.id, visibility: 'client', summary: 'A The Bold respondeu sua pergunta' });
+    }
   }
   log({ actor: user.id, action: 'comentario.criado', entity: 'comment', id: cm.id, client: c.client_id, content: c.id, summary: `${vis === 'internal' ? 'Comentário interno' : 'Comentário'} de ${user.name}${anchor?.page ? ` (página ${anchor.page})` : ''}${anchor?.t != null ? ` (${anchor.t}s)` : ''}`, visibility: vis === 'internal' ? 'internal' : 'client' });
   return cm;

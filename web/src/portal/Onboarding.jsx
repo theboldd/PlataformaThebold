@@ -1,7 +1,7 @@
 // ONBOARDING — o formulário "Sua marca" da The Bold, agora dentro da plataforma.
 // Mesmas etapas e perguntas do ESPAÇO CLIENTE do Notion. Cada resposta é salva sozinha; o envio libera o próximo passo.
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { useApi, useToast } from '../lib/hooks.js';
 import { Button, ErrorBox, Loading } from '../components/ui.jsx';
@@ -20,6 +20,10 @@ export default function Onboarding() {
   const [values, setValues] = useState({});
   const [state, setState] = useState({}); // key → 'salvando' | 'salvo' | 'erro'
   const [count, setCount] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [params, setParams] = useSearchParams();
+  const onlyMissing = params.get('faltando') === '1';
+  const [missingAtOpen, setMissingAtOpen] = useState(null); // congela a lista ao abrir: a pergunta respondida não some enquanto a pessoa digita
   const [sending, setSending] = useState(false);
   const timers = useRef({});
   const top = useRef(null);
@@ -28,6 +32,8 @@ export default function Onboarding() {
     if (!data) return;
     setValues(Object.fromEntries(Object.entries(data.answers).filter(([, a]) => a.value !== undefined).map(([k, a]) => [k, a.value])));
     setCount(data.answered);
+    setProfile(data.profile);
+    setMissingAtOpen((m) => m || data.missing_keys);
   }, [data]);
   useEffect(() => () => Object.values(timers.current).forEach(clearTimeout), []);
 
@@ -36,7 +42,7 @@ export default function Onboarding() {
 
   const save = async (key, value) => {
     setState((s) => ({ ...s, [key]: 'salvando' }));
-    try { const r = await api.put(`/portal/onboarding/answers/${key}`, { value }); setCount(r.answered); setState((s) => ({ ...s, [key]: 'salvo' })); } catch (e) { setState((s) => ({ ...s, [key]: 'erro' })); toast(e.message, 'err'); }
+    try { const r = await api.put(`/portal/onboarding/answers/${key}`, { value }); setCount(r.answered); setProfile(r.profile); setState((s) => ({ ...s, [key]: 'salvo' })); } catch (e) { setState((s) => ({ ...s, [key]: 'erro' })); toast(e.message, 'err'); }
   };
   const change = (q, value, immediate = false) => {
     setValues((v) => ({ ...v, [q.key]: value }));
@@ -50,7 +56,9 @@ export default function Onboarding() {
     try { await api.post('/portal/onboarding/submit'); toast('Formulário enviado. A equipe já recebeu suas respostas.'); reload(); refresh?.(); } catch (e) { toast(e.message, 'err'); } finally { setSending(false); }
   };
 
-  const sec = data.sections[step];
+  const missingSet = new Set(missingAtOpen || data.missing_keys);
+  const sections = onlyMissing ? data.sections.map((s) => ({ ...s, questions: s.questions.filter((q) => missingSet.has(q.key)) })).filter((s) => s.questions.length) : data.sections;
+  const sec = sections[Math.min(step, Math.max(0, sections.length - 1))] || data.sections[0];
   const filled = (q) => (q.sensitive ? data.answers[q.key]?.saved || !!values[q.key] : String(values[q.key] ?? '').trim());
   const done = data.status === 'concluido';
   const total = data.total, answered = count ?? data.answered;
@@ -58,17 +66,25 @@ export default function Onboarding() {
   return (
     <div className="p-page p-ob" ref={top}>
       <div className="caps">Onboarding · {data.title || 'Sua marca'}</div>
-      <h1 className="p-hello-t" style={{ fontSize: 'clamp(30px, 7vw, 46px)' }}>Bem-vinda(o) à The Bold.</h1>
-      <p className="p-hello-s">{done
+      <h1 className="p-hello-t" style={{ fontSize: 'clamp(30px, 7vw, 46px)' }}>{data.migrated ? 'Sua marca, por você.' : 'Bem-vinda(o) à The Bold.'}</h1>
+      <p className="p-hello-s">{data.migrated
+        ? 'Trouxemos as respostas que você já tinha dado no seu formulário anterior. Revise se quiser e complete só o que falta.'
+        : done
         ? `Formulário enviado${data.submitted_at ? ` em ${fmtDateTime(data.submitted_at)}` : ''}. Você ainda pode complementar suas respostas — a equipe é avisada.`
         : 'Suas respostas são salvas automaticamente. Pode parar e voltar quando quiser.'}</p>
-      <div className="p-ob-progress" aria-label={`${answered} de ${total} respondidas`}><i style={{ width: `${Math.round((answered / Math.max(1, total)) * 100)}%` }} /></div>
-      <div className="xs muted mt-2">{answered} de {total} perguntas respondidas</div>
+      {profile && <>
+        <div className="p-ob-progress" aria-label={`Onboarding ${profile.percent}% completo`}><i style={{ width: `${profile.percent}%` }} /></div>
+        <div className="row between wrap mt-2 gap-2">
+          <span className="sm">Seu onboarding está <b>{profile.percent}% completo</b>.{profile.missing > 0 ? ` ${profile.missing === 1 ? 'Falta 1 informação' : `Faltam ${profile.missing} informações`}.` : ' Tudo preenchido.'}</span>
+          {profile.missing > 0 && <button className="p-link xs" onClick={() => { setStep(0); setParams(onlyMissing ? {} : { faltando: '1' }, { replace: true }); }}>{onlyMissing ? 'mostrar todas as perguntas' : 'mostrar só o que falta'}</button>}
+        </div>
+      </>}
+      <div className="xs muted mt-2">{answered} de {total} perguntas respondidas{data.sections.some((s) => s.questions.some((q) => q.sensitive)) ? ' · acessos não contam no percentual' : ''}</div>
 
       <nav className="p-ob-steps" aria-label="Etapas do formulário">
-        {data.sections.map((s, i) => (
-          <button key={s.title} className={`${i === step ? 'on' : ''} ${s.questions.every(filled) ? 'done' : ''}`} onClick={() => go(i)} aria-current={i === step ? 'step' : undefined}>
-            {s.questions.every(filled) ? '✓ ' : ''}{title(s.title)}
+        {sections.map((s, i) => (
+          <button key={s.title} className={`${s === sec ? 'on' : ''} ${s.questions.every(filled) ? 'done' : ''}`} onClick={() => go(i)} aria-current={s === sec ? 'step' : undefined}>
+            <span className="p-ob-n">{String(data.sections.findIndex((x) => x.title === s.title) + 1).padStart(2, '0')} /</span> {s.questions.every(filled) ? '✓ ' : ''}{title(s.title)}
           </button>
         ))}
       </nav>
@@ -98,14 +114,14 @@ export default function Onboarding() {
           ) : (
             <textarea id={`q-${q.key}`} rows={q.type === 'text' ? 1 : 4} value={values[q.key] ?? ''} onChange={(e) => change(q, e.target.value)} onBlur={() => flush(q)} />
           )}
-          <div className="p-ob-saved" aria-live="polite">{{ salvando: 'Salvando…', salvo: 'Salvo', erro: 'Não foi possível salvar — tente de novo' }[state[q.key]] || (q.sensitive && data.answers[q.key]?.saved ? 'Guardado com segurança' : '')}</div>
+          <div className="p-ob-saved" aria-live="polite">{{ salvando: 'Salvando…', salvo: 'Salvo', erro: 'Não foi possível salvar — tente de novo' }[state[q.key]] || (q.sensitive && data.answers[q.key]?.saved ? 'Guardado com segurança' : data.answers[q.key]?.from_notion ? 'Resposta trazida do seu formulário anterior' : '')}</div>
         </div>
       ))}
 
       <div className="p-ob-foot">
-        {step > 0 ? <Button variant="ghost" onClick={() => go(step - 1)}>← {title(data.sections[step - 1].title)}</Button> : <Link className="p-link xs" to="/portal">voltar ao início</Link>}
-        {step < data.sections.length - 1
-          ? <Button variant="primary" onClick={() => go(step + 1)}>{title(data.sections[step + 1].title)} →</Button>
+        {step > 0 && sections[step - 1] ? <Button variant="ghost" onClick={() => go(step - 1)}>← {title(sections[step - 1].title)}</Button> : <Link className="p-link xs" to="/portal">voltar ao início</Link>}
+        {step < sections.length - 1
+          ? <Button variant="primary" onClick={() => go(step + 1)}>{title(sections[step + 1].title)} →</Button>
           : done ? <span className="sm muted">✓ Enviado</span>
           : <Button variant="primary" disabled={sending || !answered} onClick={submit}>{sending ? 'Enviando…' : 'Enviar formulário'}</Button>}
       </div>

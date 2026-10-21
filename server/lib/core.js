@@ -19,7 +19,8 @@ export function log({ actor = null, kind, action, entity, id = null, client = nu
 
 // ── NOTIFICAÇÕES ────────────────────────────────────────
 // level: info | atencao | urgente. group_key agrupa notificações repetidas (não lidas) em uma só.
-export function notify(userIds, { level = 'info', type, title, body = null, link = null, groupKey = null, client = null, content = null, exclude = null }) {
+// Notificação ao cliente responde sempre: o que aconteceu (title) · por que importa / o que fazer (body) · [cta →] (link)
+export function notify(userIds, { level = 'info', type, title, body = null, link = null, cta = null, groupKey = null, client = null, content = null, exclude = null }) {
   const ids = [...new Set((Array.isArray(userIds) ? userIds : [userIds]).filter(Boolean))].filter((id) => id !== exclude);
   const ts = now();
   for (const user_id of ids) {
@@ -28,12 +29,12 @@ export function notify(userIds, { level = 'info', type, title, body = null, link
     if (groupKey) {
       const ex = one('SELECT * FROM notifications WHERE user_id=? AND group_key=? AND read_at IS NULL', user_id, groupKey);
       if (ex) {
-        run('UPDATE notifications SET count=count+1, title=?, body=?, level=?, updated_at=? WHERE id=?', title, body, rank(level) > rank(ex.level) ? level : ex.level, ts, ex.id);
+        run('UPDATE notifications SET count=count+1, title=?, body=?, cta=COALESCE(?, cta), level=?, updated_at=? WHERE id=?', title, body, cta, rank(level) > rank(ex.level) ? level : ex.level, ts, ex.id);
         bus.emit('notify', { user_id, id: ex.id });
         continue;
       }
     }
-    const n = insert('notifications', { id: uid('n_'), user_id, level, type, title, body, link, group_key: groupKey, client_id: client, content_id: content, created_at: ts, updated_at: ts });
+    const n = insert('notifications', { id: uid('n_'), user_id, level, type, title, body, link, cta, group_key: groupKey, client_id: client, content_id: content, created_at: ts, updated_at: ts });
     bus.emit('notify', { user_id, id: n.id });
   }
 }

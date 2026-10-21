@@ -64,7 +64,7 @@ function MaterialRow({ m, onDone }) {
       <div className="grow">
         <div className="ttl">{m.block_reason}</div>
         <div className="sm muted">Para: #{m.number} {m.title}{m.planned_at ? ` · publicação ${fmtDate(m.planned_at)}` : ''}</div>
-        <Uploader extra={{ content_id: m.id }} label="Enviar material" onDone={onDone} />
+        <Uploader extra={{ context: `conteudo:${m.id}` }} label="Enviar material" onDone={onDone} />
       </div>
     </div>
   );
@@ -87,7 +87,7 @@ function OnbRow({ o, onDone }) {
       <div className="grow">
         <div className="ttl">{((s) => s.charAt(0).toUpperCase() + s.slice(1))(o.label.replace('Briefing “Sua marca”: ', '').replace('Briefing: ', ''))}</div>
         <div className="xs muted">{KIND[o.kind]}{o.due_at && !done ? ` · até ${fmtDate(o.due_at)}` : ''}{done ? ' · recebido' : ''}</div>
-        {!done && o.kind === 'material' && <Uploader extra={{ onboarding_item: o.id }} label="Enviar arquivos" onDone={onDone} />}
+        {!done && o.kind === 'material' && <Uploader extra={{ context: `onboarding:${o.id}` }} label="Enviar arquivos" onDone={onDone} />}
         {!done && ['formulario', 'acesso'].includes(o.kind) && <Link to="/portal/onboarding" className="p-cta mt-4">{o.kind === 'acesso' ? 'Informar acessos' : 'Abrir formulário'} <I.arrow size={14} /></Link>}
         {!done && !['material', 'formulario', 'acesso'].includes(o.kind) && (
           <form onSubmit={send} className="col gap-2 mt-4">
@@ -110,7 +110,7 @@ export function Uploader({ extra = {}, label = 'Enviar arquivos', onDone, big })
     if (!files?.length) return;
     const fd = new FormData();
     [...files].forEach((f) => fd.append('files', f));
-    Object.entries(extra).forEach(([k, v]) => fd.append(k, v));
+    Object.entries(extra).forEach(([k, v]) => v != null && v !== '' && fd.append(k, v));
     setProgress(0);
     try { await uploadWithProgress('/portal/materials', fd, setProgress); toast(`${files.length} arquivo(s) enviado(s) em qualidade original.`); onDone?.(); }
     catch (x) { toast(x.message, 'err'); } finally { setProgress(null); if (input.current) input.current.value = ''; }

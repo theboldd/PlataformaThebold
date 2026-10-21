@@ -10,7 +10,7 @@ import { activeForm, formStatus } from '../services/onboarding.js';
 import { BRAIN_SECTIONS } from '../ai/memory.js';
 
 export const ficha = Router();
-const TEAM_ORIGINS = ['equipe', 'observacao_interna'];
+const TEAM_ORIGINS = ['equipe', 'observacao_interna', 'ia'];
 
 ficha.get('/clients/:id/ficha', requireInternal, requirePerm('clientes', 'view'), (req, res) => {
   assertClient(req.user, req.params.id);
@@ -51,7 +51,9 @@ ficha.patch('/clients/:id/brain-entries/:eid', requireInternal, requirePerm('cli
   if (req.body.section !== undefined) { if (!BRAIN_SECTIONS.includes(req.body.section)) throw new HttpError(422, 'Seção inválida.'); patch.section = req.body.section; }
   if (req.body.content !== undefined) { if (!String(req.body.content).trim()) throw new HttpError(422, 'O conteúdo não pode ficar vazio.'); patch.content = String(req.body.content).trim(); }
   if (req.body.label !== undefined) patch.label = req.body.label || null;
-  // A procedência não muda: uma resposta do cliente editada continua sendo do cliente, com o editor registrado
+  // A procedência não muda: uma resposta do cliente editada continua sendo do cliente, com o editor registrado.
+  // O valor anterior nunca some: fica em client_brain_history (antes/depois, quem, quando, motivo).
+  if (patch.content !== undefined && patch.content !== e.content) insert('client_brain_history', { id: uid('bh_'), entry_id: e.id, client_id: e.client_id, content_before: e.content, content_after: patch.content, changed_by: req.user.id, origin: e.origin, reason: req.body.reason || null, created_at: now() });
   update('client_brain_entries', { id: e.id }, { ...patch, updated_by: req.user.id, updated_at: now() });
   log({ actor: req.user.id, action: 'brain.registro_alterado', entity: 'client', id: e.client_id, client: e.client_id, summary: `Client Brain alterado · ${patch.section || e.section}: ${(e.label || '').slice(0, 80)}`, before: JSON.stringify({ section: e.section, content: e.content }), after: JSON.stringify({ section: patch.section || e.section, content: patch.content ?? e.content }) });
   res.json(one('SELECT * FROM client_brain_entries WHERE id=?', e.id));

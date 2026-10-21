@@ -17,7 +17,9 @@ export const SECTION_LABEL = {
 export const ORIGIN = {
   onboarding_cliente: ['Cliente · onboarding', 'o-cliente'], equipe: ['Equipe', 'o-equipe'],
   observacao_interna: ['Observação interna', 'o-interna'], indefinido: ['Origem a confirmar', 'o-indef'],
+  cliente: ['Cliente · plataforma', 'o-cliente'], ia: ['IA · sugestão (não oficial)', 'o-indef'], decisao: ['Decisão', 'o-equipe'],
 };
+const NOT_SHAREABLE = ['observacao_interna', 'ia', 'indefinido'];
 const SOURCE = { notion: 'Notion', notion_onboarding: 'Notion · formulário', onboarding: 'Plataforma · formulário', plataforma: 'Plataforma' };
 export const ISSUE = { escopo: 'Escopo', formulario_antigo: 'Formulário antigo', arquivos_nao_lidos: 'Arquivos não lidos', inconsistencia: 'Inconsistência', conflito: 'Conflito', resposta_multipla: 'Resposta múltipla', duplicado: 'Possível duplicado', pagina_inacessivel: 'Página não lida', arquivo_no_notion: 'Arquivo no Notion', status: 'Status', equipe: 'Equipe', campo_sem_secao: 'Sem seção', quadro_mensal: 'Quadro mensal', novembro: 'Quadro mensal' };
 
@@ -69,6 +71,9 @@ function Entries({ data, clientId, reload }) {
   const save = async (e) => {
     try { await api.patch(`/clients/${clientId}/brain-entries/${e.id}`, { content: editing.content, section: editing.section }); toast('Registro atualizado (alteração no histórico).'); setEditing(null); reload(); } catch (err) { toast(err.message, 'err'); }
   };
+  const share = async (e) => {
+    try { await api.patch(`/clients/${clientId}/brain-entries/${e.id}/share`, { shared: !e.shared }); toast(e.shared ? 'Retirado de “Sua marca”.' : 'Compartilhado: o cliente vê e pode confirmar ou pedir atualização.'); reload(); } catch (err) { toast(err.message, 'err'); }
+  };
   const add = async () => {
     try { await api.post(`/clients/${clientId}/brain-entries`, draft); toast('Informação registrada.'); setDraft({ ...draft, label: '', content: '' }); setAdding(false); reload(); } catch (err) { toast(err.message, 'err'); }
   };
@@ -96,7 +101,9 @@ function Entries({ data, clientId, reload }) {
             <article key={e.id} className="ficha-entry">
               <div className="row between wrap gap-2">
                 <div className="sm strong">{e.label || 'Sem título'}</div>
-                <div className="row gap-2"><OriginChip origin={e.origin} />{data.can_edit && editing?.id !== e.id && <button className="btn btn-sm btn-ghost" onClick={() => setEditing({ id: e.id, content: e.content, section: e.section })}>Editar</button>}</div>
+                <div className="row gap-2"><OriginChip origin={e.origin} />{e.shared ? <span className="tag tag-bordo" title="Aparece para o cliente em “Sua marca”">compartilhado</span> : null}
+                  {data.can_edit && editing?.id !== e.id && !NOT_SHAREABLE.includes(e.origin) && <button className="btn btn-sm btn-ghost" onClick={() => share(e)} title="Mostrar ao cliente em “Sua marca, como a The Bold entende”">{e.shared ? 'Tirar de “Sua marca”' : 'Compartilhar com o cliente'}</button>}
+                  {data.can_edit && editing?.id !== e.id && <button className="btn btn-sm btn-ghost" onClick={() => setEditing({ id: e.id, content: e.content, section: e.section })}>Editar</button>}</div>
               </div>
               {editing?.id === e.id ? (
                 <div className="col gap-2 mt-2">

@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { I } from '../components/Icons.jsx';
 import { api } from '../lib/api.js';
 import { useApi, useToast } from '../lib/hooks.js';
 import { fmtTime, fmtDateTime, pad2 } from '../lib/format.js';
@@ -15,6 +17,9 @@ export default function Reunioes() {
   const [sel, setSel] = useState(null);
   const [busy, setBusy] = useState(false);
   const [booked, setBooked] = useState(null);
+  const [params] = useSearchParams();
+  const focus = params.get('m');
+  useEffect(() => { if (focus && data) document.getElementById(`m-${focus}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, [focus, data]);
   if (error) return <div className="p-page"><ErrorBox error={error} /></div>;
   if (!data) return <div className="p-page"><Loading rows={6} /></div>;
   const now = new Date().toISOString();
@@ -31,18 +36,30 @@ export default function Reunioes() {
       setSel(null); reload();
     } finally { setBusy(false); }
   };
-  const Meet = ({ m }) => {
+  const Meet = ({ m, next }) => {
     const d = new Date(m.starts_at);
+    const sm = m.summary;
     return (
-      <div className="p-meeting">
+      <article id={`m-${m.id}`} className={`p-meeting ${focus === m.id ? 'focus' : ''} ${next ? 'next' : ''}`}>
         <div className="date"><div className="d">{pad2(d.getDate())}</div><div className="caps">{d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}</div></div>
         <div className="grow">
-          <div className="ed-md" style={{ fontSize: 22 }}>{m.title.replace(/\s*\[DEMO\]/, '')}</div>
-          <div className="sm muted">{fmtTime(m.starts_at)}–{fmtTime(m.ends_at)}{m.location ? ` · ${m.location}` : ''}</div>
+          <div className="ed-md" style={{ fontSize: next ? 28 : 22 }}>{m.title.replace(/\s*\[DEMO\]/, '')}</div>
+          <div className="sm muted">{fmtTime(m.starts_at)}–{fmtTime(m.ends_at)}{m.location && !/^https?:/.test(m.location) ? ` · ${m.location}` : ''}</div>
+          {m.location && /^https?:\/\/meet\.google\.com/.test(m.location) && m.status === 'agendada' && <a className="p-cta sm mt-4" href={m.location} target="_blank" rel="noreferrer">Entrar no Google Meet <I.arrow size={14} /></a>}
           {m.status === 'cancelada' && <span className="tag tag-err mt-2">Cancelada</span>}
-          {m.summary && m.status === 'realizada' && <p className="sm mt-2" style={{ color: 'var(--ink-2)' }}>{m.summary}</p>}
+          {m.participants?.length > 0 && <p className="xs muted mt-2">Participantes: {m.participants.join(' · ')}</p>}
+          {m.agenda && <div className="p-meet-block"><div className="caps">Pauta</div><p className="sm">{m.agenda}</p></div>}
+          {sm && (
+            <div className="p-meet-sum">
+              <div className="caps">Resumo da reunião</div>
+              {sm.decisions?.length > 0 && <><h4>Decisões</h4><ul>{sm.decisions.map((x, i) => <li key={i}>{x}</li>)}</ul></>}
+              {sm.next_steps?.length > 0 && <><h4>Próximos passos</h4><ul>{sm.next_steps.map((x, i) => <li key={i}>{x.what}{x.who ? <b> · {x.who}</b> : null}{x.when ? <span className="muted"> · {x.when}</span> : null}</li>)}</ul></>}
+              {sm.info?.length > 0 && <><h4>Informações relevantes</h4><ul>{sm.info.map((x, i) => <li key={i}>{x}</li>)}</ul></>}
+            </div>
+          )}
+          {!sm && m.status === 'realizada' && <p className="xs muted mt-2">O resumo desta reunião está sendo preparado pela The Bold.</p>}
         </div>
-      </div>
+      </article>
     );
   };
   return (
@@ -50,7 +67,7 @@ export default function Reunioes() {
       <header className="p-page-head">
         <div className="caps">Sala de reuniões</div>
         <h1 className="ed-xl">Reuniões</h1>
-        <p className="p-lede">Reserve o horário da sua reunião mensal. Você só vê horários realmente livres.</p>
+        <p className="p-lede">Próxima reunião, pauta, decisões e próximos passos. Para marcar, você só vê horários realmente livres.</p>
       </header>
 
       {booked && (
@@ -62,7 +79,7 @@ export default function Reunioes() {
 
       <section className="mb-5">
         <div className="section-head"><h2 className="ed-md">Próximas</h2></div>
-        {upcoming.length ? upcoming.map((m) => <Meet key={m.id} m={m} />) : <Empty title="Nenhuma reunião marcada." />}
+        {upcoming.length ? upcoming.map((m, i) => <Meet key={m.id} m={m} next={i === 0} />) : <Empty title="Nenhuma reunião marcada." />}
       </section>
 
       <section className="section">

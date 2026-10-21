@@ -17,6 +17,7 @@ import { ficha } from './routes/ficha.js';
 import { pendencias } from './routes/pendencias.js';
 import { divisao } from './routes/divisao.js';
 import { review } from './routes/review.js';
+import { clientOps } from './routes/client-ops.js';
 
 export function bootstrap() {
   for (const r of ROLE_DEFS) {
@@ -60,6 +61,7 @@ export function createApp() {
   app.use('/api', ficha);
   app.use('/api', pendencias);
   app.use('/api', divisao);
+  app.use('/api', clientOps);
   app.use('/api', ops);
   app.use('/api', business);
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'Rota não encontrada.')));

@@ -7,7 +7,8 @@ import { Avatar, Button, ContentCard, Empty, ErrorBox, Field, Loading, Modal, Ri
 import { I } from '../components/Icons.jsx';
 import { ago, bytes, cleanName, fmtDate, fmtDateTime, fmtMonth, money } from '../lib/format.js';
 import { FUNCTIONS } from '../lib/status.js';
-import Ficha from './client/Ficha.jsx';
+import Ficha, { SECTION_LABEL } from './client/Ficha.jsx';
+import { RequestsTab, DecisionsTab, HealthTab, PulseTab } from './client/PortalTabs.jsx';
 import '../styles/production.css';
 
 const BRAIN = [['posicionamento', 'Posicionamento'], ['publico', 'Público'], ['persona', 'Persona'], ['tom', 'Tom de voz'], ['linguagem', 'Linguagem'], ['oferta', 'Oferta'], ['produtos', 'Produtos e serviços'], ['objetivos', 'Objetivos'], ['estrategia', 'Estratégia'], ['preferencias', 'Preferências'], ['restricoes', 'Restrições'], ['referencias', 'Referências'], ['regras', 'Regras específicas'], ['importante', 'Informações importantes']];
@@ -31,6 +32,7 @@ export default function ClienteDetalhe() {
     { key: 'visao', label: 'Visão geral' }, { key: 'ficha', label: 'Ficha' }, { key: 'brain', label: 'Resumo do Brain' },
     { key: 'onboarding', label: 'Onboarding', count: ob && ob.status !== 'concluido' ? missing.length : 0 },
     { key: 'conteudos', label: 'Conteúdos', count: data.contents.length }, { key: 'reunioes', label: 'Reuniões', count: data.meetings.length },
+    { key: 'solicitacoes', label: 'Solicitações', count: data.open_requests || 0 }, { key: 'decisoes', label: 'Decisões' }, { key: 'marca', label: 'Marca & Pulso' }, { key: 'saude', label: 'Saúde' },
     { key: 'equipe', label: 'Equipe' }, { key: 'arquivos', label: 'Arquivos', count: data.files.length },
     ...(data.finance ? [{ key: 'financeiro', label: 'Financeiro' }] : []), { key: 'historico', label: 'Histórico' },
   ];
@@ -65,6 +67,10 @@ export default function ClienteDetalhe() {
         ))}</ul>
       ))}
       {tab === 'equipe' && <TeamTab data={data} reload={reload} />}
+      {tab === 'solicitacoes' && <RequestsTab clientId={c.id} team={data.team.filter((t, i, a) => t.role_key !== 'cliente' && a.findIndex((x) => x.id === t.id) === i)} />}
+      {tab === 'decisoes' && <DecisionsTab clientId={c.id} canEdit={data.can_edit} sections={Object.keys(SECTION_LABEL)} />}
+      {tab === 'marca' && <PulseTab clientId={c.id} canEdit={data.can_edit} />}
+      {tab === 'saude' && <HealthTab clientId={c.id} />}
       {tab === 'arquivos' && (!data.files.length ? <Empty title="Nenhum arquivo." >Materiais enviados pelo cliente e entregas da produção aparecem aqui.</Empty> : (
         <div className="files-grid">{data.files.map((f) => (
           <a key={f.id} className="file-tile" href={f.urls.original} target="_blank" rel="noreferrer" data-cursor="VER">
