@@ -128,3 +128,20 @@ test('webhook: só aceita com assinatura válida do token de verificação', asy
   assert.equal((await ok.json()).status, 'aguardando_mapeamento', 'página de base não mapeada não vira nada sozinha');
   assert.ok(all('SELECT * FROM notion_changes WHERE via=?', 'webhook').length === 1);
 });
+
+test('decisão da CEO: CR EDITORIAL ligado; desligar pelo painel prevalece; sem hospedagem persistente fica PARCIAL, não ATIVA', async () => {
+  S.ensureSources();
+  assert.equal(one('SELECT enabled FROM notion_sync_sources WHERE key=?', `hist:${DB}`).enabled, 1);
+  process.env.NOTION_TOKEN = 'secret_teste';
+  let it = S.syncMap().flatMap((g) => g.items).find((i) => i.key === `hist:${DB}`);
+  assert.equal(it.state, 'parcial', 'sem hospedagem persistente não é sincronização ativa');
+  process.env.BOLD_PERSISTENT_HOST = '1';
+  it = S.syncMap().flatMap((g) => g.items).find((i) => i.key === `hist:${DB}`);
+  assert.equal(it.state, 'ativa');
+  delete process.env.BOLD_PERSISTENT_HOST; delete process.env.NOTION_TOKEN;
+  const g = await login(ceo);
+  assert.equal((await g.patch(`/integracoes/notion/fontes/hist:${DB}`, { enabled: false })).status, 200);
+  S.ensureSources();
+  assert.equal(one('SELECT enabled FROM notion_sync_sources WHERE key=?', `hist:${DB}`).enabled, 0, 'escolha manual não é sobrescrita');
+  assert.equal(one("SELECT enabled FROM notion_sync_sources WHERE key LIKE 'processo:%' LIMIT 1").enabled, 0, 'quadros continuam desligados');
+});

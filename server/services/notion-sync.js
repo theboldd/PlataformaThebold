@@ -63,7 +63,10 @@ const OTHERS = [
 const CR_FIELDS = ['Name → título', 'Date → data', 'Tipo, ESTRATÉGIA, OBJETIVO, REFERÊNCIA, LEGENDA → propriedades', 'APROVAÇÃO ARTE/LEGENDA/TEMA → informativo (nunca aprovação)'];
 const CR_UNMAPPED = ['Pessoas (👤 Responsável, Estrategista, Copywriter, Designer, Editor de Vídeo) — sem vínculo com usuários', 'Corpo da página (capa, cards, links) — não lido pela extração'];
 
-// Fontes consultáveis (bases) — criadas desativadas; a CEO decide quais entram na sincronização viva
+// Fontes consultáveis (bases) — criadas desativadas; a CEO decide quais entram na sincronização viva.
+// Decisões da CEO registradas aqui valem em qualquer instância (a prévia recria a base a cada instância):
+//  · 22/10/2026: ligar o CR EDITORIAL de todos os clientes. Se alguém desligar uma base depois pelo painel, a escolha manual prevalece.
+export const ENABLED_BY_DECISION = { labels: ['CR EDITORIAL'], decided_at: '2026-10-22', by: 'CEO' };
 export function ensureSources() {
   const ts = now();
   const add = (key, label, notionId, mapper, clientId = null) => {
@@ -74,6 +77,10 @@ export function ensureSources() {
   for (const h of all("SELECT source, source_db_url, MIN(client_id) client_id FROM notion_history WHERE source_db_url IS NOT NULL GROUP BY source, source_db_url")) {
     add(`hist:${idOf(h.source_db_url)}`, h.source, dashed(idOf(h.source_db_url)), 'notion_history', h.client_id);
   }
+  const marks = ENABLED_BY_DECISION.labels.map(() => '?').join(',');
+  const turned = all(`SELECT key, label FROM notion_sync_sources WHERE label IN (${marks}) AND enabled=0 AND updated_by IS NULL`, ...ENABLED_BY_DECISION.labels);
+  for (const t of turned) update('notion_sync_sources', { key: t.key }, { enabled: 1, updated_by: 'decisao-ceo', updated_at: ts });
+  if (turned.length) log({ kind: 'sistema', action: 'notion.fonte.ligada_por_decisao', entity: 'notion_source', id: 'CR EDITORIAL', summary: `Notion → The Bold OS: ${turned.length} base(s) de CR EDITORIAL ligadas na sincronização viva (decisão da CEO de ${ENABLED_BY_DECISION.decided_at}).` });
 }
 
 export function syncMap() {
@@ -102,8 +109,8 @@ export function syncMap() {
   const histItem = (h) => { const id = idOf(h.source_db_url); const s = src[`hist:${id}`]; return {
     key: `hist:${id}`, label: `${h.source} — ${h.client || 'cliente não identificado'}`, origin: `Página do cliente / ${h.source}`, kind: 'base', notion_id: dashed(id), url: h.source_db_url,
     destination: 'Histórico do Notion (somente leitura) · calendário editorial do cliente', entity: 'notion_history (espelho do card) · vínculo opcional com Conteúdo',
-    mapped: CR_FIELDS, unmapped: CR_UNMAPPED, direction: 'Notion → The Bold OS (leitura)', state: 'importado_nao_sincronizado', rows: null, rows_extracted: h.n,
-    imported_at: h.ext, last_edited: h.le, differences: [], note: `${h.n} registros importados (${h.vazios || 0} vazios, ocultos). Mapeamento pronto; entra na sincronização viva quando a CEO liberar.`, ...live(s) }; };
+    mapped: CR_FIELDS, unmapped: CR_UNMAPPED, direction: 'Notion → The Bold OS (leitura)', state: !s?.enabled ? 'importado_nao_sincronizado' : tokenPresent() && persistentHost() ? 'ativa' : 'parcial', rows: null, rows_extracted: h.n,
+    imported_at: h.ext, last_edited: h.le, differences: [], note: `${h.n} registros importados (${h.vazios || 0} vazios, ocultos). ${!s?.enabled ? 'Mapeamento pronto; entra na sincronização viva quando a CEO liberar.' : tokenPresent() && persistentHost() ? 'Ligada na sincronização viva (decisão da CEO).' : `Ligada por decisão da CEO. ${tokenPresent() ? 'Leitura manual (“Sincronizar agora”) funciona;' : 'Sem NOTION_TOKEN;'} a rotina contínua só roda com hospedagem persistente.`}`, ...live(s) }; };
   groups.push({ key: 'cr', label: 'CR Editorial dos clientes', items: hist.filter((h) => h.source === 'CR EDITORIAL').map(histItem) });
   groups.push({ key: 'calendarios', label: 'Calendários extras (auditados)', items: hist.filter((h) => h.source !== 'CR EDITORIAL').map(histItem) });
   // 3) Páginas dos clientes (Client Brain e onboarding com procedência)

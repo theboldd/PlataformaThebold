@@ -9,7 +9,7 @@
 | **Arquitetura Notion → The Bold OS:** webhook oficial (verificação + assinatura HMAC) ou polling por base (padrão 15 min, configurável), validação, deduplicação, mapeamento. Sem mapeamento: ALTERAÇÃO DETECTADA — AGUARDANDO MAPEAMENTO (guardada, nada criado). CR Editorial/calendários: espelho somente leitura; conteúdo vinculado nunca muda sozinho (CONFLITO); legado continua legado. Bases começam desligadas | Integrações → Notion | 🟡 Token configurado em produção (22/10) e leitura testada pela CEO com “Sincronizar agora”; rotina contínua aguarda hospedagem persistente e a decisão das bases |
 | **The Bold OS → Notion:** desativado. O cliente HTTP só lê (GET de páginas e consulta de bases); qualquer escrita é recusada antes de sair (testado) | — | ⚪ por decisão |
 
-**Arquitetura pronta ≠ sincronização operacional ativa.** ✅ NOTION_TOKEN configurado (integração interna “The Bold OS”, só leitura: atualizar/inserir conteúdo desmarcados) e conexão confirmada. Falta: hospedagem persistente (BOLD_PERSISTENT_HOST=1) e a decisão de quais bases ligar.
+**Arquitetura pronta ≠ sincronização operacional ativa.** ✅ NOTION_TOKEN configurado (integração interna “The Bold OS”, só leitura: atualizar/inserir conteúdo desmarcados) e conexão confirmada. ✅ Decisão de 22/10: CR EDITORIAL dos 20 clientes ligado (estado PARCIAL até haver hospedagem persistente; quadros, aprovações e Central continuam desligados). Falta: hospedagem persistente (BOLD_PERSISTENT_HOST=1).
 
 ---
 
