@@ -15,6 +15,25 @@ const FILTER_KEYS = ['month', 'client_id', 'assignee_id', 'stage', 'format', 'ri
 const LABEL_TONES = ['#45131D', '#1F3A4D', '#3E6A4E', '#8A5A1E', '#5B2A55', '#2F5F63', '#7A3B2E', '#3B3734'];
 const toneOf = (id = '') => LABEL_TONES[[...id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7) % LABEL_TONES.length];
 const PRIO_ICON = { critica: '⏶⏶', alta: '⏶', media: '=', baixa: '⏷' };
+// CLASSIFICAÇÃO = o tipo de trabalho do card, só a partir de dados reais: a raia da etapa no Process Engine (LANES)
+// e, na produção, a função da trilha (design, edição, legenda). Nada é recategorizado: é leitura do que já existe.
+// Marca + nome sempre visíveis (não depende só de cor).
+const CLASS = {
+  estrategia: { label: 'Estratégia', mark: '◎' }, design: { label: 'Design', mark: '◆' }, edicao: { label: 'Edição', mark: '▶' }, copy: { label: 'Legenda', mark: '¶' },
+  producao: { label: 'Produção', mark: '◇' }, revisao: { label: 'Revisão', mark: '✓' }, ajuste: { label: 'Ajuste', mark: '↺' }, cliente: { label: 'Aprovação', mark: '○' },
+  bloqueio: { label: 'Bloqueado', mark: '■' }, publicacao: { label: 'Publicação', mark: '↗' },
+};
+const LANE_CLASS = { estrategia: 'estrategia', revisao: 'revisao', ajuste: 'ajuste', cliente: 'cliente', producao: 'producao', agendamento: 'publicacao', publicacao: 'publicacao' };
+const cardClasses = (c) => {
+  if (c.blocked) return ['bloqueio'];
+  if (c.stage === 'producao') { const f = [...new Set((c.tracks || []).map((t) => t.fn))].filter((x) => CLASS[x]); return f.length ? f : ['producao']; }
+  return [LANE_CLASS[c.lane] || 'producao'];
+};
+const laneClass = (lane) => lane.cls || LANE_CLASS[lane.key] || 'producao';
+function ClassTag({ k, big }) {
+  const c = CLASS[k] || { label: k, mark: '·' };
+  return <span className={`jb-cls cls-${k} ${big ? 'big' : ''}`}><i aria-hidden>{c.mark}</i>{c.label}</span>;
+}
 
 export default function Processos() {
   useCrumbs('Processos', 'Quadro');
@@ -44,7 +63,7 @@ export default function Processos() {
   }, [data]);
   useEffect(() => { const t = setTimeout(() => setFilter('q', q.trim()), 300); return () => clearTimeout(t); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
   const setFilter = (k, v) => { const p = new URLSearchParams(params); if (v) p.set(k, v); else p.delete(k); setParams(p, { replace: true }); };
-  const active = FILTER_KEYS.some((k) => params.get(k));
+  const active = FILTER_KEYS.some((k) => params.get(k)) || !!params.get('classe');
 
   // Pessoas com cards no quadro (pilha de avatares como no Jira)
   const people = useMemo(() => {
@@ -59,11 +78,21 @@ export default function Processos() {
   const swimlanes = useMemo(() => {
     if (!data) return [];
     const base = view === 'equipe' ? teamLanes(data) : data.lanes;
-    if (group === 'none') return [{ key: 'all', label: null, lanes: base }];
+    const cls = params.get('classe');
+    const byCls = !cls ? base : view === 'equipe' ? base.filter((l) => laneClass(l) === cls) : base.map((l) => ({ ...l, cards: l.cards.filter((c) => cardClasses(c).includes(cls)) }));
+    if (group === 'none') return [{ key: 'all', label: null, lanes: byCls }];
     const keyOf = (c) => (group === 'client' ? c.client : group === 'format' ? FORMATS[c.format] || c.format : c.owner || 'Sem tarefa aberta');
-    const keys = [...new Set(base.flatMap((l) => l.cards.map(keyOf)))].sort();
-    return keys.map((k) => ({ key: k, label: k, lanes: base.map((l) => ({ ...l, cards: l.cards.filter((c) => keyOf(c) === k) })) }));
-  }, [data, group, view]);
+    const keys = [...new Set(byCls.flatMap((l) => l.cards.map(keyOf)))].sort();
+    return keys.map((k) => ({ key: k, label: k, lanes: byCls.map((l) => ({ ...l, cards: l.cards.filter((c) => keyOf(c) === k) })) }));
+  }, [data, group, view, params]);
+  // Classificações presentes no quadro, com a contagem real de cards
+  const classCounts = useMemo(() => {
+    if (!data) return [];
+    const m = new Map();
+    if (view === 'equipe') teamLanes(data).forEach((l) => { const k = laneClass(l); m.set(k, (m.get(k) || 0) + l.cards.length); });
+    else data.lanes.forEach((l) => l.cards.forEach((c) => cardClasses(c).forEach((k) => m.set(k, (m.get(k) || 0) + 1))));
+    return Object.keys(CLASS).filter((k) => m.has(k)).map((k) => ({ k, n: m.get(k) }));
+  }, [data, view]);
 
   return (
     <div className="jb">
@@ -98,6 +127,11 @@ export default function Processos() {
           <select className="jb-select" value={params.get('client_id') || ''} onChange={(e) => setFilter('client_id', e.target.value)} aria-label="Cliente">
             <option value="">Cliente</option>{data?.filters.clients.map((c) => <option key={c.id} value={c.id}>{cleanName(c.name)}</option>)}
           </select>
+          {classCounts.length > 1 && (
+            <select className="jb-select" value={params.get('classe') || ''} onChange={(e) => setFilter('classe', e.target.value)} aria-label="Classificação">
+              <option value="">Classificação</option>{classCounts.map(({ k, n }) => <option key={k} value={k}>{CLASS[k].label} · {n}</option>)}
+            </select>
+          )}
           {data?.filters.formats?.length > 1 && (
             <select className="jb-select" value={params.get('format') || ''} onChange={(e) => setFilter('format', e.target.value)} aria-label="Tipo de entrega">
               <option value="">Tipo</option>{data.filters.formats.map((f) => <option key={f} value={f}>{FORMATS[f] || f}</option>)}
@@ -130,7 +164,7 @@ export default function Processos() {
             <div key={sw.key} className="jb-swim">
               {sw.label && <div className="jb-swim-head"><span className="jb-label" style={{ background: toneOf(sw.label) }}>{cleanName(sw.label)}</span><span className="jb-swim-count">{sw.lanes.reduce((n, l) => n + l.cards.length, 0)} itens{group === 'client' ? ` · ${byFormat(sw.lanes)}` : ''}</span></div>}
               <div className="jb-board">
-                {sw.lanes.map((lane) => <Column key={lane.key} lane={lane} moved={moved} showHead={sw === swimlanes[0] || !!sw.label} onDropCard={canMove ? (card) => setMoving({ content: card, targets: lane.targets || (lane.stages || []).map((x) => x.key) }) : null} />)}
+                {sw.lanes.map((lane) => <Column key={lane.key} lane={lane} teamView={view === 'equipe'} moved={moved} showHead={sw === swimlanes[0] || !!sw.label} onDropCard={canMove ? (card) => setMoving({ content: card, targets: lane.targets || (lane.stages || []).map((x) => x.key) }) : null} />)}
               </div>
             </div>
           ))}
@@ -155,32 +189,34 @@ export default function Processos() {
 const TRACK_LABEL = { design: 'Design', edicao: 'Edição de vídeo', copy: 'Legenda' };
 function teamLanes(data) {
   const all = data.lanes.flatMap((l) => l.cards);
-  const col = (key, label, stages, filter) => ({ key, label, stages: [], targets: stages, cards: all.filter((c) => !c.blocked && stages.includes(c.stage) && (!filter || filter(c))) });
+  const col = (key, label, stages, cls, filter) => ({ key, label, cls, stages: [], targets: stages, cards: all.filter((c) => !c.blocked && stages.includes(c.stage) && (!filter || filter(c))) });
   const people = data.filters.people || [];
   const prod = all.filter((c) => !c.blocked && c.stage === 'producao');
   const personCols = [];
   for (const fn of ['design', 'edicao', 'copy']) {
     const holders = people.filter((p) => p.functions?.includes(fn) || prod.some((c) => c.tracks?.some((t) => t.fn === fn && t.assignee_id === p.id)));
-    for (const p of holders) personCols.push({ key: `p:${fn}:${p.id}`, label: TRACK_LABEL[fn], person: { id: p.id, name: p.name }, fn, stages: [], targets: ['producao'], cards: prod.filter((c) => c.tracks?.some((t) => t.fn === fn && t.assignee_id === p.id)) });
+    for (const p of holders) personCols.push({ key: `p:${fn}:${p.id}`, label: TRACK_LABEL[fn], cls: fn, person: { id: p.id, name: p.name }, fn, stages: [], targets: ['producao'], cards: prod.filter((c) => c.tracks?.some((t) => t.fn === fn && t.assignee_id === p.id)) });
     const orphan = prod.filter((c) => c.tracks?.some((t) => t.fn === fn && !t.assignee_id));
-    if (orphan.length) personCols.push({ key: `p:${fn}:none`, label: TRACK_LABEL[fn], person: { id: null, name: 'Sem responsável' }, fn, stages: [], targets: ['producao'], cards: orphan });
+    if (orphan.length) personCols.push({ key: `p:${fn}:none`, label: TRACK_LABEL[fn], cls: fn, person: { id: null, name: 'Sem responsável' }, fn, stages: [], targets: ['producao'], cards: orphan });
   }
   return [
-    col('cronograma', 'Cronograma', ['cronograma', 'ajuste_cronograma']),
-    col('analise_cronograma', 'Análise cronograma', ['analise_cronograma']),
-    col('aprovacao_tema', 'Temas com o cliente', ['aprovacao_tema']),
+    col('cronograma', 'Cronograma', ['cronograma', 'ajuste_cronograma'], 'estrategia'),
+    col('analise_cronograma', 'Análise cronograma', ['analise_cronograma'], 'revisao'),
+    col('aprovacao_tema', 'Temas com o cliente', ['aprovacao_tema'], 'cliente'),
     ...personCols,
-    col('analise_producao', 'Análise produção', ['analise_producao']),
-    col('ajustes', 'Ajustes', ['ajuste_interno', 'revisao_ajuste']),
-    { key: 'pendente', label: 'Pendente por material', stages: [], cards: all.filter((c) => c.blocked) },
-    col('aprovacao_cliente', 'Aprovação dos clientes', ['aprovacao_cliente', 'ajuste_cliente']),
-    col('agendamento', 'Para agendamento', ['agendamento']),
-    col('agendado', 'Agendado', ['agendado']),
-    { ...col('publicado', 'Publicado', ['publicado']), key: 'publicacao' },
+    col('analise_producao', 'Análise produção', ['analise_producao'], 'revisao'),
+    col('ajustes', 'Ajustes', ['ajuste_interno', 'revisao_ajuste'], 'ajuste'),
+    { key: 'pendente', label: 'Pendente por material', cls: 'bloqueio', stages: [], cards: all.filter((c) => c.blocked) },
+    col('aprovacao_cliente', 'Aprovação dos clientes', ['aprovacao_cliente', 'ajuste_cliente'], 'cliente'),
+    col('agendamento', 'Liberado para publicação', ['agendamento'], 'publicacao'),
+    col('agendado', 'Agendado', ['agendado'], 'publicacao'),
+    { ...col('publicado', 'Publicado', ['publicado'], 'publicacao'), key: 'publicacao' },
   ];
 }
 
-function Column({ lane, moved, showHead, onDropCard }) {
+function Column({ lane, moved, showHead, onDropCard, teamView }) {
+  const cls = laneClass(lane);
+  const sub = lane.label && lane.label.toLowerCase() !== (CLASS[cls]?.label || '').toLowerCase() && lane.label !== 'Edição de vídeo' ? lane.label : null;
   const [over, setOver] = useState(false);
   const droppable = !!onDropCard && (lane.targets || lane.stages || []).length > 0;
   const dropProps = droppable ? {
@@ -190,17 +226,18 @@ function Column({ lane, moved, showHead, onDropCard }) {
   } : {};
   const counts = Object.fromEntries((lane.stages || []).map((s) => [s.key, lane.cards.filter((c) => c.stage === s.key).length]));
   return (
-    <section className={`jb-col ${!lane.cards.length && !lane.person ? 'jb-col-min' : ''} ${over ? 'drop-over' : ''}`} aria-label={lane.label} {...dropProps}>
+    <section className={`jb-col ${!lane.cards.length && !lane.person ? 'jb-col-min' : ''} ${over ? 'drop-over' : ''}`} aria-label={`${CLASS[cls]?.label || ''} ${lane.person?.name || lane.label}`} {...dropProps}>
       {showHead && (
-        <div className="jb-col-head">
-          <span className="jb-col-title">{lane.label}</span><span className="jb-col-count">{lane.cards.length}</span>
-          {lane.key === 'publicacao' && <I.check size={14} className="jb-done" />}
+        <div className={`jb-col-head cls-${cls}`}>
+          <div className="jb-col-cls"><ClassTag k={cls} big />{lane.key === 'publicacao' && <I.check size={14} className="jb-done" />}</div>
+          {sub && <div className="jb-col-title">{sub}</div>}
+          <div className="jb-col-n"><b>{lane.cards.length}</b> {lane.cards.length === 1 ? 'conteúdo' : 'conteúdos'}</div>
           {lane.person && <div className="jb-col-who"><span className="jb-av sm" style={lane.person.id ? { background: toneOf(lane.person.id) } : undefined}>{lane.person.id ? initials(lane.person.name) : '?'}</span>{lane.person.name}</div>}
           {(lane.stages || []).length > 1 && <div className="jb-col-sub">{lane.stages.map((s) => <span key={s.key}>{s.label} · {counts[s.key]}</span>)}</div>}
         </div>
       )}
       <div className="jb-col-body">
-        {lane.cards.map((c) => <Card key={c.id} c={c} moved={moved.has(c.id)} draggable={!!onDropCard} track={lane.fn ? c.tracks?.find((t) => t.fn === lane.fn && (t.assignee_id || null) === (lane.person?.id || null)) : null} />)}
+        {lane.cards.map((c) => <Card key={c.id} c={c} classes={teamView ? [cls] : cardClasses(c)} moved={moved.has(c.id)} draggable={!!onDropCard} track={lane.fn ? c.tracks?.find((t) => t.fn === lane.fn && (t.assignee_id || null) === (lane.person?.id || null)) : null} />)}
         {!lane.cards.length && lane.person && <div className="jb-col-empty">Nada com {lane.person.id ? lane.person.name.split(' ')[0] : 'ninguém'} agora</div>}
       </div>
     </section>
@@ -215,7 +252,7 @@ function byFormat(lanes) {
   return Object.entries(m).map(([f, n]) => `${n} ${n === 1 ? (FORMATS[f] || f).toLowerCase() : PL[f] || f}`).join(' · ');
 }
 
-function Card({ c, moved, track, draggable }) {
+function Card({ c, moved, track, draggable, classes = [] }) {
   // na coluna de uma pessoa, o card mostra o prazo e o responsável DAQUELA trilha
   const due = track ? track.due_at : c.due_at;
   const ownerName = track ? track.name : c.owner === 'SEM RESPONSÁVEL' ? null : c.owner;
@@ -224,6 +261,7 @@ function Card({ c, moved, track, draggable }) {
   const none = track ? !track.assignee_id : c.owner === 'SEM RESPONSÁVEL';
   const body = (
     <>
+      <div className="jb-card-cls">{classes.map((k) => <ClassTag key={k} k={k} />)}</div>
       <div className="jb-card-title">{c.title}</div>
       <div className="jb-card-labels">
         <span className="jb-label" style={{ background: toneOf(c.client_id) }}>{cleanName(c.client || '')}</span>

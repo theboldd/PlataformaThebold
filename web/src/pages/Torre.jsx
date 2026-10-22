@@ -351,7 +351,7 @@ function State({ n, label, lines, alert, onClick }) {
 }
 
 function Accumulation({ stages, open }) {
-  const rows = stages.filter((s) => s.n && !['agendado', 'publicado'].includes(s.stage)).sort((a, b) => b.n - a.n);
+  const rows = stages.filter((s) => s.n && !['agendamento', 'agendado', 'publicado'].includes(s.stage)).sort((a, b) => b.n - a.n);
   const max = Math.max(1, ...rows.map((r) => r.n));
   return (
     <div className="tw-acc">

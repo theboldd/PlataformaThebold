@@ -1,5 +1,18 @@
 # THE BOLD OS — Checklist oficial de conferência
 
+## Revisão 4.3 · 22/10/2026 — data de publicação ≠ prazo, classificação em Processos, página PROCESSO do Notion
+
+| O que | Onde | Estado |
+|---|---|---|
+| **Data de publicação é referência editorial, não prazo operacional.** Removida de: risco do conteúdo (“Data de publicação já passou”, “Publica em menos de N dias”), cálculo de prazo das etapas (antes o prazo era encurtado pela data), impacto ao mover etapa (“Publicação em risco”), severidade de pendências e bloqueios, escalada “publicação em risco”, impacto dos riscos da Torre (“Próxima publicação…”), sinal “Entregas” da saúde do cliente. A data continua no calendário editorial, no feed, na ficha e nos filtros | Torre · Pendências · Insights · Performance · Saúde · Notificações | 🟢 |
+| **Operação até LIBERADO PARA PUBLICAÇÃO.** A etapa “Para agendamento” passa a se chamar “Liberado para publicação”, sem prazo; tarefas dessa etapa e das seguintes (agendado/publicado) ficam fora de atraso, pendência, capacidade, performance e gargalo. Publicação manual (Vivian), sem automação nem integração com Instagram/Meta | Process Engine · Processos · Torre | 🟢 |
+| **Processos: classificação em destaque.** Coluna: nome da classificação grande com marca (◎ Estratégia, ◆ Design, ▶ Edição, ¶ Legenda, ✓ Revisão, ↺ Ajuste, ○ Aprovação, ■ Bloqueado, ↗ Publicação) + “N conteúdos”; card: classificação no topo; novo filtro “Classificação” com a contagem real. Classificação lida da raia da etapa e da função da trilha — nada recategorizado | Processos (Equipe e Etapas) | 🟢 |
+| **Página PROCESSO do Notion** auditada (22/10 12:34): 12 subpáginas e bases com ID, destino, direção, campos mapeados e sem mapeamento, última alteração, última sincronização, erros e limitações; calendário do ciclo de novembro comparado com os marcos da plataforma (só comparação) | Notion & Histórico → Página PROCESSO | 🟡 PARCIAL |
+
+**PROCESSO — honesto:** só OUTUBRO, NOVEMBRO e INÍCIO CLIENTE entraram (uma vez, por extração de 19/10). NOVEMBRO tem 108 cards hoje × 106 extraídos e OUTUBRO foi editado depois. Controle de Aprovações (23), Log de eventos (182), Central de Clientes (22) e Histórico de Eventos (190) não foram importados — aguardam decisão e nunca entram como aprovação, pendência ou fato. PADRÃO e as páginas de documentação são só consulta. Sem `NOTION_TOKEN` não há sincronização viva.
+
+---
+
 ## Revisão 4.2 · 22/10/2026 — ficha do conteúdo, aprovações separadas, vínculo com o CR Editorial e feed
 
 | O que | Onde | Estado |

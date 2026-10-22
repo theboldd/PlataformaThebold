@@ -1,7 +1,7 @@
 // Linguagem visual de status — sempre forma + texto (nunca só cor)
 export const STATUS = {
   rascunho: 'Rascunho', em_producao: 'Em produção', revisao_interna: 'Revisão interna', aguardando_cliente: 'Aguardando cliente',
-  ajuste_solicitado: 'Ajuste solicitado', em_ajuste: 'Em ajuste', aprovado: 'Aprovado', aprovacao_nao_registrada: 'Aprovação não registrada', liberada_equipe: 'Liberada pela equipe (sem aprovação do cliente)', agendado: 'Agendado', publicado: 'Publicado', bloqueado: 'Bloqueado', cancelado: 'Cancelado',
+  ajuste_solicitado: 'Ajuste solicitado', em_ajuste: 'Em ajuste', aprovado: 'Liberado para publicação', aprovacao_nao_registrada: 'Aprovação não registrada', liberada_equipe: 'Liberada pela equipe (sem aprovação do cliente)', agendado: 'Agendado', publicado: 'Publicado', bloqueado: 'Bloqueado', cancelado: 'Cancelado',
 };
 export const STATUS_GLYPH = { aprovado: '✓', agendado: '→', publicado: '●' };
 export const FORMATS = { reel: 'Reel', video: 'Vídeo', carrossel: 'Carrossel', estatico: 'Estático', foto: 'Foto', stories: 'Stories' };

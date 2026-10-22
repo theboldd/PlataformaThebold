@@ -4,7 +4,7 @@
 // Regras: tudo calculado do banco; sem histórico não há tendência; insight só aparece com evidência nos dados.
 import { one, all, now, parseJSON } from '../db.js';
 import { scopeSQL, can } from '../lib/permissions.js';
-import { NOT_LEGACY, PLATFORM_CONTENT, STAGES, STAGE_ORDER } from './process.js';
+import { NOT_LEGACY, PLATFORM_CONTENT, STAGES, STAGE_ORDER, RELEASED_STAGES } from './process.js';
 import { computePendencies, clientRisk, teamLoad, runDetectors, explain, OPERATING } from './intelligence.js';
 import { PERF_SQL, perfOK, isInherited, performanceBase } from '../services/delayReview.js';
 import { CATALOG } from './automations.js';
@@ -93,7 +93,7 @@ export function tower(user, qs = {}) {
   const content = all(`SELECT c.*, cl.name client FROM contents c JOIN clients cl ON cl.id=c.client_id WHERE c.stage<>'cancelado' AND (c.legacy_status IS NULL OR c.legacy_status='reprogramado') AND ${C.sql}`, ...C.p);
   const T = tw();
   const openTasks = all(`SELECT t.*, c.name client, u.name assignee FROM tasks t LEFT JOIN clients c ON c.id=t.client_id LEFT JOIN users u ON u.id=t.assignee_id
-    WHERE t.status IN ('aberta','em_andamento') AND t.function<>'cliente' AND ${T.sql}`, ...T.p);
+    WHERE t.status IN ('aberta','em_andamento') AND t.function<>'cliente' AND COALESCE(t.stage,'') NOT IN (${q(RELEASED_STAGES)}) AND ${T.sql}`, ...RELEASED_STAGES, ...T.p); // liberado = publicação manual, fora da operação
   // Atraso só conta o que pode ser atribuído; herdado da migração aparece à parte (em revisão)
   const lateTasks = openTasks.filter((t) => t.due_at && t.due_at < nowIso && perfOK.equipe(t));
   const inheritedLate = openTasks.filter((t) => t.due_at && t.due_at < nowIso && isInherited(t));
@@ -119,7 +119,7 @@ export function tower(user, qs = {}) {
   });
   // Fases na ordem real do fluxo (agrupamento visual das etapas do Process Engine; nenhuma etapa nova)
   const PHASES = [['planejamento', 'Planejamento', ['cronograma', 'analise_cronograma', 'ajuste_cronograma', 'aprovacao_tema']], ['producao', 'Produção', ['producao', 'analise_producao', 'ajuste_interno']],
-    ['cliente', 'Aprovação do cliente', ['aprovacao_cliente', 'ajuste_cliente', 'revisao_ajuste']], ['publicacao', 'Publicação', ['agendamento', 'agendado', 'publicado']]];
+    ['cliente', 'Aprovação do cliente', ['aprovacao_cliente', 'ajuste_cliente', 'revisao_ajuste']], ['publicacao', 'Liberado · publicação manual', ['agendamento', 'agendado', 'publicado']]];
   const lanes = PHASES.map(([key, label, st]) => ({ key, label, stages: st, n: stages.filter((x) => st.includes(x.stage)).reduce((a, x) => a + x.n, 0) }));
 
   // ── Riscos, gargalos e bloqueios ──
@@ -131,17 +131,16 @@ export function tower(user, qs = {}) {
   for (const c of clients) {
     const r = clientRisk(c.id);
     if (!['alto', 'critico'].includes(r.level) || risks.some((x) => x.client_id === c.id)) continue;
-    const nextPub = content.filter((x) => x.client_id === c.id && x.planned_at && !['agendado', 'publicado'].includes(x.stage)).sort((a, b) => a.planned_at.localeCompare(b.planned_at))[0];
     risks.push({ id: `risk:${c.id}`, level: r.level, client: c.name, client_id: c.id, problem: r.reasons.slice(0, 2).join(' · ') || 'Risco calculado pelos conteúdos do cliente',
-      impact: nextPub ? `Próxima publicação prevista em ${new Date(nextPub.planned_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.` : null,
-      who: memberOf(c.id, 'estrategia').join(', ') || null, due: nextPub?.planned_at || null, late: null, process: null, link: `/clientes/${c.id}` });
+      impact: null, // data de publicação é referência editorial, não impacto operacional (regra da CEO, 22/10)
+      who: memberOf(c.id, 'estrategia').join(', ') || null, due: null, late: null, process: null, link: `/clientes/${c.id}` });
   }
-  const bottlenecks = stages.filter((s) => s.n >= 2 && !['agendado', 'publicado'].includes(s.stage) && (s.late >= 2 || (s.sla_days && s.avg_days > s.sla_days * 1.4)))
+  const bottlenecks = stages.filter((s) => s.n >= 2 && !RELEASED_STAGES.includes(s.stage) && (s.late >= 2 || (s.sla_days && s.avg_days > s.sla_days * 1.4)))
     .map((s) => ({ stage: s.stage, label: s.label, n: s.n, late: s.late, avg_days: s.avg_days, sla_days: s.sla_days,
       evidence: s.top_client && s.top_client.n >= 2 && s.top_client.n / s.n >= 0.5 ? `${pl(s.top_client.n, 'item pertence', 'itens pertencem')} a ${s.top_client.name}.` : null, link: `/processos?stage=${s.stage}` }))
     .sort((a, b) => b.late - a.late || (b.avg_days || 0) - (a.avg_days || 0));
   const WAITING = { cliente: 'Cliente', informacao: 'Informação', equipe: 'Equipe' };
-  const blocks = content.filter((c) => c.blocked && !['publicado'].includes(c.stage)).map((c) => ({ id: c.id, client: c.client, client_id: c.client_id, title: `#${c.number} ${c.title}`, stage: STAGES[c.stage].label,
+  const blocks = content.filter((c) => c.blocked && !RELEASED_STAGES.includes(c.stage)).map((c) => ({ id: c.id, client: c.client, client_id: c.client_id, title: `#${c.number} ${c.title}`, stage: STAGES[c.stage].label,
     reason: c.block_reason, by: WAITING[c.waiting_on] || c.waiting_on || '—', since: c.updated_at, planned_at: c.planned_at, link: `/conteudos/${c.id}` }))
     .sort((a, b) => (a.planned_at || '9').localeCompare(b.planned_at || '9'));
 

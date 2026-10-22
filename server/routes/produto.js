@@ -33,7 +33,7 @@ export function performanceReport({ dias = 30 } = {}) {
     const reprog = all(`SELECT l.before, l.after FROM activity_logs l JOIN tasks t ON t.id=l.entity_id
       WHERE l.action='tarefa.alterada' AND l.entity_type='task' AND l.created_at >= ? AND t.assignee_id=? AND t.data_origin='plataforma'`, start, p.id)
       .filter((l) => { const a = parseJSON(l.after, {}), b = parseJSON(l.before, {}); return a.due_at && a.due_at !== b.due_at; }).length;
-    const open = one("SELECT COUNT(*) n, SUM(due_at IS NOT NULL AND due_at < ?) vencidas FROM tasks WHERE assignee_id=? AND status IN ('aberta','em_andamento') AND data_origin='plataforma'", endIso, p.id);
+    const open = one("SELECT COUNT(*) n, SUM(due_at IS NOT NULL AND due_at < ?) vencidas FROM tasks WHERE assignee_id=? AND status IN ('aberta','em_andamento') AND data_origin='plataforma' AND COALESCE(stage,'') NOT IN ('agendamento','agendado','publicado')", endIso, p.id);
     const inherited = one("SELECT COUNT(*) n FROM tasks WHERE assignee_id=? AND status IN ('aberta','em_andamento','agendada') AND data_origin='notion'", p.id).n;
     const blocked = one(`SELECT COUNT(DISTINCT c.id) n FROM contents c JOIN tasks t ON t.content_id=c.id
       WHERE c.blocked=1 AND t.assignee_id=? AND t.status IN ('aberta','em_andamento') AND ${PLATFORM_CONTENT('c.')}`, p.id).n;
@@ -52,14 +52,14 @@ export function performanceReport({ dias = 30 } = {}) {
   // Contexto dos atrasos: cada tarefa concluída com atraso ou vencida, com o que estava acontecendo no conteúdo
   const late = all(`SELECT t.id, t.title, t.due_at, t.completed_at, t.status, u.name pessoa, c.number, c.title content_title, c.stage, c.blocked, c.block_reason, c.waiting_on, cl.name client
     FROM tasks t LEFT JOIN users u ON u.id=COALESCE(t.completed_by, t.assignee_id) LEFT JOIN contents c ON c.id=t.content_id LEFT JOIN clients cl ON cl.id=t.client_id
-    WHERE t.data_origin='plataforma' AND t.due_at IS NOT NULL AND (
+    WHERE t.data_origin='plataforma' AND COALESCE(t.stage,'') NOT IN ('agendamento','agendado','publicado') AND t.due_at IS NOT NULL AND (
       (t.status='concluida' AND t.completed_at > t.due_at AND t.completed_at >= ?) OR (t.status IN ('aberta','em_andamento') AND t.due_at < ?))
     ORDER BY t.due_at DESC LIMIT 40`, start, endIso);
   const migrated = one("SELECT COUNT(*) n FROM tasks WHERE data_origin='notion' AND status IN ('aberta','em_andamento','agendada')").n;
   // Previsão da próxima semana: demanda com prazo nos próximos 7 dias × capacidade CONFIGURADA (não medida). Só alerta; nunca redistribui.
   const nextEnd = iso(end + 7 * DAY);
   const forecast = people.map((p) => {
-    const due = one("SELECT COUNT(*) n FROM tasks WHERE assignee_id=? AND data_origin='plataforma' AND status IN ('aberta','em_andamento','agendada') AND due_at >= ? AND due_at < ?", p.id, endIso, nextEnd).n;
+    const due = one("SELECT COUNT(*) n FROM tasks WHERE assignee_id=? AND data_origin='plataforma' AND COALESCE(stage,'') NOT IN ('agendamento','agendado','publicado') AND status IN ('aberta','em_andamento','agendada') AND due_at >= ? AND due_at < ?", p.id, endIso, nextEnd).n;
     const clients = all("SELECT DISTINCT c.name FROM tasks t JOIN clients c ON c.id=t.client_id WHERE t.assignee_id=? AND t.data_origin='plataforma' AND t.status IN ('aberta','em_andamento','agendada') AND t.due_at >= ? AND t.due_at < ?", p.id, endIso, nextEnd).map((r) => r.name);
     return { id: p.id, name: p.name, demanda: due, capacidade: p.capacity, clientes: clients, alerta: due > p.capacity,
       motivo: due > p.capacity ? `${due} tarefas com prazo nos próximos 7 dias para capacidade configurada de ${p.capacity}/semana` : null };

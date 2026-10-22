@@ -124,13 +124,11 @@ export function tick() {
     const c = { id: k.content_id, client_id: k.client_id };
     const sent = remindClient(c, marker, { title: 'Precisamos de você', body: `O prazo de aprovação de “${k.ctitle}” passou. Ainda podemos receber sua aprovação, mas a data de publicação poderá precisar ser ajustada.` });
     automation('cliente.prazo_vencido', { entity: 'content', id: k.content_id, client: k.client_id, detail: `${marker}:${k.due_at}`, status: sent ? 'ok' : 'ignorada' });
-    // Impacto: o agendamento precisa de ~1 dia útil depois da aprovação; perto da publicação, é risco real de mudar a data
-    const hoursToPub = k.planned_at ? (new Date(k.planned_at).getTime() - t) / H : null;
-    const impact = hoursToPub == null ? 'sem data de publicação' : hoursToPub < 0 ? 'a data de publicação já passou' : hoursToPub < 48 ? `publicação em ${Math.round(hoursToPub)}h — data em risco` : `publicação em ${fmtDay(k.planned_at)} — ainda dentro do prazo`;
+    // A data de publicação é só referência editorial (publicação manual, fora da plataforma): não gera risco nem escalada
+    const impact = k.planned_at ? `data editorial ${fmtDay(k.planned_at)} (referência)` : 'sem data editorial';
     log({ kind: 'sistema', action: 'cliente.prazo_vencido', entity: 'content', id: k.content_id, client: k.client_id, content: k.content_id, summary: `Prazo de aprovação do cliente vencido (${fmtDay(k.due_at)}): #${k.number} ${k.ctitle} · ${impact}${sent ? ' · lembrete enviado' : ' · lembrete não enviado (intervalo/limite)'}` });
     const atd = resolveAssignee(k.client_id, 'atendimento');
     notify(atd, { level: 'atencao', type: 'cliente_atraso', title: `${k.cname}: prazo de aprovação passou`, body: `#${k.number} ${k.ctitle} · ${impact}`, link: `/conteudos/${k.content_id}`, groupKey: `cli-atraso:${k.client_id}`, client: k.client_id, content: k.content_id });
-    if (hoursToPub != null && hoursToPub < 48) notify(cc(), { level: 'urgente', type: 'escalada', title: `${k.cname}: publicação em risco`, body: `#${k.number} ${k.ctitle} ainda sem aprovação · ${impact}. Decidir: nova data ou contato direto.`, link: `/conteudos/${k.content_id}`, groupKey: `pub-risco:${k.client_id}`, client: k.client_id });
   }
   // Lembrete de reunião na véspera (cliente e participantes)
   for (const m of all("SELECT * FROM meetings WHERE status='agendada' AND starts_at BETWEEN ? AND ?", new Date(t + 20 * H).toISOString(), new Date(t + 26 * H).toISOString())) {

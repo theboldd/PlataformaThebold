@@ -9,6 +9,8 @@ import { log, notify, businessDaysFrom, userName } from '../lib/core.js';
 import { can, canAccessClient, HttpError } from '../lib/permissions.js';
 import { automation } from './automations.js';
 
+// Etapas depois da liberação: publicação manual, fora da operação da plataforma (sem prazo, risco, atraso ou pendência)
+export const RELEASED_STAGES = ['agendamento', 'agendado', 'publicado'];
 export const STAGES = {
   cronograma:         { label: 'Cronograma',            lane: 'estrategia',  fn: 'estrategia', milestone: 'cronograma_entrega',  sla: 3, action: 'Elaborar tema, objetivo e referência', exit: 'Tema completo (título, objetivo, formato, data)' },
   analise_cronograma: { label: 'Análise do cronograma', lane: 'revisao',     fn: 'revisao',    milestone: 'revisao_cronograma',  sla: 2, action: 'Analisar cronograma (Rebeca/Raísa)', exit: 'Aprovado ou ajuste solicitado', review: true },
@@ -20,14 +22,16 @@ export const STAGES = {
   aprovacao_cliente:  { label: 'Aguardando cliente',    lane: 'cliente',     fn: 'cliente',    milestone: 'cliente_aprova_final', sla: 2, action: 'Cliente aprova ou solicita ajuste', exit: 'Versão aprovada pelo cliente', client: true },
   ajuste_cliente:     { label: 'Ajuste do cliente',     lane: 'ajuste',      fn: null,         milestone: 'ajustes_cliente',     sla: 1, action: 'Executar ajuste pedido pelo cliente', exit: 'Nova versão entregue', client: true },
   revisao_ajuste:     { label: 'Revisão do ajuste',     lane: 'revisao',     fn: 'estrategia', milestone: 'ajustes_cliente',     sla: 1, action: 'Estrategista confere o ajuste', exit: 'Ajuste conferido', review: true },
-  agendamento:        { label: 'Para agendamento',      lane: 'agendamento', fn: 'agendamento', milestone: 'agendamento',        sla: 1, action: 'Agendar publicação', exit: 'Post agendado', client: true },
+  // Regra da CEO (22/10): a plataforma acompanha até LIBERADO PARA PUBLICAÇÃO. A publicação é manual (Vivian) e fica fora da operação:
+  // sem SLA, sem prazo, sem risco, sem atraso e sem pendência a partir daqui.
+  agendamento:        { label: 'Liberado para publicação', lane: 'agendamento', fn: 'agendamento', milestone: 'agendamento',      sla: null, action: 'Publicação manual (fora da plataforma)', exit: 'Publicação registrada', client: true, released: true },
   agendado:           { label: 'Agendado',              lane: 'publicacao',  fn: null, sla: null, action: 'Aguardar publicação', exit: 'Publicação confirmada', client: true },
   publicado:          { label: 'Publicado',             lane: 'publicacao',  fn: null, sla: null, final: true, client: true },
   cancelado:          { label: 'Cancelado',             lane: null,          fn: null, sla: null, final: true },
 };
 export const LANES = [
   { key: 'estrategia', label: 'Estratégia' }, { key: 'revisao', label: 'Revisão' }, { key: 'ajuste', label: 'Ajuste' },
-  { key: 'cliente', label: 'Cliente' }, { key: 'producao', label: 'Produção' }, { key: 'agendamento', label: 'Agendamento' }, { key: 'publicacao', label: 'Publicação' },
+  { key: 'cliente', label: 'Cliente' }, { key: 'producao', label: 'Produção' }, { key: 'agendamento', label: 'Liberado para publicação' }, { key: 'publicacao', label: 'Publicação manual' },
 ];
 export const STAGE_ORDER = Object.keys(STAGES);
 
@@ -125,7 +129,8 @@ function assertAvailable(content) {
   if (opens) throw new HttpError(409, `Etapa agendada: “${STAGES[content.stage].label}” só fica disponível em ${fmtDiaBR(opens)}. Pronto não é disponível — a ação abre na data do marco.`);
 }
 
-// Prazo da etapa: marco do ciclo (se ainda no futuro) → senão SLA em dias úteis. Nunca depois da data de publicação.
+// Prazo da etapa: marco do ciclo (se ainda no futuro) → senão SLA em dias úteis.
+// A data de publicação é referência editorial, não prazo operacional: não limita nem antecipa prazos.
 export function dueFor(content, stage) {
   const def = STAGES[stage];
   if (!def || def.sla == null) return null;
@@ -136,10 +141,6 @@ export function dueFor(content, stage) {
     if (ms) { const d = endOfDayBR(ms.end); if (d > now()) due = d; }
   }
   if (!due) { const d = businessDaysFrom(new Date(now()), def.sla); d.setHours(21, 0, 0, 0); due = d.toISOString(); }
-  if (content.planned_at) {
-    const cap = new Date(new Date(content.planned_at).getTime() - (stage === 'agendamento' ? 2 : 24) * 3600e3).toISOString();
-    if (cap < due && cap > now()) due = cap;
-  }
   return due;
 }
 
@@ -288,7 +289,7 @@ function enterStage(content, stage, actor, ctx = {}) {
       // tarefas de ajuste já são criadas em requestAdjustment
       break;
     case 'agendamento':
-      mk(`Agendar publicação — ${content.title}`, 'agendamento', 'agendamento'); break;
+      mk(`Publicação manual — ${content.title}`, 'agendamento', 'agendamento'); break; // registro opcional, sem prazo (fora da operação)
     default: break;
   }
   // Ciclo acompanha a etapa mais atrasada dos conteúdos
@@ -650,13 +651,7 @@ export function movePreview(c, to, chosenKind) {
   const auto = STAGES[c.stage].final ? 'reabertura' : iTo < iFrom ? 'retorno' : iTo === iFrom + 1 ? 'manual' : 'excecao';
   const kind = ['correcao', 'excecao'].includes(chosenKind) ? chosenKind : auto;
   const impacts = [];
-  // prazo de publicação: caminho mínimo da etapa de destino até o agendamento (SLA em dias úteis)
-  if (c.planned_at && iTo < STAGE_ORDER.indexOf('agendado')) {
-    const startIdx = FLOW.indexOf(to) >= 0 ? FLOW.indexOf(to) : FLOW.findIndex((k) => STAGE_ORDER.indexOf(k) > iTo);
-    const days = (FLOW.includes(to) ? 0 : STAGES[to].sla || 0) + FLOW.slice(Math.max(startIdx, 0)).reduce((n, k) => n + (STAGES[k].sla || 0), 0);
-    const ready = businessDaysFrom(new Date(now()), days);
-    if (ready.toISOString() > c.planned_at) impacts.push({ type: 'prazo', level: 'alto', text: `Publicação de ${fmtDia(c.planned_at)} em risco: daqui até o agendamento são ~${days} dias úteis de etapas.` });
-  }
+  // a data de publicação é referência editorial: mover etapa não gera "publicação em risco" (regra da CEO, 22/10)
   if (c.approved_version_id && iTo < STAGE_ORDER.indexOf('aprovacao_cliente')) impacts.push({ type: 'aprovacao', level: 'medio', text: 'O cliente já tinha aprovado: a aprovação precisará ser feita de novo.' });
   if (c.scheduled_at && iTo < STAGE_ORDER.indexOf('agendado')) impacts.push({ type: 'agendamento', level: 'alto', text: `Havia agendamento para ${fmtDia(c.scheduled_at)}: confira e desfaça na ferramenta de publicação, se for o caso.` });
   const opens = stageOpensAt(c, to);
@@ -707,7 +702,7 @@ export function nextAction(c) {
 
 // Risco operacional (limiares herdados da "Central de Clientes": 24/48/72h sem resposta; 5/3/2 dias até o prazo)
 export function contentRisk(c) {
-  if (STAGES[c.stage].final) return { level: 'nenhum', reasons: [] };
+  if (STAGES[c.stage].final || RELEASED_STAGES.includes(c.stage)) return { level: 'nenhum', reasons: [] }; // liberado: publicação manual, fora da operação
   const reasons = [];
   let score = 0;
   const t = Date.now();
@@ -722,14 +717,7 @@ export function contentRisk(c) {
   if (STAGES[c.stage].lane === 'cliente') {
     if (hours > 72) { score += 2; reasons.push('Cliente sem resposta há mais de 72h'); } else if (hours > 48) { score += 1; reasons.push('Cliente sem resposta há mais de 48h'); }
   }
-  if (c.planned_at) {
-    const days = (new Date(c.planned_at).getTime() - t) / 864e5;
-    const idx = STAGE_ORDER.indexOf(c.stage);
-    if (days < 0 && idx < STAGE_ORDER.indexOf('agendado')) { score += 4; reasons.push('Data de publicação já passou'); }
-    else if (days < 2 && idx < STAGE_ORDER.indexOf('agendamento')) { score += 3; reasons.push('Publica em menos de 2 dias e ainda não foi aprovado'); }
-    else if (days < 3 && idx < STAGE_ORDER.indexOf('aprovacao_cliente')) { score += 2; reasons.push('Publica em menos de 3 dias e ainda está em produção/revisão'); }
-    else if (days < 5 && idx < STAGE_ORDER.indexOf('producao')) { score += 1; reasons.push('Publica em menos de 5 dias e o tema não foi aprovado'); }
-  }
+  // data de publicação não entra no risco: é referência editorial, não prazo operacional (regra da CEO, 22/10)
   if (c.revision_rounds + c.client_adjust_rounds >= 3) { score += 1; reasons.push(`Voltou para ajuste ${c.revision_rounds + c.client_adjust_rounds} vezes`); }
   const level = score >= 5 ? 'critico' : score >= 3 ? 'alto' : score >= 1 ? 'medio' : 'baixo';
   return { level, score, reasons };

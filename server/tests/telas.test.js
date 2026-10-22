@@ -35,7 +35,7 @@ const INTERNAL = (c, ct) => ['/auth/me', '/dashboard', '/torre', '/torre/automat
   `/clients/${c}/brand`, `/clients/${c}/pulse`, `/clients/${c}/health`, `/clients/${c}/decisions`, `/clients/${c}/requests`, `/clients/${c}/onboarding-card`, `/clients/${c}/origem`, '/divisao', '/onboarding/cards',
   '/contents', `/contents?client_id=${c}`, `/contents/${ct}`, '/review/clients', `/review/clients/${c}`, '/calendar', '/meetings', '/chat/channels', '/crm', '/finance', '/financeiro/estrutura',
   '/insights?status=aberto', '/brain/agents', '/automations', '/automations/estado', '/integrations', '/produto/integracoes', '/users', '/users/directory', '/client-access', '/history?limit=50',
-  '/migration-issues', '/notion/resumo', '/configuracoes', '/notifications', '/reports',
+  '/migration-issues', '/notion/resumo', '/notion/processo', '/configuracoes', '/notifications', '/reports',
   '/brain/decisions', '/brain/decisions?q=x&status=todas', `/brain/decisions?client_id=${c}`, '/brain/radar', '/me/notification-prefs',
   '/negocio/recebimentos', '/negocio/repasses', '/negocio/repasses?competencia=2026-09', '/negocio/custos', '/negocio/metas', '/negocio/rentabilidade', '/negocio/config', '/agenda/opcoes', `/contents/${ct}/ficha`, `/clients/${c}/notion-vinculo`];
 const PORTAL = ['/portal/me', '/portal/home', '/portal/feed', '/portal/decisions', '/portal/pendencias', '/portal/calendar', '/portal/meetings', '/portal/channel', '/portal/requests',

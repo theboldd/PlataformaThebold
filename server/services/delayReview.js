@@ -15,11 +15,15 @@ export const DECISIONS = {
 };
 
 // Performance, atraso e capacidade só com origem "plataforma" (regras 24 e 25). Mesmo filtro para SQL e para linhas carregadas.
+// Tarefas de etapas já liberadas para publicação (publicação manual) também ficam fora: não são prazo operacional.
+const RELEASED = ['agendamento', 'agendado', 'publicado'];
+const relSQL = (a) => `COALESCE(${a}.stage,'') NOT IN (${RELEASED.map((s) => `'${s}'`).join(',')})`;
 export const PERF_SQL = {
-  individual: (a = 't') => `${a}.data_origin='plataforma'`,
-  equipe: (a = 't') => `${a}.data_origin='plataforma'`,
+  individual: (a = 't') => `${a}.data_origin='plataforma' AND ${relSQL(a)}`,
+  equipe: (a = 't') => `${a}.data_origin='plataforma' AND ${relSQL(a)}`,
 };
-export const perfOK = { individual: (t) => t.data_origin === 'plataforma', equipe: (t) => t.data_origin === 'plataforma' };
+const opTask = (t) => t.data_origin === 'plataforma' && !RELEASED.includes(t.stage);
+export const perfOK = { individual: opTask, equipe: opTask };
 export const isInherited = (t) => t.data_origin === 'notion';
 export const NOT_ATTRIB = ['notion'];
 

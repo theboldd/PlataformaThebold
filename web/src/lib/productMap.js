@@ -33,6 +33,7 @@ export const PRODUCT_MAP = [
   A('Torre de Controle', '/torre', [
     ['Estado da operação', 'ok', 'Torre · topo', '/torre'],
     ['Riscos, gargalos e bloqueios', 'ok', 'Torre · Riscos & gargalos', '/torre'],
+    ['Data de publicação é referência editorial, não prazo: não gera risco, atraso, pendência, alerta, KPI ou capacidade; a operação vai até “Liberado para publicação” (publicação manual)', 'ok', 'Torre / Pendências / Insights / Performance', '/torre'],
     ['Mapa da operação (etapas do Process Engine)', 'ok', 'Torre · Mapa da operação', '/torre'],
     ['Pessoas: capacidade, carga, herdadas, atrasadas, próximos 7 dias', 'ok', 'Torre · Capacidade da equipe', '/torre'],
     ['Concentração, sobrecarga e subutilização', 'ok', 'Torre · Capacidade da equipe', '/torre'],
@@ -66,6 +67,7 @@ export const PRODUCT_MAP = [
     ['Feed para aprovação (grade e um por um) com os mesmos registros do calendário', 'ok', 'Cliente · Calendário editorial → VER FEED PARA APROVAÇÃO', '/clientes'],
     ['Corpo do card do Notion (capa, cards 2–6, links) dentro da ficha', 'config', 'Conteúdo → Ficha', '/conteudos', 'A extração de 21/10 trouxe só propriedades; chega com a sincronização (NOTION_TOKEN)'],
     ['Pessoas do Notion (Responsável, Estrategista, Copywriter, Designer, Editor) ligadas a usuários', 'decisao', 'Conteúdo → Ficha', '/conteudos', 'Aguardando mapeamento Notion → usuário da plataforma'],
+    ['Página PROCESSO do Notion auditada e mapeada (12 subpáginas/bases): estado PARCIAL, origem, destino, direção, última alteração, sincronização, sem mapeamento e limitações', 'parcial', 'Notion & Histórico · Página PROCESSO', '/notion', 'Sem sincronização viva: 3 bases importadas uma vez (2 alteradas depois), 9 não sincronizadas/aguardando decisão'],
     ['Sincronização viva Notion ↔ The Bold OS', 'decisao', 'Notion & Histórico', '/notion', 'Aguarda as 4 decisões: mapa, write-back, token, hospedagem persistente'],
     ['Fases, mês compacto, prévia do feed e histórico do Notion', 'ok', 'Cliente · Calendário editorial', '/clientes'],
     ['Reuniões do cliente', 'ok', 'Cliente · Reuniões', '/clientes'],
@@ -115,6 +117,7 @@ export const PRODUCT_MAP = [
     ['Etapas, status, responsáveis por função e prazos', 'ok', 'Processos / Conteúdo', '/processos'],
     ['Janelas e "pronto ≠ disponível" (regra 20)', 'ok', 'Sala de Revisão / Conteúdo', '/revisao'],
     ['Mover etapa com motivo e impacto', 'ok', 'Processos (arrastar) / Conteúdo · Mover etapa', '/processos'],
+    ['Classificação em destaque (Design, Edição, Legenda, Estratégia, Revisão, Ajuste, Aprovação, Bloqueado, Publicação) na coluna, no card e no filtro, com contagem real', 'ok', 'Processos', '/processos'],
     ['Reabertura e correção', 'parcial', 'Conteúdo · Mover etapa / nova versão', null, 'Sem botão "Reabrir" explícito'],
     ['Exceção (bloquear, cancelar)', 'ok', 'Conteúdo · Ações'],
     ['Regras do processo', 'ok', 'Automações · Regras do processo', '/automacoes'],

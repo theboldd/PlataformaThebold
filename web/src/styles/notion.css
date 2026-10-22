@@ -48,3 +48,22 @@
   .nh-tr [data-l]::before { content: attr(data-l); display: block; font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; font-weight: 700; color: var(--muted); }
   .nh-tr [data-l="Notion"] { grid-column: 1 / -1; }
 }
+
+/* Página PROCESSO */
+.np-head { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: center; margin-bottom: var(--sp-2); }
+.np-list { display: grid; gap: 8px; margin: var(--sp-4) 0 var(--sp-6); }
+.np-item { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; background: var(--surface, transparent); }
+.np-item > summary { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--sp-3); align-items: center; cursor: pointer; list-style: none; }
+.np-item > summary::-webkit-details-marker { display: none; }
+.np-name small { display: block; color: var(--muted); font-size: var(--fs-xs); }
+.np-role { font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.np-role.r-operacional { color: var(--ink); font-weight: 700; }
+.np-facts { display: grid; gap: 6px; margin: 12px 0 6px; font-size: var(--fs-sm); }
+.np-facts > div { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: var(--sp-3); }
+.np-facts dt { color: var(--muted); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: var(--tracking-caps); }
+.np-facts dd { margin: 0; overflow-wrap: anywhere; }
+.np-facts ul, .np-lim { margin: 0; padding-left: 18px; }
+@media (max-width: 640px) {
+  .np-item > summary { grid-template-columns: 1fr; }
+  .np-facts > div { grid-template-columns: 1fr; gap: 2px; }
+}

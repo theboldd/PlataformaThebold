@@ -56,10 +56,10 @@ export function clientHealth(clientId, viewer = null) {
   else { const d = lastMeet ? Math.floor((Date.now() - new Date(lastMeet).getTime()) / DAY) : null; s.push(sig('reunioes', 'Reuniões', canc >= 2 || (d > 60 && !nextMeet) ? 'atencao' : 'ok', [...(lastMeet ? [`Última reunião em ${fmtDay(lastMeet)}.`] : []), ...(nextMeet ? [`Próxima em ${fmtDay(nextMeet)}.`] : []), ...(canc ? [`${canc} cancelada(s) em 90 dias.`] : [])])); }
   // 9. Evolução: entregas publicadas/agendadas no último mês × pacote mensal
   const cl = one('SELECT monthly_posts FROM clients WHERE id=?', clientId);
-  const delivered = one("SELECT COUNT(*) n FROM contents WHERE client_id=? AND data_origin='plataforma' AND stage IN ('agendado','publicado') AND COALESCE(published_at, scheduled_at, planned_at) BETWEEN ? AND ?", clientId, ago(30), now()).n;
-  const planned = one("SELECT COUNT(*) n FROM contents WHERE client_id=? AND data_origin='plataforma' AND stage<>'cancelado' AND planned_at BETWEEN ? AND ?", clientId, ago(30), now()).n;
-  if (!planned) s.push(sig('evolucao', 'Entregas', 'sem_dados', ['Nenhum conteúdo previsto nos últimos 30 dias.']));
-  else s.push(sig('evolucao', 'Entregas', delivered / planned < 0.5 ? 'risco' : delivered / planned < 0.8 ? 'atencao' : 'ok', [`${delivered} de ${planned} conteúdos previstos nos últimos 30 dias foram agendados ou publicados (pacote: ${cl?.monthly_posts ?? '?'}/mês).`]));
+  // Informativo: a data de publicação é referência editorial e a publicação é manual (fora da plataforma) — não vira risco nem atenção
+  const released = one("SELECT COUNT(*) n FROM contents WHERE client_id=? AND data_origin='plataforma' AND stage IN ('agendamento','agendado','publicado') AND stage_entered_at BETWEEN ? AND ?", clientId, ago(30), now()).n;
+  if (!released) s.push(sig('evolucao', 'Entregas', 'sem_dados', ['Nenhum conteúdo liberado para publicação nos últimos 30 dias.']));
+  else s.push(sig('evolucao', 'Entregas', 'ok', [`${released} conteúdo(s) liberado(s) para publicação nos últimos 30 dias (pacote: ${cl?.monthly_posts ?? '?'}/mês). Publicação manual, fora da plataforma.`]));
   // 10. Pagamentos — detalhe só para quem tem acesso ao financeiro
   const inv = one("SELECT COUNT(*) n, MIN(due_at) first FROM invoices WHERE client_id=? AND (status='atrasada' OR (status='aberta' AND due_at < strftime('%Y-%m-%dT%H:%M:%fZ','now')))", clientId);
   const finOk = !viewer || can(viewer, 'financeiro');

@@ -1,11 +1,13 @@
 // NOTION & HISTÓRICO — visão única de tudo o que veio do Notion (regras oficiais 15, 22, 23 e 24).
 // Somente leitura: só conta o que está gravado na base; cada número vem de uma consulta própria e, se a tabela/coluna
 // não existir, volta null (a tela mostra DADOS INSUFICIENTES) — nunca um número estimado.
-// Nada aqui gera pendência, alerta, KPI ou performance. Sem sincronização com o Notion, por decisão.
+// Nada aqui gera pendência, alerta, KPI ou performance. Sem sincronização viva com o Notion (aguarda token, hospedagem e aprovação do mapa).
 import { Router } from 'express';
 import { all, one } from '../db.js';
 import { requireInternal, requirePerm } from '../lib/auth.js';
 import { can, scopeSQL } from '../lib/permissions.js';
+import { buildMilestones } from '../engine/process.js';
+import { AUDIT, PROCESSO, ITEMS, CYCLE_NOV_2026 } from '../data/notion-processo.js';
 
 export const notion = Router();
 const view = [requireInternal, requirePerm('clientes', 'view')];
@@ -104,4 +106,39 @@ notion.get('/notion/overview', view, (req, res) => {
     }
   }
   res.json(out);
+});
+
+// PÁGINA "PROCESSO" DO NOTION — mapa auditado (server/data/notion-processo.js) + o que existe na base agora.
+// Estado geral nunca é "sincronizada": sem NOTION_TOKEN não há sincronização viva; o que entrou veio por exportação única.
+notion.get('/notion/processo', view, (req, res) => {
+  const sc = scopeSQL(req.user, 'client_id');
+  const items = ITEMS.map((it) => {
+    const inPlatform = it.platform_ref ? count(`SELECT COUNT(*) n FROM client_brain_entries WHERE source_ref LIKE ? AND ${sc.sql}`, `${it.platform_ref}%`, ...sc.params) : null;
+    const issuesOpen = it.issues_source ? count(`SELECT COUNT(*) n FROM migration_issues WHERE source=? AND status='aberto' AND ${sc.sql}`, it.issues_source, ...sc.params) : null;
+    const changedAfter = it.extracted_at && it.last_edited ? it.last_edited > it.extracted_at : null;
+    const newRows = it.rows_extracted != null && it.rows != null ? it.rows - it.rows_extracted : null;
+    return { ...it, in_platform: inPlatform, issues_open: issuesOpen, changed_after_extraction: changedAfter, new_rows: newRows, last_sync: null };
+  });
+  // Calendário do ciclo escrito no Notion × marcos padrão da plataforma para 2026-11 (só comparação; nada é aplicado)
+  const platform = safe(() => buildMilestones('2026-11')) || {};
+  const cycle = CYCLE_NOV_2026.map((r) => {
+    const keys = [].concat(r.milestone || []);
+    const candidates = keys.map((k) => ({ key: k, ...(platform[k] || {}), match: !platform[k] ? 'sem_marco' : platform[k].start === r.start && platform[k].end === r.end ? 'igual' : 'diferente' }));
+    return { ...r, ambiguous: keys.length > 1, candidates, match: !keys.length ? 'sem_correspondencia' : candidates.some((c) => c.match === 'igual') ? 'igual' : candidates.every((c) => c.match === 'sem_marco') ? 'sem_marco' : 'diferente' };
+  });
+  const by = (k) => items.filter((i) => i.state === k).length;
+  res.json({
+    audit: AUDIT, page: PROCESSO, token: Boolean(process.env.NOTION_TOKEN),
+    state: 'parcial',
+    summary: { total: items.length, importado_extracao: by('importado_extracao'), nao_sincronizado: by('nao_sincronizado'), sem_mapeamento: by('sem_mapeamento'), aguardando_decisao: by('aguardando_decisao'), fora_do_escopo: by('fora_do_escopo'), alterados_depois: items.filter((i) => i.changed_after_extraction).length },
+    items, cycle,
+    limits: [
+      'Sem NOTION_TOKEN no servidor: nenhuma leitura automática; a última leitura real foi a auditoria manual acima.',
+      'Na hospedagem atual (prévia Vercel) a base é uma cópia temporária por instância: uma sincronização não persistiria.',
+      'Fórmulas e rollups (Status automático, Progresso automático, Temas/Artes aprovados por eventos) não são consultáveis por SQL na API — só pela leitura da página.',
+      'A integração não expõe quem visualizou uma página (a própria página CONTROLE DE APROVAÇÕES registra isso).',
+      'Pessoas vêm como usuários do Notion: sem mapeamento para usuários da plataforma.',
+      'Corpo dos cards dos quadros mensais e a data da última edição do Controle INÍCIO CLIENTE não foram lidos nesta auditoria.',
+    ],
+  });
 });

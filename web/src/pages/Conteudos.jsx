@@ -7,7 +7,7 @@ import { fmtDate, fmtMonth, cleanName } from '../lib/format.js';
 import { FORMATS } from '../lib/status.js';
 import '../styles/production.css';
 
-const STAGES = [['cronograma', 'Cronograma'], ['analise_cronograma', 'Análise do cronograma'], ['ajuste_cronograma', 'Ajuste do cronograma'], ['aprovacao_tema', 'Aprovação do tema'], ['producao', 'Produção'], ['analise_producao', 'Revisão interna'], ['ajuste_interno', 'Ajuste interno'], ['aprovacao_cliente', 'Aguardando cliente'], ['ajuste_cliente', 'Ajuste do cliente'], ['revisao_ajuste', 'Revisão do ajuste'], ['agendamento', 'Para agendamento'], ['agendado', 'Agendado'], ['publicado', 'Publicado']];
+const STAGES = [['cronograma', 'Cronograma'], ['analise_cronograma', 'Análise do cronograma'], ['ajuste_cronograma', 'Ajuste do cronograma'], ['aprovacao_tema', 'Aprovação do tema'], ['producao', 'Produção'], ['analise_producao', 'Revisão interna'], ['ajuste_interno', 'Ajuste interno'], ['aprovacao_cliente', 'Aguardando cliente'], ['ajuste_cliente', 'Ajuste do cliente'], ['revisao_ajuste', 'Revisão do ajuste'], ['agendamento', 'Liberado para publicação'], ['agendado', 'Agendado'], ['publicado', 'Publicado']];
 
 export default function Conteudos() {
   useCrumbs('Conteúdos');

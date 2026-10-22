@@ -8,6 +8,7 @@ import { PageHead, Section, Stat, Empty, Loading, ErrorBox } from '../components
 import { StateBadge, StateNotice, Insufficient } from '../components/State.jsx';
 import { cleanName } from '../lib/format.js';
 import { ISSUE } from './client/Ficha.jsx';
+import Processo from './notion/Processo.jsx';
 import '../styles/notion.css';
 
 const LEGACY = { nao_validado: 'Legado · não validado', reprogramado: 'Reprogramado', cancelado: 'Encerrado como cancelado', historico: 'Mantido como histórico' };
@@ -43,9 +44,11 @@ export default function NotionHistorico() {
       <Section title="Estado" kicker="Integração Notion">
         <div className="nh-state">
           <StateBadge s={data.state || 'somente_leitura'} />
-          <span>Sem sincronização com o Notion (por decisão). A importação foi feita por exportação; a plataforma não lê nem escreve no Notion.</span>
+          <span>Sem sincronização viva com o Notion: a importação foi feita por exportação; a plataforma não lê nem escreve no Notion em tempo real (aguarda token, hospedagem persistente e aprovação do mapa).</span>
         </div>
       </Section>
+
+      <Processo />
 
       <Section title="Números" kicker="Lidos da base agora">
         <div className="stats nh-stats">

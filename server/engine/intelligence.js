@@ -1,7 +1,7 @@
 // Inteligência operacional determinística: pendências, risco de clientes, gargalos, carga, padrões.
 // A IA (Claude) só interpreta/narra estes resultados — os números vêm do banco.
 import { one, all, insert, update, uid, now, parseJSON } from '../db.js';
-import { STAGES, contentRisk, nextAction } from './process.js';
+import { STAGES, contentRisk, nextAction, RELEASED_STAGES } from './process.js';
 import { scopeSQL } from '../lib/permissions.js';
 import { PERF_SQL } from '../services/delayReview.js';
 
@@ -22,6 +22,7 @@ export function computePendencies() {
     WHERE t.status IN ('aberta','em_andamento')`);
   for (const k of tasks) {
     if (k.data_origin === 'notion') continue; // regra 23: dado migrado não gera pendência automaticamente
+    if (RELEASED_STAGES.includes(k.stage) || RELEASED_STAGES.includes(k.content_stage)) continue; // liberado: publicação manual, fora da operação
     const overdue = k.due_at && new Date(k.due_at).getTime() < t;
     const isClient = k.function === 'cliente';
     const base = { id: `task:${k.id}`, client_id: k.client_id, client: k.client_name, content_id: k.content_id, content: k.content_id ? `#${k.content_number} ${k.content_title}` : null,
@@ -34,7 +35,7 @@ export function computePendencies() {
     }
     if (overdue) {
       const late = t - new Date(k.due_at).getTime();
-      const publishSoon = k.planned_at && (new Date(k.planned_at).getTime() - t) < 3 * 864e5;
+      const publishSoon = false; // data de publicação não agrava atraso: é referência editorial (regra da CEO, 22/10)
       out.push({ ...base, severity: publishSoon || late > 2 * 864e5 ? 'critica' : 'alta', title: isClient ? `Aprovação atrasada — ${k.client_name}` : `Atrasado: ${k.title}`,
         problem: isClient ? `${k.content_stage === 'aprovacao_tema' ? 'Aprovação do tema' : 'Aprovação'} atrasada` : (k.client_name && k.title.endsWith(` — ${k.client_name}`) ? k.title.slice(0, -(k.client_name.length + 3)) : k.title), cause: isClient ? 'cliente' : 'prazo', late_ms: late, impact_w: publishSoon ? 3 : 2,
         action: isClient ? 'Cobrar aprovação do cliente' : 'Concluir ou renegociar o prazo',
@@ -45,9 +46,10 @@ export function computePendencies() {
     }
   }
   for (const c of all(`SELECT ct.*, cl.name client_name FROM contents ct JOIN clients cl ON cl.id=ct.client_id WHERE ct.blocked=1 AND ct.stage NOT IN ('publicado','cancelado') AND ct.data_origin='plataforma'`)) {
-    out.push({ id: `block:${c.id}`, client_id: c.client_id, client: c.client_name, content_id: c.id, content: `#${c.number} ${c.title}`, process: STAGES[c.stage].label, since: c.updated_at, due: c.planned_at,
-      severity: c.planned_at && new Date(c.planned_at).getTime() - t < 5 * 864e5 ? 'critica' : 'alta', title: `Bloqueado: ${c.block_reason}`, problem: c.block_reason || 'Conteúdo bloqueado',
-      cause: c.waiting_on === 'cliente' ? 'material' : c.waiting_on === 'informacao' ? 'informacao' : 'equipe', late_ms: ago(c.updated_at), late: fmtDays(ago(c.updated_at)), impact_w: c.planned_at && new Date(c.planned_at).getTime() - t < 5 * 864e5 ? 3 : 2,
+    if (RELEASED_STAGES.includes(c.stage)) continue;
+    out.push({ id: `block:${c.id}`, client_id: c.client_id, client: c.client_name, content_id: c.id, content: `#${c.number} ${c.title}`, process: STAGES[c.stage].label, since: c.updated_at, due: null,
+      severity: 'alta', title: `Bloqueado: ${c.block_reason}`, problem: c.block_reason || 'Conteúdo bloqueado',
+      cause: c.waiting_on === 'cliente' ? 'material' : c.waiting_on === 'informacao' ? 'informacao' : 'equipe', late_ms: ago(c.updated_at), late: fmtDays(ago(c.updated_at)), impact_w: 2,
       action: c.waiting_on === 'cliente' ? 'Cobrar o material' : 'Resolver e desbloquear', source: { type: 'content', id: c.id }, publish_at: c.planned_at, who: c.waiting_on === 'cliente' ? 'Cliente' : c.waiting_on === 'informacao' ? 'Aguardando informação' : 'Equipe',
       impact: 'Conteúdo não avança.', next: c.waiting_on === 'cliente' ? 'Cobrar o material e definir data-limite.' : 'Resolver o bloqueio e desbloquear.', link: `/conteudos/${c.id}` });
   }
@@ -116,7 +118,7 @@ export function explain(i) {
     if (tot) pattern = `As ${tot} tarefas atrasadas desta etapa estão em ${rows.length} cliente(s); a maior parte (${pct(rows[0].n, tot)}%) em um só. Isso descreve onde está, não por quê.`;
   } else if (i.detector === 'carga') {
     const uid = i.fingerprint.split(':')[1];
-    const r = one(`SELECT COUNT(*) n, SUM(data_origin='notion') herdadas, SUM(due_at < ?) vencidas, COUNT(DISTINCT client_id) clientes FROM tasks WHERE assignee_id=? AND status IN ('aberta','em_andamento')`, nowIso, uid);
+    const r = one(`SELECT COUNT(*) n, SUM(data_origin='notion') herdadas, SUM(due_at < ? AND COALESCE(stage,'') NOT IN ('agendamento','agendado','publicado')) vencidas, COUNT(DISTINCT client_id) clientes FROM tasks WHERE assignee_id=? AND status IN ('aberta','em_andamento')`, nowIso, uid);
     const op = one("SELECT COUNT(*) n FROM tasks WHERE status IN ('aberta','em_andamento') AND data_origin='plataforma' AND function<>'cliente'").n;
     pattern = `${pct(i.metric, op)}% das tarefas abertas da operação (nascidas na plataforma) estão com esta pessoa, em ${r.clientes} cliente(s).${r.herdadas ? ` Além delas, ${r.herdadas} tarefa(s) herdada(s) da migração — fora desta conta.` : ''}`;
   } else if (i.detector === 'material') {
@@ -232,7 +234,7 @@ export function stageDistribution(user) {
 export function teamLoad() {
   return all(`SELECT u.id, u.name, u.role_key, u.capacity, u.functions,
     (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento')) open,
-    (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento') AND t.data_origin='plataforma') open_platform,
+    (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento') AND ${PERF_SQL.individual('t')}) open_platform,
     (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento') AND t.due_at < ? AND ${PERF_SQL.individual('t')}) late,
     (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento') AND t.due_at < ? AND t.data_origin='notion') inherited,
     (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status='concluida' AND t.completed_at > ?) done_7d

@@ -302,9 +302,9 @@ test('cliente não respondeu: atraso registrado, lembrete sem excesso, atendimen
   run("DELETE FROM automation_runs WHERE automation_key IN ('cliente.sem_resposta_24h','cliente.prazo_vencido')");
   tick();
   const log = one("SELECT * FROM activity_logs WHERE action='cliente.prazo_vencido' AND content_id=?", c.id);
-  assert.ok(log && log.visibility === 'internal' && /data em risco/.test(log.summary), 'atraso registrado com impacto, só interno');
+  assert.ok(log && log.visibility === 'internal' && /data editorial/.test(log.summary) && !/risco/.test(log.summary), 'atraso registrado, só interno; data de publicação só como referência');
   assert.ok(one("SELECT 1 FROM notifications WHERE user_id=? AND type='cliente_atraso'", U.gestao.id), 'atendimento avisado');
-  assert.ok(one("SELECT 1 FROM notifications WHERE type='escalada' AND title LIKE '%publicação em risco%'"), 'escala internamente quando a publicação está em risco');
+  assert.ok(!one("SELECT 1 FROM notifications WHERE title LIKE '%publicação em risco%'"), 'data de publicação não gera escalada (publicação manual, fora da plataforma)');
   const reminders = () => one("SELECT COUNT(*) n FROM automation_runs WHERE automation_key='cliente.prazo_vencido' AND client_id=? AND status='ok'", A.id).n;
   assert.equal(reminders(), 1, 'um lembrete');
   run("UPDATE tasks SET due_at=? WHERE content_id=? AND kind='aprovacao'", new Date(Date.now() - 1800e3).toISOString(), c.id);
@@ -388,4 +388,21 @@ test('legado/migrado fora do portal, do ciclo atual, do relatório e dos lembret
   assert.ok(!(await s.get('/portal/feed')).data.items.some((x) => x.id === leg.id));
   assert.ok(!(await s.get('/portal/materials')).data.open_contents.some((x) => x.id === leg.id));
   assert.notEqual(liveCycle(C.id)?.id, cyc(leg));
+});
+
+test('data de publicação não é prazo operacional: sem risco, atraso ou pendência por ela', async () => {
+  const { contentRisk, dueFor, RELEASED_STAGES, STAGES } = await import('../engine/process.js');
+  const { computePendencies } = await import('../engine/intelligence.js');
+  const c = await toClientApproval(A, 'Data editorial passada', 1.5);
+  run('UPDATE contents SET planned_at=? WHERE id=?', new Date(Date.now() - 5 * 864e5).toISOString(), c.id);
+  run("UPDATE tasks SET due_at=? WHERE content_id=? AND status IN ('aberta','em_andamento')", new Date(Date.now() + 5 * 864e5).toISOString(), c.id);
+  const cc = one('SELECT * FROM contents WHERE id=?', c.id);
+  const r = contentRisk(cc);
+  assert.ok(!r.reasons.some((x) => /publica/i.test(x)), 'nenhum motivo de risco vem da data de publicação');
+  assert.ok(!computePendencies().some((p) => p.content_id === c.id && /publica/i.test(`${p.impact} ${p.title}`)), 'pendência não cita publicação');
+  const due = dueFor({ ...cc, planned_at: new Date(Date.now() + 3600e3).toISOString() }, 'producao');
+  assert.ok(!due || due > new Date(Date.now() + 3600e3).toISOString(), 'prazo da etapa não é encurtado pela data de publicação');
+  assert.equal(STAGES.agendamento.label, 'Liberado para publicação');
+  assert.equal(STAGES.agendamento.sla, null);
+  for (const st of RELEASED_STAGES) assert.equal(contentRisk({ ...cc, stage: st }).level, 'nenhum', `${st}: fora da operação`);
 });

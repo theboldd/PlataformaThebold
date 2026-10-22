@@ -14,7 +14,7 @@ export const PHASES = [
   { key: 'planejado', label: 'Planejado', stages: ['cronograma', 'analise_cronograma', 'ajuste_cronograma', 'aprovacao_tema'] },
   { key: 'producao', label: 'Em produção', stages: ['producao', 'analise_producao', 'ajuste_interno', 'ajuste_cliente', 'revisao_ajuste'] },
   { key: 'aprovacao', label: 'Com o cliente para aprovar', stages: ['aprovacao_cliente'] },
-  { key: 'aprovado', label: 'Para agendar', stages: ['agendamento'] }, // aprovado só quando há registro (approved_version_id)
+  { key: 'aprovado', label: 'Liberado para publicação', stages: ['agendamento'] }, // aprovado só quando há registro (approved_version_id)
   { key: 'agendado', label: 'Agendado', stages: ['agendado'] },
   { key: 'publicado', label: 'Publicado', stages: ['publicado'] },
   // regra 22: item legado não validado não é conteúdo operacional — fica num grupo à parte
