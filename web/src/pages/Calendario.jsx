@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { StateBadge, StateNotice } from '../components/State.jsx';
 import { Link, useNavigate } from 'react-router-dom';
-import { useApi } from '../lib/hooks.js';
+import { useApi, useToast } from '../lib/hooks.js';
+import { api } from '../lib/api.js';
 import { StateTag } from '../components/State.jsx';
 import { useCrumbs } from '../components/Shell.jsx';
-import { Button, Seg, Loading, Empty, ErrorBox, Tag } from '../components/ui.jsx';
+import { Button, Seg, Loading, Empty, ErrorBox, Tag, Modal, Field } from '../components/ui.jsx';
 import { I } from '../components/Icons.jsx';
 import { fmtTime, cleanName } from '../lib/format.js';
 import { STATUS, STATUS_GLYPH, FORMATS } from '../lib/status.js';
@@ -37,7 +38,10 @@ export default function Calendario() {
     return [anchor, addDays(anchor, 34)];
   }, [view, anchor]);
   const qs = new URLSearchParams({ start: new Date(`${range[0]}T00:00:00-03:00`).toISOString(), end: new Date(`${range[1]}T23:59:59-03:00`).toISOString(), ...(client ? { client_id: client } : {}), ...(mine ? { mine: '1' } : {}) });
-  const { data, error, loading } = useApi(`/calendar?${qs}`, [qs.toString()]);
+  const { data, error, loading, reload } = useApi(`/calendar?${qs}`, [qs.toString()]);
+  const opts = useApi('/agenda/opcoes', [], { live: false });
+  const [novo, setNovo] = useState(false);
+  const [sel, setSel] = useState(null);
 
   const byDay = useMemo(() => {
     const m = {};
@@ -57,7 +61,7 @@ export default function Calendario() {
     : view === 'dia' ? new Date(`${anchor}T12:00:00Z`).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', timeZone: 'UTC' })
     : `${new Date(`${range[0]}T12:00:00Z`).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', timeZone: 'UTC' })} — ${new Date(`${range[1]}T12:00:00Z`).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', timeZone: 'UTC' })}`;
   const titleCap = title.charAt(0).toUpperCase() + title.slice(1);
-  const open = (it) => { if (!it.link) return; if (it.external) window.open(it.link, '_blank', 'noopener'); else nav(it.link); };
+  const open = (it) => { if (it.event_id) { setSel(it); return; } if (!it.link) return; if (it.external) window.open(it.link, '_blank', 'noopener'); else nav(it.link); };
   const g = data?.google;
 
   return (
@@ -70,6 +74,8 @@ export default function Calendario() {
           </div>
         </div>
         <div className="col" style={{ alignItems: 'flex-end', gap: 10 }}>
+          {opts.data?.can_create ? <Button variant="primary" icon={<I.plus size={15} />} onClick={() => setNovo(true)}>Novo evento, compromisso ou tarefa</Button>
+            : opts.data && <span className="xs muted">Somente visualização · criar eventos é liberado pela CEO</span>}
           <Seg options={[{ value: 'mes', label: 'Mês' }, { value: 'semana', label: 'Semana' }, { value: 'dia', label: 'Dia' }, { value: 'agenda', label: 'Agenda' }]} value={view} onChange={setView} label="Visualização" />
           <span className="gstatus">
             {g?.status === 'conectado' ? <Tag tone="ok">Google Calendar conectado · {g.items} eventos</Tag>
@@ -98,6 +104,8 @@ export default function Calendario() {
           : view === 'semana' ? <Week range={range} today={today} byDay={byDay} open={open} />
           : <Agenda range={range} byDay={byDay} open={open} single={view === 'dia'} />
       )}
+      {novo && <NewAgendaItem opts={opts.data} anchor={anchor} onClose={() => setNovo(false)} onDone={() => { setNovo(false); reload(); }} />}
+      {sel && <EventDetail it={sel} onClose={() => setSel(null)} onDone={() => { setSel(null); reload(); }} />}
     </div>
   );
 }
@@ -157,4 +165,69 @@ function Agenda({ range, byDay, open, single }) {
       <div className="col gap-1">{(byDay[k] || []).map((it, j) => it.band ? <div key={it.id + j} className="band" style={{ alignSelf: 'flex-start' }}>{it.title}</div> : <Ev key={it.id + j} it={it} open={open} wide />)}{!(byDay[k] || []).length && <span className="sm faint">Nada agendado.</span>}</div>
     </div>
   ));
+}
+
+// NOVO NA AGENDA: evento, compromisso ou tarefa · para toda a equipe ou para pessoas selecionadas uma a uma
+function NewAgendaItem({ opts, anchor, onClose, onDone }) {
+  const toast = useToast();
+  const [f, setF] = useState({ tipo: 'evento', title: '', description: '', date: anchor || new Date().toISOString().slice(0, 10), time: '09:00', end_time: '', all_day: false, client_id: '', audience: 'todos', members: [], priority: 'media' });
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
+  const toggle = (id) => setF({ ...f, members: f.members.includes(id) ? f.members.filter((x) => x !== id) : [...f.members, id] });
+  const submit = async () => {
+    const starts_at = new Date(`${f.date}T${f.all_day ? '12:00' : f.time || '09:00'}:00-03:00`).toISOString();
+    const ends_at = !f.all_day && f.end_time ? new Date(`${f.date}T${f.end_time}:00-03:00`).toISOString() : null;
+    if (f.tipo === 'tarefa' && f.audience === 'todos' && !confirm(`Criar uma tarefa para cada pessoa da equipe (${opts.people.length})?`)) return;
+    try { const r = await api.post('/agenda/itens', { ...f, starts_at, ends_at }); toast(r.tasks ? `${r.tasks} tarefa(s) criada(s) e avisada(s).` : `Criado e avisado para ${r.recipients} pessoa(s).`); onDone(); } catch (e) { toast(e.message, 'err'); }
+  };
+  return (
+    <Modal open wide title="Novo na agenda" onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" onClick={submit} disabled={!f.title.trim() || (f.audience === 'selecionados' && !f.members.length)}>Criar</Button></>}>
+      <div className="col gap-4">
+        <Seg value={f.tipo} onChange={(v) => setF({ ...f, tipo: v })} options={Object.entries(opts.tipos).map(([value, label]) => ({ value, label }))} label="Tipo" />
+        {f.tipo === 'tarefa' && <p className="xs muted" style={{ margin: 0 }}>Tarefa vira uma tarefa real para cada pessoa escolhida, com prazo nesta data (aparece em Pendências e no Calendário).</p>}
+        <Field label="Título"><input className="input" value={f.title} onChange={set('title')} /></Field>
+        <div className="grid-2">
+          <Field label="Data"><input className="input" type="date" value={f.date} onChange={set('date')} /></Field>
+          {f.tipo !== 'tarefa' && <Field label="Dia inteiro"><label className="row gap-2 sm"><input type="checkbox" checked={f.all_day} onChange={set('all_day')} /> Sem horário</label></Field>}
+          {!f.all_day && <Field label={f.tipo === 'tarefa' ? 'Prazo (hora)' : 'Início'}><input className="input" type="time" value={f.time} onChange={set('time')} /></Field>}
+          {!f.all_day && f.tipo !== 'tarefa' && <Field label="Fim (opcional)"><input className="input" type="time" value={f.end_time} onChange={set('end_time')} /></Field>}
+          <Field label="Cliente (opcional)"><select className="select" value={f.client_id} onChange={set('client_id')}><option value="">Sem cliente</option>{opts.clients.map((c) => <option key={c.id} value={c.id}>{cleanName(c.name)}</option>)}</select></Field>
+          {f.tipo === 'tarefa' && <Field label="Prioridade"><select className="select" value={f.priority} onChange={set('priority')}><option value="baixa">Baixa</option><option value="media">Média</option><option value="alta">Alta</option><option value="critica">Crítica</option></select></Field>}
+        </div>
+        <Field label="Descrição (opcional)"><textarea className="textarea" value={f.description} onChange={set('description')} /></Field>
+        <div className="col gap-2">
+          <div className="caps">{f.tipo === 'tarefa' ? 'Para quem é a tarefa' : 'Quem vê'}</div>
+          <div className="row wrap gap-2">
+            <Button size="sm" variant={f.audience === 'todos' ? 'primary' : 'ghost'} onClick={() => setF({ ...f, audience: 'todos' })}>Toda a equipe</Button>
+            <Button size="sm" variant={f.audience === 'selecionados' ? 'primary' : 'ghost'} onClick={() => setF({ ...f, audience: 'selecionados' })}>Selecionar pessoas</Button>
+          </div>
+          {f.audience === 'selecionados' && (
+            <div className="ag-people">{opts.people.map((p) => (
+              <label key={p.id} className={`ag-person ${f.members.includes(p.id) ? 'on' : ''}`}><input type="checkbox" checked={f.members.includes(p.id)} onChange={() => toggle(p.id)} /> {p.name}</label>
+            ))}</div>
+          )}
+          <span className="xs muted">{f.audience === 'todos' ? `Aparece para as ${opts.people.length} pessoas da equipe, que são avisadas.` : `${f.members.length} pessoa(s) selecionada(s). Só elas (e você) veem e são avisadas.`}</span>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function EventDetail({ it, onClose, onDone }) {
+  const toast = useToast();
+  const cancel = async () => {
+    const reason = prompt('Motivo do cancelamento (as pessoas são avisadas):');
+    if (!reason) return;
+    try { await api.post(`/agenda/eventos/${it.event_id}/cancelar`, { reason }); toast('Cancelado e avisado.'); onDone(); } catch (e) { toast(e.message, 'err'); }
+  };
+  return (
+    <Modal open title={it.title} onClose={onClose} footer={<>{it.can_cancel && <Button variant="danger" onClick={cancel}>Cancelar evento</Button>}<Button onClick={onClose}>Fechar</Button></>}>
+      <div className="col gap-2 sm">
+        <div><span className="caps">{it.kind === 'compromisso' ? 'Compromisso' : 'Evento'}</span></div>
+        <div>{new Date(it.start).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'full', timeStyle: it.all_day ? undefined : 'short' })}{it.end && !it.all_day ? ` até ${fmtTime(it.end)}` : ''}</div>
+        {it.description && <p style={{ margin: 0 }}>{it.description}</p>}
+        <div className="muted">Quem vê: {it.audience === 'selecionados' ? (it.members || []).join(', ') : 'toda a equipe'}</div>
+        {it.creator && <div className="xs faint">Criado por {it.creator}</div>}
+      </div>
+    </Modal>
+  );
 }

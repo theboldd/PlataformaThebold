@@ -59,7 +59,10 @@ export const PRODUCT_MAP = [
     ['Visão geral do cliente (status, risco, próximos passos)', 'ok', 'Cliente · Visão geral', '/clientes'],
     ['Client Brain com origem separada', 'parcial', 'Cliente · Ficha / Resumo do Brain', '/clientes', 'Dois formatos (14 e 22 seções) ainda não unificados'],
     ['Onboarding (formulário, migrado parcial, cards por seção)', 'ok', 'Cliente · Onboarding', '/clientes'],
-    ['Calendário editorial e conteúdos (fases, mês, feed, histórico do Notion)', 'ok', 'Cliente · Calendário editorial', '/clientes'],
+    ['Calendário editorial como no Notion: mês com cartões, formato no título, marcas e checks APROVAÇÃO ARTE / LEGENDA / TEMA (só com registro)', 'ok', 'Cliente · Calendário editorial', '/clientes'],
+    ['CR Editorial do Notion no mesmo calendário (somente leitura); “+” no dia e arrastar para mudar a data', 'ok', 'Cliente · Calendário editorial', '/clientes'],
+    ['Usar os temas e datas do CR Editorial nos conteúdos da plataforma', 'decisao', 'Cliente · Calendário editorial', '/clientes', 'Hoje são duas fontes: CR Editorial (Notion) e quadro de processo (tema a definir)'],
+    ['Fases, mês compacto, prévia do feed e histórico do Notion', 'ok', 'Cliente · Calendário editorial', '/clientes'],
     ['Reuniões do cliente', 'ok', 'Cliente · Reuniões', '/clientes'],
     ['Comunicação do cliente', 'ok', 'Cliente · Comunicação', '/clientes'],
     ['Pendências do cliente', 'ok', 'Cliente · Pendências', '/clientes'],
@@ -115,6 +118,8 @@ export const PRODUCT_MAP = [
   A('Calendário', '/calendario', [
     ['Mês, semana, dia, agenda; conteúdos, prazos, ciclos e reuniões', 'ok', 'Calendário', '/calendario'],
     ['Google Calendar no calendário', 'config', 'Calendário · aviso no topo', '/integracoes', 'Conectar o Google'],
+    ['Equipe só visualiza; criar evento, compromisso ou tarefa só com a permissão de Agenda (CEO concede)', 'ok', 'Calendário · + Novo', '/calendario'],
+    ['Ao criar: toda a equipe ou pessoas selecionadas uma a uma (só elas veem e são avisadas)', 'ok', 'Calendário · + Novo', '/calendario'],
   ]),
   A('Reuniões', '/reunioes', [
     ['Agenda, reuniões, pauta e ata', 'ok', 'Reuniões', '/reunioes', '', true],
@@ -143,6 +148,7 @@ export const PRODUCT_MAP = [
     ['Recebimentos: indicadores, status por parcela, calendário, marcar como pago, negociação, cancelamento, histórico de cobranças', 'ok', 'Negócio · Recebimentos', '/negocio?aba=recebimentos', '', true],
     ['Cobrança por cliente (e-mail, dia, recorrência) e régua D-1 / D0', 'config', 'Negócio · Recebimentos', '/negocio?aba=recebimentos', 'Resend + e-mail de cobrança de cada cliente + agendador'],
     ['Cobranças após o vencimento', 'decisao', 'Negócio · Configuração', '/negocio?aba=config', 'A CEO definir quantas e o intervalo'],
+    ['Adicionar demanda por pessoa (função, cliente, quantidade, valor) — lançada à mão, removível só com motivo', 'ok', 'Negócio · Produção & Repasses', '/negocio?aba=repasses'],
     ['Produção & Repasses: apuração por competência, motivos, ajustes, fechamento com aprovação, relatório, apuração diária', 'ok', 'Negócio · Produção & Repasses', '/negocio?aba=repasses', 'Permissão própria (só a CEO concede)', true],
     ['Valores de repasse e dia de fechamento', 'decisao', 'Negócio · Produção & Repasses / Configuração', '/negocio?aba=repasses', 'A CEO cadastrar os valores e o dia'],
     ['Custos (únicos e recorrentes, da agência ou de um cliente)', 'ok', 'Negócio · Custos', '/negocio?aba=custos', 'Nenhum custo cadastrado', true],

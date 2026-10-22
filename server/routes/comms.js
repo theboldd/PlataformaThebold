@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { eventVisibleSQL } from './agenda.js';
 import { isInherited } from '../services/delayReview.js';
 import { one, all, insert, update, run, uid, now, parseJSON, tx } from '../db.js';
 import { requireInternal, requirePerm, requireAuth } from '../lib/auth.js';
@@ -162,6 +163,7 @@ comms.post('/chat/messages/:id/convert', requireInternal, (req, res) => {
       else throw new HttpError(409, `O conteúdo está em “${STAGES[c.stage].label}”. Ajustes entram em etapas de revisão ou de aprovação do cliente.`);
       result = { type, id: c.id };
     } else if (type === 'evento') {
+      if (!can(req.user, 'agenda', 'create')) throw new HttpError(403, 'Criar evento no Calendário exige a permissão de Agenda (liberada pela CEO).');
       if (!starts_at) throw new HttpError(422, 'Informe a data do evento.');
       const e = insert('events', { id: uid('ev_'), title: text, kind: req.body.kind || 'compromisso', starts_at: new Date(starts_at).toISOString(), all_day: req.body.all_day ? 1 : 0, client_id: clientId, created_by: req.user.id, created_at: now() });
       result = { type, id: e.id };
@@ -194,8 +196,11 @@ comms.get('/calendar', requireInternal, async (req, res) => {
   for (const m of all(`SELECT m.*, cl.name client FROM meetings m LEFT JOIN clients cl ON cl.id=m.client_id WHERE m.status<>'cancelada' AND m.starts_at BETWEEN ? AND ? AND (m.client_id IS NULL OR ${scm.sql})${req.query.client_id ? ' AND m.client_id=?' : ''}`, start, end, ...scm.params, ...cp)) {
     items.push({ id: `m:${m.id}`, type: 'reuniao', title: m.title, start: m.starts_at, end: m.ends_at, client_id: m.client_id, gcal: m.gcal_sync, link: `/reunioes?m=${m.id}` });
   }
-  for (const e of all(`SELECT e.* FROM events e WHERE e.starts_at BETWEEN ? AND ? AND (e.client_id IS NULL OR ${scopeSQL(req.user, 'e.client_id').sql})`, start, end, ...scopeSQL(req.user, 'e.client_id').params)) {
-    items.push({ id: `e:${e.id}`, type: e.kind === 'producao' || e.kind === 'ciclo' ? 'ciclo' : 'evento', title: e.title, start: e.starts_at, end: e.ends_at, all_day: !!e.all_day, client_id: e.client_id });
+  const ev = eventVisibleSQL(req.user);
+  for (const e of all(`SELECT e.*, u.name creator FROM events e LEFT JOIN users u ON u.id=e.created_by WHERE e.cancelled_at IS NULL AND e.starts_at BETWEEN ? AND ? AND (e.client_id IS NULL OR ${scopeSQL(req.user, 'e.client_id').sql}) AND ${ev.sql}`, start, end, ...scopeSQL(req.user, 'e.client_id').params, ...ev.params)) {
+    const members = e.audience === 'selecionados' ? all('SELECT u.name FROM event_members em JOIN users u ON u.id=em.user_id WHERE em.event_id=? ORDER BY u.name', e.id).map((r) => r.name) : null;
+    items.push({ id: `e:${e.id}`, event_id: e.id, type: e.kind === 'producao' || e.kind === 'ciclo' ? 'ciclo' : 'evento', kind: e.kind, title: e.title, description: e.description, start: e.starts_at, end: e.ends_at, all_day: !!e.all_day, client_id: e.client_id,
+      audience: e.audience, members, creator: e.creator, can_cancel: can(req.user, 'agenda', 'create') && (e.created_by === req.user.id || can(req.user, 'agenda', 'admin')) });
   }
   // Marcos do ciclo: agregados por mês (ex.: "Produção · NOVEMBRO") — iguais para todos os clientes, mostrados uma vez
   const LABEL = { cronograma_entrega: 'Entrega de cronograma', revisao_cronograma: 'Revisão de cronograma', ajuste_cronograma: 'Ajuste de cronograma', cliente_aprova_temas: 'Clientes aprovam temas', leitura_comentarios: 'Estrategistas leem comentários', producao: 'Produção', revisao_producao: 'Revisão da produção', ajustes_equipe: 'Ajustes da equipe', tudo_pronto: 'Tudo pronto', cliente_aprova_final: 'Clientes aprovam produção', ajustes_cliente: 'Ajustes dos clientes', agendamento: 'Agendamento' };

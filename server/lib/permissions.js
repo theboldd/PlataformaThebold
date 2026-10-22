@@ -11,6 +11,7 @@ export const MODULES = {
   divisao: 'Divisão de clientes (ver e gerenciar quem cuida de cada cliente)',
   carteira: 'Carteira de clientes (criar cliente e mudar status: ativar, pausar, encerrar)',
   atrasos: 'Classificação de atrasos (ver os fatos de cada item atrasado ou herdado e classificar a causa)',
+  agenda: 'Agenda: criar eventos, compromissos e tarefas no Calendário e escolher quem vê (sem esta permissão, a equipe só visualiza)',
   repasses: 'Produção & Repasses (ver valores = view · gerenciar valores e ajustes = edit · aprovar e fechar competência = approve)',
   performance: 'Equipe · Performance (entregas, prazos, reaberturas e capacidade por pessoa — dado sobre pessoas)',
 };
@@ -20,7 +21,7 @@ const ALL = Object.keys(MODULES).filter((m) => m !== 'portal');
 // Módulos que só a CEO decide: Divisão (vincular/desvincular clientes da equipe) e Carteira (criar cliente, mudar status).
 // Atrasos e Performance: dado sobre pessoas — mesma regra.
 // Por padrão só o perfil CEO tem; liberar para alguém (em Usuários) ou para um perfil exige <módulo>:admin — só a CEO.
-export const CEO_GRANT = ['divisao', 'carteira', 'atrasos', 'performance', 'repasses'];
+export const CEO_GRANT = ['divisao', 'carteira', 'atrasos', 'performance', 'repasses', 'agenda'];
 const full = (mods) => Object.fromEntries(mods.map((m) => [m, [...ACTIONS]]));
 const prod = { dashboard: ['view'], processos: ['view'], clientes: ['view'], conteudos: ['view', 'edit'], calendario: ['view'], reunioes: ['view'], chat: ['view', 'create'], brain: ['view'] };
 

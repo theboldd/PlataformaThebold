@@ -1,5 +1,25 @@
 # THE BOLD OS — Checklist oficial de conferência
 
+## Revisão 4.1 · 22/10/2026 — calendário editorial como no Notion, agenda com permissão e demandas por pessoa
+
+| O que | Onde | Estado |
+|---|---|---|
+| **Calendário editorial igual ao do Notion:** mês de domingo a sábado, um cartão por post com o formato no título (CARROSSEL, ÚNICO, REELS), marcas (ENVIAR MATERIAL…) e checks APROVAÇÃO ARTE / LEGENDA / TEMA. Marcados só com registro: tema = aprovação de tema; arte e legenda = versão aprovada pelo cliente | Cliente → Calendário editorial (visão padrão “Calendário”) | 🟢 |
+| CR Editorial do Notion no mesmo calendário, marcado “Notion” e somente leitura, com as marcações reais de lá; “+” em cada dia cria conteúdo com a data; arrastar um cartão (ou um “sem data”) muda a data e registra no histórico | Cliente → Calendário editorial | 🟢 |
+| **Agenda com permissão:** a equipe só visualiza o Calendário. Criar evento, compromisso ou tarefa exige a permissão “Agenda”, que só a CEO concede. Ao criar: “Toda a equipe” ou “Selecionar pessoas” uma a uma. Só os escolhidos veem e são avisados; tarefa vira uma tarefa real por pessoa; cancelar exige motivo | Calendário → “Novo evento, compromisso ou tarefa” · Usuários → permissões | 🟢 |
+| **Adicionar demanda por pessoa:** pessoa, função, cliente, quantidade, valor unitário (ou a regra cadastrada), situação e motivo. Remover só com motivo; nada é apagado | Negócio → Produção & Repasses → “+ Adicionar demanda” | 🟢 |
+| Cartões de Riscos & gargalos em tons pastel (rosado, pêssego, manteiga, lavanda, azul), no claro e no escuro | Torre → Riscos & gargalos | 🟢 |
+
+**⚪ Precisa de decisão.** Hoje, para a Gabriela (e os demais), existem duas fontes:
+- **CR Editorial (Notion):** os 13 posts de novembro, com tema, data e marcações.
+- **Quadro de processo da plataforma:** 12 conteúdos “tema a definir”, sem data.
+
+O calendário mostra as duas, separadas. A decisão é se os temas e datas do CR Editorial passam a alimentar os conteúdos da plataforma: copiar como dado da plataforma ou vincular um a um. Até lá, o CR Editorial continua somente leitura (regra 15).
+
+**Para liberar a Agenda a alguém:** Usuários e permissões → a pessoa → permissão “Agenda” (criar).
+
+---
+
 ## Revisão 4 · 22/10/2026 — CRM + Financeiro viram NEGÓCIO e o que estava “em desenvolvimento” foi construído
 
 **Negócio (uma página só, item “Negócio” no menu).** Abas: Pipeline (CRM) · Recebimentos · Produção & Repasses · Custos · Metas · Rentabilidade · Configuração. Os endereços antigos `/crm` e `/financeiro` redirecionam para cá.

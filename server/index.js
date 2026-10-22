@@ -21,6 +21,7 @@ import { divisao } from './routes/divisao.js';
 import { atrasos } from './routes/atrasos.js';
 import { produto } from './routes/produto.js';
 import { negocio } from './routes/negocio.js';
+import { agenda } from './routes/agenda.js';
 import { editorial } from './routes/editorial.js';
 import { markMigratedTasks, markLegacy, syncDelayReviews } from './services/delayReview.js';
 import { review } from './routes/review.js';
@@ -49,7 +50,7 @@ export function bootstrap() {
     if (fresh) for (const [m, acts] of Object.entries(r.perms)) for (const a of acts) run('INSERT OR IGNORE INTO role_permissions (role_key,module,action) VALUES (?,?,?)', r.key, m, a);
   }
   // Módulos criados depois da primeira instalação: semeia uma vez as permissões padrão dos roles existentes
-  for (const mod of ['divisao', 'carteira', 'atrasos', 'performance', 'repasses']) {
+  for (const mod of ['divisao', 'carteira', 'atrasos', 'performance', 'repasses', 'agenda']) {
     const flag = `perm_seed:${mod}`;
     if (one('SELECT 1 FROM settings WHERE key=?', flag)) continue;
     for (const r of ROLE_DEFS) for (const a of r.perms[mod] || []) run('INSERT OR IGNORE INTO role_permissions (role_key,module,action) VALUES (?,?,?)', r.key, mod, a);
@@ -120,6 +121,7 @@ export function createApp() {
   app.use('/api', atrasos);
   app.use('/api', produto);
   app.use('/api', negocio);
+  app.use('/api', agenda);
   app.use('/api', editorial);
   app.use('/api', ops);
   app.use('/api', business);

@@ -37,7 +37,7 @@ const INTERNAL = (c, ct) => ['/auth/me', '/dashboard', '/torre', '/torre/automat
   '/insights?status=aberto', '/brain/agents', '/automations', '/automations/estado', '/integrations', '/produto/integracoes', '/users', '/users/directory', '/client-access', '/history?limit=50',
   '/migration-issues', '/notion/resumo', '/configuracoes', '/notifications', '/reports',
   '/brain/decisions', '/brain/decisions?q=x&status=todas', `/brain/decisions?client_id=${c}`, '/brain/radar', '/me/notification-prefs',
-  '/negocio/recebimentos', '/negocio/repasses', '/negocio/repasses?competencia=2026-09', '/negocio/custos', '/negocio/metas', '/negocio/rentabilidade', '/negocio/config'];
+  '/negocio/recebimentos', '/negocio/repasses', '/negocio/repasses?competencia=2026-09', '/negocio/custos', '/negocio/metas', '/negocio/rentabilidade', '/negocio/config', '/agenda/opcoes'];
 const PORTAL = ['/portal/me', '/portal/home', '/portal/feed', '/portal/decisions', '/portal/pendencias', '/portal/calendar', '/portal/meetings', '/portal/channel', '/portal/requests',
   '/portal/materials', '/portal/brand', '/portal/history?limit=80', '/portal/onboarding/form'];
 

@@ -245,6 +245,7 @@ function Thread({ channelId, threadId, people, onClose, onConvert, tick }) {
 }
 
 function ConvertModal({ msg, channel, onClose, onDone }) {
+  const auth = useAuth();
   const toast = useToast();
   const [type, setType] = useState('tarefa');
   const [f, setF] = useState({ title: msg.body.slice(0, 160), assignee_id: '', due_at: '', client_id: channel.client_id || '', content_id: '', starts_at: '', waiting_on: 'cliente' });
@@ -267,7 +268,7 @@ function ConvertModal({ msg, channel, onClose, onDone }) {
       onDone();
     } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
   };
-  const TYPES = [['tarefa', 'Tarefa'], ['pendencia', 'Pendência'], ['decisao', 'Decisão'], ['ajuste', 'Ajuste'], ['evento', 'Evento']];
+  const TYPES = [['tarefa', 'Tarefa'], ['pendencia', 'Pendência'], ['decisao', 'Decisão'], ['ajuste', 'Ajuste'], ...(auth.can('agenda', 'create') ? [['evento', 'Evento']] : [])]; // evento no Calendário: só com a permissão de Agenda
   return (
     <Modal open title="Transformar em registro oficial" onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" magnetic onClick={submit} disabled={busy}>{busy ? 'Registrando…' : 'Registrar'}</Button></>}>
       <blockquote className="note mb-5" style={{ margin: '0 0 20px' }}>“{msg.body.slice(0, 280)}” <span className="xs faint">— {msg.author_name}</span></blockquote>
