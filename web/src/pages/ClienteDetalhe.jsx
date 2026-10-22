@@ -4,10 +4,10 @@ import { api } from '../lib/api.js';
 import { useApi, useAuth, useToast } from '../lib/hooks.js';
 import { ClienteOrigem } from './client/ClienteOrigem.jsx';
 import { useCrumbs } from '../components/Shell.jsx';
-import { Avatar, Button, Empty, ErrorBox, Field, Loading, Modal, Risk, Stat, Tabs, Timeline } from '../components/ui.jsx';
+import { Avatar, Button, Empty, ErrorBox, Field, Loading, Modal, Risk, Timeline } from '../components/ui.jsx';
 import { I } from '../components/Icons.jsx';
-import { ago, bytes, cleanName, fmtDate, fmtDateTime, fmtMonth, money } from '../lib/format.js';
-import { FUNCTIONS } from '../lib/status.js';
+import { ago, bytes, cleanName, fmtDate, fmtDateTime, money } from '../lib/format.js';
+import { FUNCTIONS, FORMATS } from '../lib/status.js';
 import Ficha, { SECTION_LABEL } from './client/Ficha.jsx';
 import { RequestsTab, DecisionsTab, HealthTab, PulseTab } from './client/PortalTabs.jsx';
 import { PendenciesTab, CommunicationTab } from './client/ClientExtraTabs.jsx';
@@ -15,17 +15,28 @@ import '../styles/pend.css';
 import Editorial from './client/Editorial.jsx';
 import { ClientOnboardingCard } from './client/OnboardingCards.jsx';
 import '../styles/production.css';
+import '../styles/cliente.css';
 
 const BRAIN = [['posicionamento', 'Posicionamento'], ['publico', 'Público'], ['persona', 'Persona'], ['tom', 'Tom de voz'], ['linguagem', 'Linguagem'], ['oferta', 'Oferta'], ['produtos', 'Produtos e serviços'], ['objetivos', 'Objetivos'], ['estrategia', 'Estratégia'], ['preferencias', 'Preferências'], ['restricoes', 'Restrições'], ['referencias', 'Referências'], ['regras', 'Regras específicas'], ['importante', 'Informações importantes']];
 const MILESTONES = { cronograma_entrega: 'Entrega do cronograma', revisao_cronograma: 'Revisão do cronograma', ajuste_cronograma: 'Ajuste do cronograma', cliente_aprova_temas: 'Cliente aprova temas', leitura_comentarios: 'Leitura de comentários', producao: 'Produção', revisao_producao: 'Revisão da produção', ajustes_equipe: 'Ajustes da equipe', tudo_pronto: 'Tudo pronto', cliente_aprova_final: 'Cliente aprova produção', ajustes_cliente: 'Ajustes do cliente', agendamento: 'Agendamento' };
 const MEM_KINDS = { decisao: 'Decisão', aprendizado: 'Aprendizado', feedback: 'Feedback', preferencia: 'Preferência', restricao: 'Restrição', informacao: 'Informação' };
+// Navegação da ficha: 4 grupos (não 17 abas). As chaves de ?tab= continuam as mesmas — links antigos seguem funcionando.
+const NAV = [
+  { key: 'geral', label: 'Visão geral', items: [{ tab: 'visao', label: 'Visão geral' }, { tab: 'ficha', label: 'Ficha' }, { tab: 'brain', label: 'Client Brain' }, { tab: 'onboarding', label: 'Onboarding' }] },
+  { key: 'conteudo', label: 'Conteúdo', items: [{ tab: 'conteudos', label: 'Calendário editorial' }, { tab: 'conteudos', ed: 'feed', label: 'Feed de aprovação' }, { tab: 'arquivos', label: 'Arquivos' }] },
+  { key: 'relacao', label: 'Relação', items: [{ tab: 'comunicacao', label: 'Comunicação' }, { tab: 'reunioes', label: 'Reuniões' }, { tab: 'solicitacoes', label: 'Solicitações' }, { tab: 'decisoes', label: 'Decisões' }] },
+  { key: 'gestao', label: 'Gestão', items: [{ tab: 'pendencias', label: 'Pendências' }, { tab: 'processo', label: 'Processo do mês' }, { tab: 'equipe', label: 'Equipe' }, { tab: 'marca', label: 'Marca & Pulso' }, { tab: 'saude', label: 'Saúde' }, { tab: 'financeiro', label: 'Financeiro', finance: true }, { tab: 'historico', label: 'Histórico' }, { tab: 'origem', label: 'Origem dos dados' }] },
+];
+const itemKey = (it) => `${it.tab}${it.ed ? `:${it.ed}` : ''}`;
 const CYCLE = { planejamento: 'Planejamento', aprovacao_temas: 'Aprovação de temas', producao: 'Produção', aprovacao_final: 'Aprovação final', agendamento: 'Agendamento', publicando: 'Publicando', encerrado: 'Encerrado' };
 
 export default function ClienteDetalhe() {
   const { id } = useParams();
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') || 'visao';
-  const setTab = (t) => setParams(t === 'visao' ? {} : { tab: t }, { replace: true });
+  const ed = params.get('ed');
+  const go = (it) => setParams(it.tab === 'visao' ? {} : { tab: it.tab, ...(it.ed ? { ed: it.ed } : {}), ...(it.mes ? { mes: it.mes } : {}) }, { replace: true });
+  const setTab = (t, extra = {}) => go({ tab: t, ...extra });
   const { data, error, loading, reload } = useApi(`/clients/${id}`, [id]);
   const auth = useAuth();
   useCrumbs('Clientes', data ? cleanName(data.client.name) : '…');
@@ -33,36 +44,40 @@ export default function ClienteDetalhe() {
   if (loading || !data) return <div className="page"><Loading rows={8} /></div>;
   const { client: c, onboarding: ob } = data;
   const missing = ob ? ob.items.filter((i) => i.status === 'pendente' && i.required) : [];
-  const tabs = [
-    { key: 'visao', label: 'Visão geral' }, { key: 'ficha', label: 'Ficha' }, { key: 'brain', label: 'Resumo do Brain' },
-    { key: 'onboarding', label: 'Onboarding', count: ob && ob.status !== 'concluido' ? missing.length : 0 },
-    { key: 'conteudos', label: 'Calendário editorial', count: data.contents.length }, { key: 'reunioes', label: 'Reuniões', count: data.meetings.length },
-    { key: 'pendencias', label: 'Pendências' }, { key: 'comunicacao', label: 'Comunicação' },
-    { key: 'solicitacoes', label: 'Solicitações', count: data.open_requests || 0 }, { key: 'decisoes', label: 'Decisões' }, { key: 'marca', label: 'Marca & Pulso' }, { key: 'saude', label: 'Saúde' },
-    { key: 'equipe', label: 'Equipe' }, { key: 'arquivos', label: 'Arquivos', count: data.files.length },
-    ...(data.finance ? [{ key: 'financeiro', label: 'Financeiro' }] : []), { key: 'origem', label: 'Origem dos dados' }, { key: 'historico', label: 'Histórico' },
-  ];
+  const counts = { onboarding: ob && ob.status !== 'concluido' ? missing.length : 0, solicitacoes: data.open_requests || 0, arquivos: data.files.length, reunioes: data.meetings.length };
+  const nav = NAV.map((g) => ({ ...g, items: g.items.filter((it) => !it.finance || data.finance) }));
+  const current = `${tab}${tab === 'conteudos' && ed === 'feed' ? ':feed' : ''}`;
+  const group = nav.find((g) => g.items.some((it) => itemKey(it) === current)) || nav[0];
   return (
-    <div className="page">
-      <header className="dossie-head">
-        <div>
-          <div className="caps">Dossiê · {c.segment || 'Cliente'}{c.handle ? ` · ${c.handle}` : ''}</div>
-          <h1 className="ed-xxl mt-2">{cleanName(c.name)}</h1>
-          <div className="row wrap gap-4 mt-4">
+    <div className="page cf">
+      <header className="cf-head">
+        <div className="cf-id">
+          <div className="caps">{c.segment || 'Cliente'}{c.handle ? ` · ${c.handle}` : ''}{c.kind === 'interno' ? ' · cliente interno' : ''}</div>
+          <h1 className="cf-name">{cleanName(c.name)}</h1>
+          <div className="cf-status">
             {auth.can('carteira', 'edit') ? <StatusControl c={c} reload={reload} />
-              : <span className={`tag ${c.status === 'onboarding' ? 'tag-bordo' : c.status === 'ativo' ? 'tag-ok' : ''}`}>{c.status === 'a_confirmar' ? 'status a confirmar' : c.status}</span>}
-            {c.kind === 'interno' && <span className="tag tag-bordo" title="A própria The Bold: fica fora das métricas de carteira, comerciais e de clientes externos">Cliente interno</span>}
-            <Risk level={c.risk.level} />{['baixo', 'nenhum'].includes(c.risk.level) && <span className="xs muted">sem riscos identificados</span>}
-            <span className="sm muted">{c.services.join(' · ')}</span>
+              : <span className="cf-pill">{c.status === 'a_confirmar' ? 'Status a confirmar' : CLIENT_STATUS[c.status] || c.status}</span>}
+            {['baixo', 'nenhum'].includes(c.risk.level) ? <span className="cf-quiet">sem riscos identificados</span> : <Risk level={c.risk.level} />}
+            {c.services.length > 0 && <span className="cf-quiet">{c.services.join(' · ')}</span>}
           </div>
         </div>
-        <div className="row wrap gap-2">
+        <div className="cf-actions">
           {data.channel_id && <Link to={`/comunicacao/${data.channel_id}`} className="btn" data-cursor="ABRIR"><I.chat size={14} /> Conversa com o cliente</Link>}
           {auth.can('conteudos', 'create') && <Link to={`/conteudos/novo?client_id=${c.id}`} className="btn btn-primary"><I.plus size={14} /> Conteúdo</Link>}
-          {auth.can('carteira', 'admin') && <DeleteClient c={c} />}
+          {auth.can('carteira', 'admin') && <MoreMenu><DeleteClient c={c} /></MoreMenu>}
         </div>
       </header>
-      <Tabs tabs={tabs} value={tab} onChange={setTab} />
+      <nav className="cf-nav" aria-label="Seções do cliente">
+        <div className="cf-groups" role="tablist">
+          {nav.map((g) => <button key={g.key} role="tab" aria-selected={g === group} className={g === group ? 'on' : ''} onClick={() => go(g.items[0])}>{g.label}</button>)}
+        </div>
+        <div className="cf-sub">
+          {group.items.map((it) => <button key={itemKey(it)} className={itemKey(it) === current ? 'on' : ''} aria-current={itemKey(it) === current ? 'page' : undefined} onClick={() => go(it)}>{it.label}{counts[it.tab] && !it.ed ? <span className="cf-n">{counts[it.tab]}</span> : null}</button>)}
+        </div>
+        <select className="cf-mobile select" aria-label="Seção do cliente" value={current} onChange={(e) => go(nav.flatMap((g) => g.items).find((it) => itemKey(it) === e.target.value))}>
+          {nav.map((g) => <optgroup key={g.key} label={g.label}>{g.items.map((it) => <option key={itemKey(it)} value={itemKey(it)}>{it.label}</option>)}</optgroup>)}
+        </select>
+      </nav>
       {tab === 'visao' && <Overview data={data} missing={missing} setTab={setTab} />}
       {tab === 'ficha' && <Ficha clientId={c.id} />}
       {tab === 'brain' && <BrainTab data={data} reload={reload} />}
@@ -90,6 +105,7 @@ export default function ClienteDetalhe() {
         ))}</div>
       ))}
       {tab === 'financeiro' && data.finance && <FinanceTab finance={data.finance} />}
+      {tab === 'processo' && <ProcessTab data={data} />}
       {tab === 'historico' && <Timeline items={data.timeline} />}
       {tab === 'origem' && <ClienteOrigem clientId={data.client.id} />}
     </div>
@@ -101,7 +117,7 @@ function CycleBlock({ cycle }) {
   const pct = cycle.counts.total ? Math.round(((cycle.counts.done || 0) / cycle.counts.total) * 100) : 0;
   return (
     <div className="mb-5">
-      <div className="row between wrap mb-2"><span className="ed-md" style={{ textTransform: 'capitalize' }}>Ciclo {fmtMonth(cycle.month)}</span><span className="sm muted">{CYCLE[cycle.status]} · {cycle.counts.done || 0}/{cycle.counts.total} agendados ou publicados</span></div>
+      <div className="row between wrap mb-2"><span className="ed-md">Ciclo de {monthLabel(cycle.month)}</span><span className="sm muted">{CYCLE[cycle.status]} · {cycle.counts.done || 0}/{cycle.counts.total} agendados ou publicados</span></div>
       <div className="bar mb-4"><span style={{ width: `${pct}%` }} /></div>
       <div className="milestones">{Object.entries(cycle.milestones).map(([k, m]) => {
         const st = m.end < today ? 'past' : m.start <= today ? 'now' : '';
@@ -111,48 +127,173 @@ function CycleBlock({ cycle }) {
   );
 }
 
+// VISÃO GERAL — responde: onde estamos, o que está acontecendo, o que precisa de atenção e qual é o próximo passo.
+// Ordem: indicadores → próximo passo → calendário editorial + feed de aprovação → marca + equipe.
+// Calendário editorial (o que vai ao ar e quando) e processo (etapa interna) ficam em componentes separados.
+const dayBR = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+const monthLabel = (ym) => { const t = new Date(`${ym}-15T12:00:00Z`).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).replace(' de ', ' '); return t.charAt(0).toUpperCase() + t.slice(1); };
+const shiftMonth = (ym, n) => { const d = new Date(`${ym}-15T12:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 7); };
+const pad2 = (n) => String(n).padStart(2, '0');
+
 function Overview({ data, missing, setTab }) {
   const { client: c } = data;
-  const active = data.cycles.filter((cy) => cy.status !== 'encerrado').sort((a, b) => b.month.localeCompare(a.month)).slice(0, 2);
-  const brainLines = data.brain.filter((b) => b.body && ['posicionamento', 'tom', 'restricoes', 'objetivos'].includes(b.section));
-  const decisions = data.memories.filter((m) => m.kind === 'decisao').slice(0, 4);
+  const n = (v) => pad2(v || 0);
   return (
-    <div>
-      <div className="stats">
-        <Stat value={c.counts.total || 0} label="Conteúdos" />
-        <Stat value={c.counts.em_producao || 0} label="Em produção" onClick={() => setTab('conteudos')} />
-        <Stat value={c.counts.aguardando_cliente || 0} label="Aguardando cliente" alert={(c.counts.aguardando_cliente || 0) > 0} onClick={() => setTab('conteudos')} />
-        <Stat value={c.counts.publicados || 0} label="Publicados" />
-      </div>
+    <div className="cf-over">
       {data.onboarding && data.onboarding.status !== 'concluido' && missing.length > 0 && (
-        <button className="ob-banner mt-5" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', color: 'inherit' }} onClick={() => setTab('onboarding')}>
-          <div className="caps" style={{ color: 'var(--err)' }}>Onboarding incompleto</div>
-          <div className="sm mt-2">Faltam <b>{missing.length}</b> itens: {missing.slice(0, 4).map((m) => m.label).join(' · ')}{missing.length > 4 ? '…' : ''}</div>
+        <button className="cf-note" onClick={() => setTab('onboarding')}>
+          <span className="caps">Onboarding incompleto</span>
+          <span className="sm">Faltam {missing.length} {missing.length === 1 ? 'item' : 'itens'}: {missing.slice(0, 3).map((m) => m.label).join(' · ')}{missing.length > 3 ? '…' : ''}</span>
+          <span className="cf-link">Ver →</span>
         </button>
       )}
-      <div className="grid-2 section" style={{ alignItems: 'start' }}>
-        <div>
-          <div className="section-head"><h2 className="ed-md">Próximos passos</h2></div>
-          {c.risk.reasons.length > 0 && <div className="mb-4">{c.risk.reasons.map((r) => <div key={r} className="sm" style={{ color: 'var(--err)', padding: '4px 0' }}>■ {r}</div>)}</div>}
-          {c.next ? (
-            <Link to={`/conteudos/${c.next.content_id}`} className="next-action" style={{ display: 'block' }} data-cursor="ABRIR">
-              <div className="caps">{c.next.stage}</div><div className="ed-md mt-2">{c.next.content}</div><div className="sm mt-2"><b>{c.next.who || '—'}</b> · {c.next.text}</div>
-            </Link>
-          ) : <p className="sm muted">Nenhum conteúdo em andamento.</p>}
-          <div className="section-head mt-6"><h2 className="ed-md">Equipe</h2><button className="btn btn-sm btn-ghost" onClick={() => setTab('equipe')}>Ver</button></div>
-          <div className="row wrap gap-4">{Object.values(data.team.reduce((acc, t) => { (acc[t.id] ||= { ...t, fns: [] }).fns.push(FUNCTIONS[t.function]); return acc; }, {})).map((t) => <span key={t.id} className="row gap-2 sm"><Avatar name={t.name} tone={t.function === 'cliente' ? 'ink' : undefined} /> <span>{t.name}<div className="xs faint">{t.fns.join(' · ')}</div></span></span>)}</div>
-        </div>
-        <div>
-          <div className="section-head"><h2 className="ed-md">Essência da marca</h2><button className="btn btn-sm btn-ghost" onClick={() => setTab('brain')}>Client Brain</button></div>
-          {!brainLines.length ? <p className="sm muted">Client Brain ainda vazio — preenchido no onboarding.</p> : brainLines.map((b) => <div key={b.section} className="mb-4"><div className="caps">{BRAIN.find((x) => x[0] === b.section)?.[1]}</div><div className="sm mt-2">{b.body}</div></div>)}
-          {decisions.length > 0 && <><div className="caps mt-5 mb-2">Decisões recentes</div>{decisions.map((d) => <div key={d.id} className="sm" style={{ padding: '6px 0', borderBottom: '1px solid var(--line)' }}>{d.body}<div className="xs faint">{ago(d.created_at)}</div></div>)}</>}
+      <div className="cf-kpis">
+        <div><b>{n(c.counts.total)}</b><span>Conteúdos</span></div>
+        <div><b>{n(c.counts.em_producao)}</b><span>Em produção</span></div>
+        <div className={(c.counts.aguardando_cliente || 0) > 0 ? 'attn' : ''}><b>{n(c.counts.aguardando_cliente)}</b><span>Aguardando cliente</span></div>
+      </div>
+
+      <NextStep c={c} />
+
+      <div className="cf-duo">
+        <MiniCalendar clientId={c.id} setTab={setTab} />
+        <FeedPreview contents={data.contents} setTab={setTab} />
+      </div>
+
+      <div className="cf-duo cf-duo-even">
+        <BrandEssence data={data} setTab={setTab} />
+        <TeamCompact team={data.team} setTab={setTab} />
+      </div>
+    </div>
+  );
+}
+
+function NextStep({ c }) {
+  const reasons = c.risk.reasons || [];
+  return (
+    <section className="cf-next">
+      <div className="caps">Próximo passo</div>
+      {c.next ? (
+        <>
+          <h2 className="cf-next-t">{c.next.content}</h2>
+          <div className="cf-next-meta"><span className="cf-pill">{c.next.stage}</span>{c.next.who && <span>{c.next.who}</span>}</div>
+          <p className="cf-next-a">{c.next.text}</p>
+          <Link to={`/conteudos/${c.next.content_id}`} className="cf-cta" data-cursor="ABRIR">Abrir conteúdo →</Link>
+        </>
+      ) : <p className="cf-empty">Nenhum conteúdo em andamento.</p>}
+      {reasons.length > 0 && <ul className="cf-attn">{reasons.slice(0, 3).map((r) => <li key={r}>{r}</li>)}</ul>}
+    </section>
+  );
+}
+
+// Calendário editorial do mês: conteúdos da plataforma pela data editorial + CR Editorial do Notion (somente leitura) ainda não vinculado
+function MiniCalendar({ clientId, setTab }) {
+  const ed = useApi(`/clients/${clientId}/editorial`, [clientId], { live: false });
+  const hist = useApi(`/clients/${clientId}/notion-history`, [clientId], { live: false });
+  const items = (ed.data?.items || []).filter((i) => i.date && i.phase !== 'legado');
+  const linked = new Set(items.map((i) => i.notion_link?.history_id).filter(Boolean));
+  const cr = (hist.data?.items || []).filter((r) => r.date_start && !linked.has(r.id));
+  const todayYM = new Date().toISOString().slice(0, 7);
+  const months = [...new Set([...items.map((i) => dayBR(i.date).slice(0, 7)), ...cr.map((r) => r.date_start.slice(0, 7))])].sort();
+  // abre no próximo mês com conteúdo da plataforma (o ciclo em produção); sem isso, no mês atual ou no último com data
+  const pMonths = [...new Set(items.map((i) => dayBR(i.date).slice(0, 7)))].sort();
+  const initial = pMonths.find((m) => m >= todayYM) || months.find((m) => m >= todayYM) || months[months.length - 1] || todayYM;
+  const [month, setMonth] = useState(null);
+  const ym = month || initial;
+  const rows = [
+    ...items.filter((i) => dayBR(i.date).slice(0, 7) === ym).map((i) => ({ key: i.id, day: dayBR(i.date), fmt: FORMATS[i.format] || i.format, title: i.title, to: `/conteudos/${i.id}` })),
+    ...cr.filter((r) => r.date_start.slice(0, 7) === ym).map((r) => ({ key: r.id, day: r.date_start.slice(0, 10), fmt: null, title: r.title, notion: true })),
+  ].sort((a, b) => a.day.localeCompare(b.day) || a.title.localeCompare(b.title));
+  return (
+    <section className="cf-block cf-cal">
+      <div className="cf-block-h">
+        <h2 className="cf-h">Calendário editorial</h2>
+        <div className="cf-month">
+          <button onClick={() => setMonth(shiftMonth(ym, -1))} aria-label="Mês anterior">‹ <span>{monthLabel(shiftMonth(ym, -1)).split(' ')[0]}</span></button>
+          <b>{monthLabel(ym)}</b>
+          <button onClick={() => setMonth(shiftMonth(ym, 1))} aria-label="Próximo mês"><span>{monthLabel(shiftMonth(ym, 1)).split(' ')[0]}</span> ›</button>
         </div>
       </div>
-      <section className="section">
-        <div className="section-head"><h2 className="ed-md">Calendário operacional</h2></div>
-        {!active.length ? <p className="sm muted">Nenhum ciclo ativo.</p> : active.map((cy) => <CycleBlock key={cy.id} cycle={cy} />)}
-      </section>
-    </div>
+      {ed.loading && !ed.data ? <Loading rows={3} /> : !rows.length ? <p className="cf-empty">Nenhum conteúdo com data em {monthLabel(ym)}.</p> : (
+        <ol className="cf-days">
+          {rows.map((r, i) => {
+            const first = i === 0 || rows[i - 1].day !== r.day;
+            const body = <><span className="cf-day">{first ? r.day.slice(8, 10) : ''}</span><span className="cf-day-t">{r.fmt && <em>{r.fmt}</em>}{r.title}</span>{r.notion && <span className="cf-src">Notion</span>}</>;
+            return <li key={r.key}>{r.to ? <Link to={r.to} data-cursor="ABRIR">{body}</Link> : <button onClick={() => setTab('conteudos', { mes: ym })} title="CR Editorial do Notion (somente leitura) — abrir no calendário completo">{body}</button>}</li>;
+          })}
+        </ol>
+      )}
+      <button className="cf-cta" onClick={() => setTab('conteudos', { mes: ym })}>Abrir calendário completo →</button>
+    </section>
+  );
+}
+
+// Feed de aprovação: o que está com o cliente agora (tema ou versão). A aprovação acontece no feed do portal.
+function FeedPreview({ contents, setTab }) {
+  const waiting = (contents || []).filter((x) => ['aprovacao_tema', 'aprovacao_cliente'].includes(x.stage));
+  return (
+    <section className="cf-block cf-feed">
+      <div className="cf-block-h"><h2 className="cf-h">Feed de aprovação</h2><span className="cf-quiet">{waiting.length ? `${waiting.length} aguardando o cliente` : 'nada aguardando'}</span></div>
+      {!waiting.length ? <p className="cf-empty">Nenhum conteúdo aguardando interação do cliente.</p> : (
+        <div className="cf-thumbs">
+          {waiting.slice(0, 4).map((x) => (
+            <Link key={x.id} to={`/conteudos/${x.id}`} className="cf-thumb" data-cursor="ABRIR">
+              <span className="cf-thumb-pv">{x.thumb ? <img src={x.thumb} alt="" loading="lazy" /> : <i>{FORMATS[x.format] || x.format}</i>}</span>
+              <span className="cf-thumb-t">{x.title}</span>
+              <span className="cf-quiet">{x.stage === 'aprovacao_tema' ? 'Tema' : 'Versão'} com o cliente</span>
+            </Link>
+          ))}
+        </div>
+      )}
+      <button className="cf-cta" onClick={() => setTab('conteudos', { ed: 'feed' })}>Ver feed →</button>
+    </section>
+  );
+}
+
+function BrandEssence({ data, setTab }) {
+  const order = ['posicionamento', 'tom', 'publico', 'objetivos'];
+  const lines = order.map((k) => data.brain.find((b) => b.section === k && b.body)).filter(Boolean).slice(0, 2);
+  return (
+    <section className="cf-block">
+      <div className="cf-block-h"><h2 className="cf-h">Essência da marca</h2></div>
+      {!lines.length ? <p className="cf-empty">Client Brain ainda não preenchido.</p> : lines.map((b) => (
+        <div key={b.section} className="cf-brand"><span className="caps">{BRAIN.find((x) => x[0] === b.section)?.[1]}</span><p>{b.body.length > 260 ? `${b.body.slice(0, 260).trim()}…` : b.body}</p></div>
+      ))}
+      <div className="cf-ctas"><button className="cf-cta" onClick={() => setTab('ficha')}>Ver ficha completa →</button><button className="cf-cta quiet" onClick={() => setTab('brain')}>Client Brain</button></div>
+    </section>
+  );
+}
+
+function TeamCompact({ team, setTab }) {
+  const people = Object.values((team || []).filter((t) => t.function !== 'cliente').reduce((acc, t) => { (acc[t.id] ||= { ...t, fns: [] }).fns.push(FUNCTIONS[t.function] || t.function); return acc; }, {}));
+  return (
+    <section className="cf-block">
+      <div className="cf-block-h"><h2 className="cf-h">Equipe</h2></div>
+      {!people.length ? <p className="cf-empty">Ninguém vinculado a este cliente.</p> : (
+        <ul className="cf-team">{people.map((t) => <li key={t.id}><span>{t.name}</span><span className="cf-quiet">{t.fns.join(' · ')}</span></li>)}</ul>
+      )}
+      <button className="cf-cta" onClick={() => setTab('equipe')}>Ver equipe →</button>
+    </section>
+  );
+}
+
+// Processo do mês (cronograma operacional interno) — fica em Gestão, fora da visão principal
+function ProcessTab({ data }) {
+  const active = data.cycles.filter((cy) => cy.status !== 'encerrado').sort((a, b) => b.month.localeCompare(a.month)).slice(0, 2);
+  return (
+    <section>
+      <p className="sm muted" style={{ marginTop: 0 }}>Marcos internos do ciclo (processo da equipe). Não é o calendário editorial: o que vai ao ar e quando está em Conteúdo → Calendário editorial.</p>
+      {!active.length ? <Empty title="Nenhum ciclo ativo." /> : active.map((cy) => <CycleBlock key={cy.id} cycle={cy} />)}
+    </section>
+  );
+}
+
+function MoreMenu({ children }) {
+  return (
+    <details className="cf-more">
+      <summary aria-label="Mais ações">⋯</summary>
+      <div className="cf-more-menu">{children}</div>
+    </details>
   );
 }
 
