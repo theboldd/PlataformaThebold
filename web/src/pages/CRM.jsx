@@ -11,8 +11,8 @@ import { fmtDate, money, cleanName } from '../lib/format.js';
 
 const PIPE = ['lead', 'contato', 'qualificacao', 'reuniao', 'proposta', 'negociacao', 'fechado'];
 
-export default function CRM() {
-  useCrumbs('CRM');
+export default function CRM({ embedded }) {
+  useCrumbs(...(embedded ? ['Negócio', 'Pipeline'] : ['CRM']));
   const { data, error, loading, reload } = useApi('/crm');
   const auth = useAuth();
   const [edit, setEdit] = useState(null);
@@ -26,11 +26,21 @@ export default function CRM() {
   const cols = [...PIPE.map((k) => data.stages.find((s) => s.key === k)), ...(showLost ? [data.stages.find((s) => s.key === 'onboarding'), data.stages.find((s) => s.key === 'perdido')] : [])];
   const canCreate = auth.can('crm', 'create');
   return (
-    <div className="page">
-      <PageHead kicker="Comercial" title="Pipeline" sub="Do primeiro contato ao onboarding. Fechar um negócio cria o cliente e inicia o onboarding automaticamente.">
-        <Button variant="ghost" onClick={() => setShowLost(!showLost)}>{showLost ? 'Ocultar encerrados' : 'Ver onboarding e perdidos'}</Button>
-        {canCreate && <Button variant="primary" magnetic icon={<I.plus size={15} />} onClick={() => setEdit({})}>Novo negócio</Button>}
-      </PageHead>
+    <div className={embedded ? "" : "page"}>
+      {embedded ? (
+        <div className="row wrap gap-3 mb-4" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <p className="sm muted" style={{ margin: 0 }}>Do primeiro contato ao onboarding. Fechar um negócio cria o cliente e inicia o onboarding.</p>
+          <div className="row wrap gap-2">
+            <Button variant="ghost" onClick={() => setShowLost(!showLost)}>{showLost ? 'Ocultar encerrados' : 'Ver onboarding e perdidos'}</Button>
+            {canCreate && <Button variant="primary" magnetic icon={<I.plus size={15} />} onClick={() => setEdit({})}>Novo negócio</Button>}
+          </div>
+        </div>
+      ) : (
+        <PageHead kicker="Comercial" title="Pipeline" sub="Do primeiro contato ao onboarding. Fechar um negócio cria o cliente e inicia o onboarding automaticamente.">
+          <Button variant="ghost" onClick={() => setShowLost(!showLost)}>{showLost ? 'Ocultar encerrados' : 'Ver onboarding e perdidos'}</Button>
+          {canCreate && <Button variant="primary" magnetic icon={<I.plus size={15} />} onClick={() => setEdit({})}>Novo negócio</Button>}
+        </PageHead>
+      )}
       <div className="stats mb-5 crm-stats">
         <Stat value={open.length} label="Negócios abertos" />
         <Stat value={money(total)} label="Em negociação" hint="Valor mensal" />

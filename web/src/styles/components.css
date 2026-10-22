@@ -86,7 +86,8 @@
 
 /* ── Avatar ── */
 .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--bordo); color: var(--paper); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex: none; letter-spacing: .02em; }
-.avatar.lg { width: 44px; height: 44px; font-size: 15px; }
+/* .lg também é a raiz da tela de login: o avatar grande anula aquelas regras */
+.avatar.lg { width: 44px; height: 44px; min-height: 0; font-size: 15px; display: inline-flex; flex-direction: row; position: static; overflow: visible; isolation: auto; background: var(--bordo); color: var(--paper); }
 .avatar.ink { background: var(--ink); color: var(--bg); }
 .avatar.ghost { background: var(--surface-2); color: var(--muted); }
 

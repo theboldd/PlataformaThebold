@@ -1,6 +1,7 @@
 // Núcleo transversal: auditoria (activity log), notificações agrupadas e barramento em tempo real (SSE).
 import { EventEmitter } from 'node:events';
 import { one, all, insert, run, uid, now } from '../db.js';
+import { deliveryFor, emailNotification } from '../services/notification-prefs.js';
 
 export const bus = new EventEmitter();
 bus.setMaxListeners(500);
@@ -26,7 +27,11 @@ export function notify(userIds, { level = 'info', type, title, body = null, link
   for (const user_id of ids) {
     const u = one('SELECT active FROM users WHERE id=?', user_id);
     if (!u?.active) continue;
-    if (groupKey) {
+    // Preferências da pessoa (Perfil → Notificações). Sem preferência salva = comportamento original. URGENTE sempre chega.
+    const pref = deliveryFor(user_id, type, level);
+    if (pref.email) emailNotification(user_id, { title, body, link });
+    if (!pref.platform) continue;
+    if (groupKey && pref.group) {
       const ex = one('SELECT * FROM notifications WHERE user_id=? AND group_key=? AND read_at IS NULL', user_id, groupKey);
       if (ex) {
         run('UPDATE notifications SET count=count+1, title=?, body=?, cta=COALESCE(?, cta), level=?, updated_at=? WHERE id=?', title, body, cta, rank(level) > rank(ex.level) ? level : ex.level, ts, ex.id);

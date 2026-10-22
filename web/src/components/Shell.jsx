@@ -42,8 +42,7 @@ const NAV = [
     { to: '/comunicacao', label: 'Comunicação', icon: I.chat, mod: 'chat', badge: 'chat' },
   ] },
   { group: 'Negócio', items: [
-    { to: '/crm', label: 'CRM', icon: I.crm, mod: 'crm' },
-    { to: '/financeiro', label: 'Financeiro', icon: I.money, mod: 'financeiro' },
+    { to: '/negocio', label: 'Negócio', icon: I.money, mods: ['crm', 'financeiro', 'repasses'] },
   ] },
   { group: 'Inteligência', items: [
     { to: '/insights', label: 'Insights', icon: I.spark, mod: 'insights' },
@@ -83,7 +82,7 @@ export function Shell({ children }) {
     return () => { window.removeEventListener('bold:notification', h); window.removeEventListener('bold:message', h); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const allowed = (n) => (n.team ? auth.internal : n.anyAct ? !!auth.permissions[n.mod]?.length : auth.permissions[n.mod]?.includes('view')) && (n.special !== 'pendencias' || auth.pendencias);
+  const allowed = (n) => (n.mods ? n.mods.some((m) => auth.permissions[m]?.includes('view')) : n.team ? auth.internal : n.anyAct ? !!auth.permissions[n.mod]?.length : auth.permissions[n.mod]?.includes('view')) && (n.special !== 'pendencias' || auth.pendencias);
   const groups = NAV.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length);
   return (
     <NavHistory top={TOP} labels={TOP_LABEL}>

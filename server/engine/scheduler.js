@@ -25,6 +25,7 @@ function remindClient(c, marker, { title, body, cta = 'Revisar agora', link = '/
   return true;
 }
 import { runJob } from './jobs.js';
+import { billingRoutine, payoutRoutine } from '../services/negocio.js';
 
 const H = 3600e3;
 const cc = () => all("SELECT id FROM users WHERE active=1 AND role_key IN ('operacoes','ceo')").map((r) => r.id);
@@ -57,6 +58,16 @@ export function reconcileStageWindows() {
   run('INSERT INTO settings (key,value,updated_at) VALUES (?,?,?)', 'janela_reconciliada', JSON.stringify(n), now());
   if (n) log({ kind: 'sistema', action: 'etapa.janela_aplicada', entity: 'sistema', summary: `${n} tarefa(s) de etapas que ainda não abriram passaram para "agendada" (regra: pronto ≠ disponível)` });
   return n;
+}
+
+// Ciclo completo: o tick do processo (síncrono) + rotinas diárias do Negócio (cobranças D-1/D0/D+N e apuração de repasses).
+// Idempotentes: cobrança tem índice único por parcela+tipo+dia; apuração tem uma linha por dia.
+export async function fullTick() {
+  const r = tick();
+  const out = { ...r };
+  try { out.cobrancas = await billingRoutine(); } catch (e) { console.error('[scheduler] cobranças:', e.message); out.cobrancas_erro = e.message; }
+  try { await payoutRoutine(); } catch (e) { console.error('[scheduler] repasses:', e.message); out.repasses_erro = e.message; }
+  return out;
 }
 
 export function tick() {
@@ -151,7 +162,7 @@ export function tick() {
     if (isEnabled('crm.followup') && onceFor('crm.followup', d.id, d.next_action_at)) {
       automation('crm.followup', { entity: 'deal', id: d.id, detail: d.next_action_at });
       insert('tasks', { id: uid('t_'), title: `Follow-up comercial — ${d.name}`, description: d.next_action, function: 'comercial', assignee_id: d.owner_id, status: 'aberta', kind: 'follow_up', origin: 'automacao', source_type: 'deal', source_id: d.id, priority: 'alta', due_at: new Date(t + 4 * H).toISOString(), created_at: nowIso });
-      notify(d.owner_id, { level: 'atencao', type: 'crm', title: `Follow-up vencido: ${d.name}`, body: d.next_action, link: '/crm' });
+      notify(d.owner_id, { level: 'atencao', type: 'crm', title: `Follow-up vencido: ${d.name}`, body: d.next_action, link: '/negocio?aba=pipeline' });
     }
   }
   // Financeiro: atraso e vencimento próximo
@@ -159,10 +170,10 @@ export function tick() {
     const fin = all("SELECT id FROM users WHERE active=1 AND role_key IN ('comercial','ceo')").map((r) => r.id);
     if (i.due_at < nowIso) {
       run("UPDATE invoices SET status='atrasada' WHERE id=?", i.id);
-      if (isEnabled('financeiro.atraso') && onceFor('financeiro.atraso', i.id, i.due_at)) { automation('financeiro.atraso', { entity: 'invoice', id: i.id, client: i.client_id, detail: i.due_at }); notify(fin, { level: 'atencao', type: 'financeiro', title: 'Parcela em atraso', body: `${i.cname} — ${i.description}`, link: '/financeiro', groupKey: 'fin:atraso' }); }
+      if (isEnabled('financeiro.atraso') && onceFor('financeiro.atraso', i.id, i.due_at)) { automation('financeiro.atraso', { entity: 'invoice', id: i.id, client: i.client_id, detail: i.due_at }); notify(fin, { level: 'atencao', type: 'financeiro', title: 'Parcela em atraso', body: `${i.cname} — ${i.description}`, link: '/negocio?aba=recebimentos', groupKey: 'fin:atraso' }); }
     } else if (new Date(i.due_at).getTime() - t < 3 * 864e5 && isEnabled('financeiro.vencimento') && onceFor('financeiro.vencimento', i.id, i.due_at)) {
       automation('financeiro.vencimento', { entity: 'invoice', id: i.id, client: i.client_id, detail: i.due_at });
-      notify(fin, { level: 'info', type: 'financeiro', title: 'Vencimentos nos próximos 3 dias', body: `${i.cname} — ${i.description}`, link: '/financeiro', groupKey: 'fin:venc' });
+      notify(fin, { level: 'info', type: 'financeiro', title: 'Vencimentos nos próximos 3 dias', body: `${i.cname} — ${i.description}`, link: '/negocio?aba=recebimentos', groupKey: 'fin:venc' });
     }
   }
   // Saúde do cliente: uma fotografia por dia (idempotente) — roda também pela rotina externa (/api/cron/tick)
@@ -181,7 +192,7 @@ export function startScheduler() {
   const safe = (fn, name) => { try { return fn(); } catch (e) { console.error(`[scheduler] ${name}:`, e.message); } };
   const loop = async () => {
     // mesma trava da rotina externa (/api/cron/tick): nunca rodam ao mesmo tempo; execução ignorada não é registrada a cada minuto
-    const r = await runJob('tick', tick, { trigger: 'processo', record: false });
+    const r = await runJob('tick', fullTick, { trigger: 'processo', record: false });
     if (r.error) console.error('[scheduler] tick:', r.error);
     if (Date.now() - lastPublish > 60e3) { lastPublish = Date.now(); try { await publishDueContent(); } catch (e) { console.error('[scheduler] meta:', e.message); } }
     if (Date.now() - last15 > 15 * 60e3) {

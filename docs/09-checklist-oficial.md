@@ -29,6 +29,44 @@ Todos vêm do mesmo componente (`web/src/components/State.jsx`).
 
 > A prévia na Vercel continua **descartável**: o que se altera nela se perde, e as rotinas contínuas não rodam. A tela Integrações → “Hospedagem e rotinas” mostra isso como **AGUARDANDO DECISÃO**.
 
+## Revisão 4 · 22/10/2026 — CRM + Financeiro viram NEGÓCIO e o que estava “em desenvolvimento” foi construído
+
+**Negócio (uma página só, item “Negócio” no menu).** Abas: Pipeline (CRM) · Recebimentos · Produção & Repasses · Custos · Metas · Rentabilidade · Configuração. Os endereços antigos `/crm` e `/financeiro` redirecionam para cá.
+
+| Área | Entregue agora | Estado com a base atual |
+|---|---|---|
+| Recebimentos | Seis indicadores: receber hoje, a receber, atrasados, recebidos no mês, total recebido, total em aberto. Status por parcela: a vencer, lembrete enviado, vencendo hoje, pagamento confirmado, atrasado, cobrança enviada, em negociação, cancelado. Calendário de recebimentos (45 dias). Cobrança por cliente (e-mail, dia, recorrência, pausar). Marcar como pago (quem, quando, valor, competência), em negociação, cancelar com motivo, reenviar cobrança. Histórico de cobranças. Rotina diária: lembrete D-1, cobrança D0 e D+N só se a CEO definir a quantidade (idempotente) | 🔵 Dados insuficientes (nenhum contrato) · e-mail aguardando Resend · cobranças após vencimento aguardando decisão |
+| Produção & Repasses | Permissão própria (só a CEO concede: ver / editar / aprovar). Apuração por competência só com trabalho da plataforma e sem cliente interno. Status de execução e motivos: material do cliente nunca é falha do profissional; prazo vencido não gera desconto. Valores por pessoa / função / tipo / cliente com vigência (a regra mais específica vale; valor novo não muda o histórico). Ajustes com motivo (revogáveis, nunca apagados). Fechamento Rascunho → Em revisão → Aguardando aprovação → Aprovado → Fechado → Reaberto (com motivo): fechar exige aprovação e regra para tudo e congela a apuração. Relatório por e-mail. Apuração diária. “Por que não executou” | 🔵 Regra financeira pendente de configuração (nenhum valor cadastrado) · dia de fechamento aguardando decisão |
+| Custos | Únicos ou recorrentes, por categoria, da agência ou diretos de um cliente; desativar sem apagar | 🔵 Nenhum custo cadastrado |
+| Metas | Faturado, recebido, novos clientes e margem: meta, realizado, projeção, desvio | ⚪ Aguardando decisão (sem metas) |
+| Rentabilidade | Receita, custos, repasses e margem da agência e por cliente; ajustes e custo de retrabalho; evolução de 6 meses. Valores de repasse escondidos de quem não tem a permissão | Dados insuficientes |
+| Configuração financeira | Régua de cobrança, textos editáveis dos e-mails, assinatura, dia de fechamento, e-mail do relatório e motivos que entram na apuração. Toda mudança vai para o histórico | ⚪ Valores aguardando decisão da CEO |
+| The Bold Brain | **Memória de Decisões**: rascunho → sugerida → confirmada → revogada/substituída, com versões, sem exclusão; decisões confirmadas de reunião entram sozinhas. **Radar de Automações**: padrões manuais repetidos (≥ 5 em 30 dias) viram sugestão; aprovar só registra, nunca cria automação | 🟢 Ativo (dados insuficientes até haver uso) |
+| Notificações | Preferências por pessoa em Perfil → Notificações: plataforma e e-mail por categoria, e agrupar. Urgente sempre chega | 🟢 Plataforma ativa · e-mail aguardando Resend · push em desenvolvimento |
+| Conteúdo | Faixa **AGORA → VOCÊ → THE BOLD → DEPOIS** na página do conteúdo | 🟢 |
+| Portal | Progresso do ciclo (agendados ou publicados sobre o total) | 🟢 com ciclo da plataforma |
+| Performance | **Previsão da próxima semana**: demanda × capacidade configurada. Só alerta, nunca redistribui | Dados insuficientes |
+| Perfil (celular) | Corrigido: o avatar ocupava a tela inteira (o estilo do login vazava) | 🟢 |
+
+**Continua sem construir.** Depende de serviço externo ou de decisão:
+- videochamada própria (LiveKit);
+- Central de Arquivos do Google Drive (Workspace × Gmail);
+- sincronização do Slack e do Google Calendar nos dois sentidos;
+- chat com IA, revisão por IA e previsão de atraso por IA (precisam do Claude e, na revisão, dos critérios);
+- push no celular;
+- criação automática do ciclo mensal (V2).
+
+Todos aparecem na tela com o estado correspondente.
+
+**Para revisar nesta rodada:**
+1. **Negócio:** as 7 abas. Em Recebimentos, as 4 visões. Em Produção & Repasses, as 7 visões, “Cadastrar valor” e “Iniciar fechamento”. Depois Custos (“Cadastrar custo”), Metas (“Definir meta”) e Configuração.
+2. **The Bold Brain:** abas Memória de Decisões (criar → confirmar → editar gera versão) e Radar.
+3. **Perfil:** Notificações; no celular, o cabeçalho.
+4. **Um conteúdo:** a faixa AGORA → VOCÊ → THE BOLD → DEPOIS.
+5. **Equipe · Performance:** a previsão da próxima semana.
+
+> A prévia é descartável: valores, custos e decisões cadastrados nela se perdem quando ela reinicia.
+
 ## O que mudou nesta rodada (para ficar visível)
 
 | Tela | Antes | Agora |

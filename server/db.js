@@ -501,6 +501,52 @@ CREATE TABLE IF NOT EXISTS meeting_summaries (
 `;
 db.exec(SCHEMA);
 db.exec(SCHEMA_PORTAL);
+
+// ── NEGÓCIO (CRM + Financeiro): cobrança por cliente, histórico de cobranças, repasses, custos e metas ──
+// Nenhum valor é presumido: sem regra cadastrada, a tela mostra "pendente de configuração" ou "aguardando decisão".
+const SCHEMA_NEGOCIO = `
+CREATE TABLE IF NOT EXISTS billing_settings (
+  client_id TEXT PRIMARY KEY REFERENCES clients(id) ON DELETE CASCADE, billing_email TEXT, due_day INTEGER, recurrence TEXT NOT NULL DEFAULT 'mensal',
+  status TEXT NOT NULL DEFAULT 'ativo', notes TEXT, updated_by TEXT, updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS billing_events (
+  id TEXT PRIMARY KEY, invoice_id TEXT REFERENCES invoices(id) ON DELETE CASCADE, client_id TEXT REFERENCES clients(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL, -- lembrete_d1 | cobranca_d0 | cobranca_pos | pagamento_confirmado | em_negociacao | cancelada | nao_identificado | reenvio_manual
+  scheduled_for TEXT, sent_at TEXT, to_email TEXT, subject TEXT,
+  status TEXT NOT NULL, -- enviado | nao_enviado | falhou | registrado
+  error TEXT, actor_id TEXT, note TEXT, created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_billing_auto ON billing_events(invoice_id, kind, scheduled_for) WHERE kind IN ('lembrete_d1','cobranca_d0','cobranca_pos');
+CREATE TABLE IF NOT EXISTS payout_rates (
+  id TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id), function TEXT, task_kind TEXT, client_id TEXT REFERENCES clients(id),
+  value REAL NOT NULL, starts_at TEXT NOT NULL, ends_at TEXT, active INTEGER NOT NULL DEFAULT 1, note TEXT, created_by TEXT, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS payout_closings (
+  id TEXT PRIMARY KEY, competencia TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'rascunho', -- rascunho | em_revisao | aguardando_aprovacao | aprovado | fechado | reaberto
+  snapshot TEXT, totals TEXT, report_sent_at TEXT, report_error TEXT, updated_by TEXT, updated_at TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS payout_adjustments (
+  id TEXT PRIMARY KEY, competencia TEXT NOT NULL, user_id TEXT NOT NULL REFERENCES users(id), amount REAL NOT NULL, reason TEXT NOT NULL,
+  created_by TEXT, created_at TEXT NOT NULL, revoked_at TEXT, revoked_by TEXT
+);
+CREATE TABLE IF NOT EXISTS payout_daily (
+  competencia TEXT NOT NULL, date TEXT NOT NULL, counted INTEGER NOT NULL, excluded INTEGER NOT NULL, total REAL, pending_rules INTEGER NOT NULL DEFAULT 0,
+  diff REAL, created_at TEXT NOT NULL, PRIMARY KEY (competencia, date)
+);
+CREATE TABLE IF NOT EXISTS finance_costs (
+  id TEXT PRIMARY KEY, description TEXT NOT NULL, category TEXT NOT NULL, -- aluguel | ferramentas | equipe | impostos | marketing | outros
+  kind TEXT NOT NULL DEFAULT 'unico', -- unico | recorrente
+  amount REAL NOT NULL, competencia TEXT, starts_at TEXT, ends_at TEXT, client_id TEXT REFERENCES clients(id),
+  active INTEGER NOT NULL DEFAULT 1, created_by TEXT, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS finance_goals (
+  id TEXT PRIMARY KEY, competencia TEXT NOT NULL, metric TEXT NOT NULL, -- faturado | recebido | novos_clientes | margem
+  target REAL NOT NULL, created_by TEXT, created_at TEXT NOT NULL, UNIQUE (competencia, metric)
+);
+`;
+db.exec(SCHEMA_NEGOCIO);
+
 // Migrações leves (colunas adicionadas depois da primeira versão)
 for (const sql of ['ALTER TABLE adjustments ADD COLUMN aspect TEXT', 'ALTER TABLE client_brain_entries ADD COLUMN shared INTEGER NOT NULL DEFAULT 0', 'ALTER TABLE messages ADD COLUMN ref_type TEXT', 'ALTER TABLE messages ADD COLUMN ref_id TEXT',
   'ALTER TABLE notifications ADD COLUMN cta TEXT', 'ALTER TABLE files ADD COLUMN category TEXT', 'ALTER TABLE files ADD COLUMN context_type TEXT', 'ALTER TABLE files ADD COLUMN context_id TEXT', 'ALTER TABLE meetings ADD COLUMN agenda TEXT',

@@ -7,6 +7,7 @@ import { Avatar, Button, Field, PageHead, Section, Seg, Tag } from '../component
 import { FUNCTIONS } from '../lib/status.js';
 import { ago } from '../lib/format.js';
 import { saveTheme } from '../lib/theme.js';
+import NotificationPrefs from '../components/NotificationPrefs.jsx';
 
 export default function Perfil() {
   useCrumbs('Perfil');
@@ -54,6 +55,7 @@ export default function Perfil() {
           </Section>
         </div>
       </div>
+      {u.role_key !== 'cliente' && <NotificationPrefs />}
       <div className="row end mt-7"><Button variant="danger" onClick={auth.logout}>Sair da conta</Button></div>
     </div>
   );

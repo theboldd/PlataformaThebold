@@ -67,6 +67,12 @@ export default function Inicio() {
       {/* AGORA */}
       <section className="p-now" aria-labelledby="h-now">
         <div className="caps" id="h-now">Você está aqui</div>
+        {data.journey?.progress && (
+          <div className="p-profile mt-2">
+            <div className="p-profile-bar" aria-hidden><i style={{ width: `${data.journey.progress.percent}%` }} /></div>
+            <p className="sm">Progresso do ciclo: <b>{data.journey.progress.ready} de {data.journey.progress.total}</b> conteúdos agendados ou publicados.</p>
+          </div>
+        )}
         {data.journey ? <Track track={data.journey} /> : <p className="sm muted mt-2">O acompanhamento do ciclo aqui começa no primeiro ciclo criado na nova plataforma. Os conteúdos que já estavam em andamento estão em <Link to="/portal/conteudos" className="p-link">Conteúdos</Link>.</p>}
       </section>
 

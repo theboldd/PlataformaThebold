@@ -56,10 +56,19 @@ export function performanceReport({ dias = 30 } = {}) {
       (t.status='concluida' AND t.completed_at > t.due_at AND t.completed_at >= ?) OR (t.status IN ('aberta','em_andamento') AND t.due_at < ?))
     ORDER BY t.due_at DESC LIMIT 40`, start, endIso);
   const migrated = one("SELECT COUNT(*) n FROM tasks WHERE data_origin='notion' AND status IN ('aberta','em_andamento','agendada')").n;
+  // Previsão da próxima semana: demanda com prazo nos próximos 7 dias × capacidade CONFIGURADA (não medida). Só alerta; nunca redistribui.
+  const nextEnd = iso(end + 7 * DAY);
+  const forecast = people.map((p) => {
+    const due = one("SELECT COUNT(*) n FROM tasks WHERE assignee_id=? AND data_origin='plataforma' AND status IN ('aberta','em_andamento','agendada') AND due_at >= ? AND due_at < ?", p.id, endIso, nextEnd).n;
+    const clients = all("SELECT DISTINCT c.name FROM tasks t JOIN clients c ON c.id=t.client_id WHERE t.assignee_id=? AND t.data_origin='plataforma' AND t.status IN ('aberta','em_andamento','agendada') AND t.due_at >= ? AND t.due_at < ?", p.id, endIso, nextEnd).map((r) => r.name);
+    return { id: p.id, name: p.name, demanda: due, capacidade: p.capacity, clientes: clients, alerta: due > p.capacity,
+      motivo: due > p.capacity ? `${due} tarefas com prazo nos próximos 7 dias para capacidade configurada de ${p.capacity}/semana` : null };
+  });
   return {
     period: { dias: days, start, end: endIso },
     state: valid ? 'ativo' : 'dados_insuficientes',
     valid_events: valid, people: rows, late,
+    forecast: { state: forecast.some((f) => f.demanda) ? 'ativo' : 'dados_insuficientes', confianca: 'baixa — capacidade configurada, ainda não medida', items: forecast },
     migrated_open: migrated,
     score: null,
     rules: [
@@ -91,8 +100,8 @@ produto.get('/financeiro/estrutura', requireInternal, requirePerm('financeiro', 
     recebimentos: { state: invoices || contracts.n ? 'ativo' : 'dados_insuficientes', contratos: contracts.n, parcelas: invoices, mrr: contracts.mrr || 0,
       cobranca: mailConfigured() ? null : 'Envio de cobrança por e-mail aguarda configuração do Resend (RESEND_API_KEY e BOLD_MAIL_FROM).' },
     repasses: {
-      state: 'aguardando_decisao',
-      motivo: 'As regras financeiras de repasse (valor por demanda ou por função, competência, fechamento e motivos de desconto) ainda não foram definidas pela CEO.',
+      state: one('SELECT 1 FROM payout_rates WHERE active=1') ? 'ativo' : 'aguardando_configuracao',
+      motivo: 'Os valores de repasse (por pessoa, função, tipo de demanda ou cliente, com vigência) ainda não foram cadastrados em Negócio → Produção & Repasses → Valores.',
       campos: ['Profissional', 'Demanda', 'Valor', 'Competência', 'Status', 'Fechamento', 'Motivo'],
       producao, producao_state: producao.length ? 'ativo' : 'dados_insuficientes',
     },
@@ -100,7 +109,7 @@ produto.get('/financeiro/estrutura', requireInternal, requirePerm('financeiro', 
       state: receita.length ? 'aguardando_decisao' : 'dados_insuficientes',
       motivo: 'Margem e rentabilidade por cliente dependem de receita cadastrada (contratos) e das regras de repasse e custos (aguardando decisão).',
       receita, retrabalho, retrabalho_state: retrabalho.length ? 'ativo' : 'dados_insuficientes',
-      custos: { state: 'aguardando_decisao' }, margem: { state: 'aguardando_decisao' }, evolucao: { state: 'dados_insuficientes' },
+      custos: { state: one('SELECT 1 FROM finance_costs WHERE active=1') ? 'ativo' : 'aguardando_configuracao' }, margem: { state: 'aguardando_configuracao' }, evolucao: { state: 'dados_insuficientes' },
     },
   });
 });
@@ -214,8 +223,10 @@ produto.get('/configuracoes', requireInternal, (req, res) => {
       note: `${autos.filter((a) => a.state === 'ativo').length} ativas · ${autos.filter((a) => a.state === 'aguardando_integracao').length} aguardando integração · ${autos.filter((a) => a.state === 'em_desenvolvimento').length} em desenvolvimento.` }),
     sec('regras', 'Regras do processo', 'Etapas, responsáveis, regras do fluxo e reenvio ao cliente.', '/automacoes?aba=regras', 'ativo', { visible: can(u, 'automacoes') }),
     sec('calendario', 'Calendário operacional', 'Marcos do ciclo mensal (cronograma, revisão, produção, aprovação, agendamento).', '/automacoes?aba=regras', 'ativo', { visible: can(u, 'automacoes') }),
-    sec('notificacoes', 'Notificações', 'Preferências por pessoa (canal, frequência, agrupamento). Hoje todas as notificações chegam no sino da plataforma.', null, 'em_desenvolvimento', { visible: true }),
-    sec('financeiro', 'Financeiro', 'Regras de repasse, custos e fechamento mensal.', '/financeiro?aba=repasses', 'aguardando_decisao', { visible: can(u, 'financeiro') }),
+    sec('notificacoes', 'Notificações', 'Preferências por pessoa: plataforma e e-mail por categoria, agrupamento. Urgentes sempre chegam. Push no celular em desenvolvimento.', '/perfil', 'ativo', { visible: true, note: mailConfigured() ? null : 'Canal e-mail aguardando configuração (Resend).' }),
+    sec('financeiro', 'Financeiro', 'Régua de cobrança, textos dos e-mails, dia de fechamento, e-mail do relatório e regras de repasse.', '/negocio?aba=config',
+      (() => { const g = (k) => { const r = one('SELECT value FROM settings WHERE key=?', k); return r ? JSON.parse(r.value) : null; }; return g('fin.dia_fechamento') && one('SELECT 1 FROM payout_rates WHERE active=1') ? 'ativo' : 'aguardando_configuracao'; })(),
+      { visible: can(u, 'financeiro'), note: 'Pendente até a CEO definir: dia de fechamento, valores de repasse e cobranças após o vencimento.' }),
     sec('hospedagem', 'Hospedagem e dados', integ.find((i) => i.key === 'infra').docs, '/integracoes', integ.find((i) => i.key === 'infra').state, { visible: can(u, 'integracoes') }),
     sec('perfil', 'Meu perfil', 'Seus dados, aparência e senha.', '/perfil', 'ativo', { visible: true }),
   ].filter((s) => s.visible) });

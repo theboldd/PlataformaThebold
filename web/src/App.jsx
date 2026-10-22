@@ -25,8 +25,7 @@ const Pendencias = P(() => import('./pages/Pendencias.jsx'));
 const Migracao = P(() => import('./pages/Migracao.jsx'));
 const Divisao = P(() => import('./pages/Divisao.jsx'));
 const Atrasos = P(() => import('./pages/Atrasos.jsx'));
-const CRM = P(() => import('./pages/CRM.jsx'));
-const Financeiro = P(() => import('./pages/Financeiro.jsx'));
+const Negocio = P(() => import('./pages/Negocio.jsx'));
 const Insights = P(() => import('./pages/Insights.jsx'));
 const Brain = P(() => import('./pages/Brain.jsx'));
 const Automacoes = P(() => import('./pages/Automacoes.jsx'));
@@ -38,6 +37,12 @@ const Performance = P(() => import('./pages/Performance.jsx'));
 const Configuracoes = P(() => import('./pages/Configuracoes.jsx'));
 const Notion = P(() => import('./pages/Notion.jsx'));
 const PortalApp = P(() => import('./portal/PortalApp.jsx'));
+
+// /financeiro (links e notificações antigos) → Negócio, preservando a aba
+function LegacyFinance() {
+  const aba = new URLSearchParams(window.location.search).get('aba');
+  return <Navigate to={`/negocio?aba=${['repasses', 'rentabilidade'].includes(aba) ? aba : 'recebimentos'}`} replace />;
+}
 
 export default function App() {
   const [auth, setAuth] = useState(undefined);
@@ -94,8 +99,9 @@ export default function App() {
                     <Route path="/migracao" element={<Migracao />} />
                     <Route path="/divisao" element={<Divisao />} />
                     <Route path="/atrasos" element={<Atrasos />} />
-                    <Route path="/crm" element={<CRM />} />
-                    <Route path="/financeiro" element={<Financeiro />} />
+                    <Route path="/negocio" element={<Negocio />} />
+                    <Route path="/crm" element={<Navigate to="/negocio?aba=pipeline" replace />} />
+                    <Route path="/financeiro" element={<LegacyFinance />} />
                     <Route path="/insights" element={<Insights />} />
                     <Route path="/brain" element={<Brain />} />
                     <Route path="/automacoes" element={<Automacoes />} />

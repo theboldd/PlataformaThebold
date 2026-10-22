@@ -35,7 +35,9 @@ const INTERNAL = (c, ct) => ['/auth/me', '/dashboard', '/torre', '/torre/automat
   `/clients/${c}/brand`, `/clients/${c}/pulse`, `/clients/${c}/health`, `/clients/${c}/decisions`, `/clients/${c}/requests`, `/clients/${c}/onboarding-card`, `/clients/${c}/origem`, '/divisao', '/onboarding/cards',
   '/contents', `/contents?client_id=${c}`, `/contents/${ct}`, '/review/clients', `/review/clients/${c}`, '/calendar', '/meetings', '/chat/channels', '/crm', '/finance', '/financeiro/estrutura',
   '/insights?status=aberto', '/brain/agents', '/automations', '/automations/estado', '/integrations', '/produto/integracoes', '/users', '/users/directory', '/client-access', '/history?limit=50',
-  '/migration-issues', '/notion/resumo', '/configuracoes', '/notifications', '/reports'];
+  '/migration-issues', '/notion/resumo', '/configuracoes', '/notifications', '/reports',
+  '/brain/decisions', '/brain/decisions?q=x&status=todas', `/brain/decisions?client_id=${c}`, '/brain/radar', '/me/notification-prefs',
+  '/negocio/recebimentos', '/negocio/repasses', '/negocio/repasses?competencia=2026-09', '/negocio/custos', '/negocio/metas', '/negocio/rentabilidade', '/negocio/config'];
 const PORTAL = ['/portal/me', '/portal/home', '/portal/feed', '/portal/decisions', '/portal/pendencias', '/portal/calendar', '/portal/meetings', '/portal/channel', '/portal/requests',
   '/portal/materials', '/portal/brand', '/portal/history?limit=80', '/portal/onboarding/form'];
 
@@ -54,7 +56,7 @@ test('base vazia: toda tela interna e do portal abre sem erro de servidor', asyn
   assert.equal(perf.state, 'dados_insuficientes');
   assert.equal(perf.score, null);
   const fin = JSON.parse((await get('/financeiro/estrutura')).body);
-  assert.equal(fin.repasses.state, 'aguardando_decisao');
+  assert.equal(fin.repasses.state, 'aguardando_configuracao');
   assert.equal(fin.recebimentos.state, 'dados_insuficientes');
   const integ = JSON.parse((await get('/produto/integracoes')).body).items;
   for (const k of ['google_calendar', 'google_meet', 'google_drive', 'slack', 'meta', 'resend', 'anthropic', 'notion', 'infra']) assert.ok(integ.some((i) => i.key === k), `integração ${k} visível`);

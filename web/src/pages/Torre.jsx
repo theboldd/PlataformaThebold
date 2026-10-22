@@ -254,7 +254,7 @@ export default function Torre() {
                   <div><dt>A receber em 30 dias</dt><dd>{money(d.finance.a_receber_30d)}</dd></div>
                 </dl>
               ) : <p className="tw-empty">Nenhum contrato ou fatura cadastrado ainda.</p>}
-              <Link className="tw-more" to="/financeiro">Ver financeiro <I.arrow size={13} /></Link>
+              <Link className="tw-more" to="/negocio?aba=recebimentos">Ver financeiro <I.arrow size={13} /></Link>
             </div>
           )}
           {d.crm && (
@@ -270,7 +270,7 @@ export default function Torre() {
                   <div><dt>Valor do pipeline</dt><dd>{money(d.crm.pipeline)}</dd></div>
                 </dl>
               ) : <p className="tw-empty">Nenhum negócio cadastrado no CRM ainda.</p>}
-              <Link className="tw-more" to="/crm">Ver CRM <I.arrow size={13} /></Link>
+              <Link className="tw-more" to="/negocio?aba=pipeline">Ver CRM <I.arrow size={13} /></Link>
             </div>
           )}
           <div className="tw-mini">

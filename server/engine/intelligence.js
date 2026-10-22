@@ -61,7 +61,7 @@ export function computePendencies() {
   }
   for (const i of all("SELECT inv.*, cl.name client_name FROM invoices inv JOIN clients cl ON cl.id=inv.client_id WHERE inv.status IN ('aberta','atrasada') AND inv.due_at < ?", now())) {
     out.push({ id: `inv:${i.id}`, client_id: i.client_id, client: i.client_name, process: 'Financeiro', since: i.due_at, due: i.due_at, severity: 'alta', title: `Pagamento em atraso — ${i.description}`, problem: `Pagamento em atraso: ${i.description}`, cause: 'financeiro', late_ms: t - new Date(i.due_at).getTime(), impact_w: 2,
-      action: 'Contato do financeiro', source: { type: 'invoice', id: i.id }, who: 'Cliente / Financeiro', late: fmtDays(t - new Date(i.due_at).getTime()), impact: 'Receita pendente.', next: 'Contato do financeiro.', link: '/financeiro', financial: true });
+      action: 'Contato do financeiro', source: { type: 'invoice', id: i.id }, who: 'Cliente / Financeiro', late: fmtDays(t - new Date(i.due_at).getTime()), impact: 'Receita pendente.', next: 'Contato do financeiro.', link: '/negocio?aba=recebimentos', financial: true });
   }
   const order = { critica: 0, alta: 1, media: 2, baixa: 3 };
   // prioridade → impacto → tempo de atraso → prazo mais próximo

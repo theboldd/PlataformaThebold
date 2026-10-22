@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react';
 import { StateTag, StatePanel } from '../components/State.jsx';
 import { Link } from 'react-router-dom';
-import { useApi, useToast } from '../lib/hooks.js';
+import { useApi, useToast, useAuth } from '../lib/hooks.js';
 import { api } from '../lib/api.js';
 import { useCrumbs } from '../components/Shell.jsx';
-import { Section, Loading, Empty, Button, Tag } from '../components/ui.jsx';
+import { Section, Loading, Empty, Button, Tag, Tabs } from '../components/ui.jsx';
+import { DecisionMemory, AutomationRadar } from './intel/Memoria.jsx';
 import { ago, cleanName } from '../lib/format.js';
 import '../styles/intel.css';
 import { useUrlState } from '../lib/nav.jsx';
@@ -17,6 +18,12 @@ export default function Brain() {
   const toast = useToast();
   const { data: meta, reload } = useApi('/brain/agents', [], { live: false });
   const { data: clients } = useApi('/clients', [], { live: false });
+  const auth = useAuth();
+  const canRadar = !!auth.permissions?.automacoes?.includes('view');
+  const [tab, setTab] = useUrlState('aba', 'consultas');
+  const { data: dec } = useApi('/brain/decisions', [tab], { live: false });
+  const { data: radar } = useApi(canRadar ? '/brain/radar' : null, [tab], { live: false });
+  const go = (t) => { setTab(t); setTimeout(() => out.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); };
   const [q, setQ] = useState('');
   const [agent, setAgent] = useUrlState('agente', 'brain');
   const [client, setClient] = useState('');
@@ -26,7 +33,7 @@ export default function Brain() {
   const out = useRef(null);
   const ask = async (question = q) => {
     if (!question.trim()) return;
-    setBusy(true); setRes(null); setAsked(question);
+    setBusy(true); setRes(null); setAsked(question); setTab('consultas');
     try {
       const r = await api.post('/brain/ask', { question, agent, client_id: client || null });
       setRes(r); reload();
@@ -74,11 +81,21 @@ export default function Brain() {
       <div className="state-grid section">
         <StatePanel compact s={meta.configured ? 'ativo' : 'aguardando_configuracao'} kicker="Consultas" title="Perguntas sobre clientes, operação, gargalos e padrões" missing={meta.configured ? null : 'conectar o Claude (ANTHROPIC_API_KEY) em Integrações.'} />
         <StatePanel compact s="ativo" kicker="Memória" title="Client Brain e dados da plataforma, respeitando suas permissões" />
-        <StatePanel compact s="em_desenvolvimento" kicker="Memória de Decisões" title="“Por que fazemos dessa forma?” — decisões com contexto, motivo e validade" missing="fase 3 do roadmap de inteligência (Bloco 13)." />
-        <StatePanel compact s="em_desenvolvimento" kicker="Radar de Automações" title="Padrões manuais repetidos viram sugestão de regra, sempre com aprovação humana" missing="fase 3 do roadmap de inteligência (Bloco 13)." />
+        <StatePanel compact s={dec?.state || 'dados_insuficientes'} kicker="Memória de Decisões" title="“Por que fazemos dessa forma?” — decisões com contexto, motivo e validade"
+          action={<button className="btn btn-sm" onClick={() => go('decisoes')}>{dec?.total ? `Abrir · ${dec.total} decisão(ões)` : 'Abrir'}</button>} />
+        <StatePanel compact s={!canRadar ? 'bloqueado' : radar?.state || 'dados_insuficientes'} kicker="Radar de Automações" title="Padrões manuais repetidos viram sugestão de regra, sempre com aprovação humana"
+          missing={canRadar ? null : 'permissão de Automações (ver).'}
+          action={canRadar && <button className="btn btn-sm" onClick={() => go('radar')}>{radar?.items?.length ? `Abrir · ${radar.items.length} padrão(ões)` : 'Abrir'}</button>} />
       </div>
 
-      <div ref={out} style={{ scrollMarginTop: 80 }}>
+      <div className="section" ref={out} style={{ scrollMarginTop: 80 }}>
+        <Tabs value={tab} onChange={setTab} tabs={[{ key: 'consultas', label: 'Consultas' }, { key: 'decisoes', label: 'Memória de Decisões', count: dec?.total }, ...(canRadar ? [{ key: 'radar', label: 'Radar de Automações', count: radar?.items?.length }] : [])]} />
+      </div>
+      {tab === 'decisoes' && <DecisionMemory clients={clients} />}
+      {tab === 'radar' && canRadar && <AutomationRadar />}
+
+      {tab === 'consultas' && <>
+      <div style={{ scrollMarginTop: 80 }}>
         {busy && <div className="section row"><span className="thinking"><span /><span /><span /></span><span className="muted sm">Consultando dados permitidos…</span></div>}
         {res && (
           <Section title={asked} kicker={res.agent || 'Resposta'}>
@@ -115,6 +132,7 @@ export default function Brain() {
           )) : <Empty title="Nenhuma consulta ainda." />}
         </Section>
       </div>
+      </>}
     </div>
   );
 }

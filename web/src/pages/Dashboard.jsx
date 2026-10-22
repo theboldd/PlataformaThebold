@@ -184,16 +184,16 @@ function Commercial({ d, reload }) {
   return (
     <>
       <div className="hero-stats money-stats">
-        {d.crm && <Stat value={d.crm.abertos.n} label="Negócios abertos" to="/crm" hint={money(d.crm.abertos.v)} />}
-        {d.crm && <Stat value={money(d.crm.ponderado)} label="Pipeline ponderado" to="/crm" />}
-        {d.crm && <Stat value={d.crm.followups_vencidos} label="Follow-ups vencidos" alert={d.crm.followups_vencidos > 0} to="/crm" />}
-        {d.finance && <Stat value={money(d.finance.atrasado)} label="Em atraso" alert={d.finance.atrasado > 0} to="/financeiro" />}
+        {d.crm && <Stat value={d.crm.abertos.n} label="Negócios abertos" to="/negocio?aba=pipeline" hint={money(d.crm.abertos.v)} />}
+        {d.crm && <Stat value={money(d.crm.ponderado)} label="Pipeline ponderado" to="/negocio?aba=pipeline" />}
+        {d.crm && <Stat value={d.crm.followups_vencidos} label="Follow-ups vencidos" alert={d.crm.followups_vencidos > 0} to="/negocio?aba=pipeline" />}
+        {d.finance && <Stat value={money(d.finance.atrasado)} label="Em atraso" alert={d.finance.atrasado > 0} to="/negocio?aba=recebimentos" />}
       </div>
       <div className="cols mt-6">
         <div>
-          <Section title="Pipeline" kicker="Próximas ações" action={<Link className="btn btn-sm btn-ghost" to="/crm">CRM →</Link>}>
+          <Section title="Pipeline" kicker="Próximas ações" action={<Link className="btn btn-sm btn-ghost" to="/negocio?aba=pipeline">CRM →</Link>}>
             {d.deals.length ? d.deals.map((x, i) => (
-              <Link key={x.id} to="/crm" className="erow link">
+              <Link key={x.id} to="/negocio?aba=pipeline" className="erow link">
                 <span className="n">{n2(i + 1)}</span>
                 <div style={{ minWidth: 0 }}><div className="t">{cleanName(x.name)}</div><div className="s">{DEAL_STAGE[x.stage] || x.stage} · {x.owner_name} · {x.next_action}</div></div>
                 <div className="r col" style={{ alignItems: 'flex-end' }}><span className="strong">{money(x.value)}</span><span style={x.next_action_at < new Date().toISOString() ? { color: 'var(--err)' } : null}>{fmtDate(x.next_action_at)}</span></div>
@@ -203,7 +203,7 @@ function Commercial({ d, reload }) {
           <Section title="Minhas tarefas"><MyTasks tasks={d.my_tasks} reload={reload} /></Section>
         </div>
         <div>
-          <Section title="Recebíveis" kicker="Abertas e em atraso" action={<Link className="btn btn-sm btn-ghost" to="/financeiro">Financeiro →</Link>}>
+          <Section title="Recebíveis" kicker="Abertas e em atraso" action={<Link className="btn btn-sm btn-ghost" to="/negocio?aba=recebimentos">Financeiro →</Link>}>
             {d.invoices.length ? d.invoices.map((i) => (
               <div key={i.id} className="erow" style={{ gridTemplateColumns: 'minmax(0,1fr) auto' }}>
                 <div style={{ minWidth: 0 }}><div className="t clip">{cleanName(i.client_name)}</div><div className="s">{i.description}</div></div>

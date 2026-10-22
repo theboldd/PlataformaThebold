@@ -9,7 +9,7 @@ import { loadUser, csrf } from './lib/auth.js';
 import { ROLE_DEFS, HttpError, can } from './lib/permissions.js';
 import { runJob, lastRuns } from './engine/jobs.js';
 import { seedAutomations } from './engine/automations.js';
-import { startScheduler, tick, reconcileStageWindows, activateScheduledTasks } from './engine/scheduler.js';
+import { startScheduler, tick, fullTick, reconcileStageWindows, activateScheduledTasks } from './engine/scheduler.js';
 import { core } from './routes/core.js';
 import { ops } from './routes/ops.js';
 import { comms } from './routes/comms.js';
@@ -20,6 +20,7 @@ import { pendencias } from './routes/pendencias.js';
 import { divisao } from './routes/divisao.js';
 import { atrasos } from './routes/atrasos.js';
 import { produto } from './routes/produto.js';
+import { negocio } from './routes/negocio.js';
 import { editorial } from './routes/editorial.js';
 import { markMigratedTasks, markLegacy, syncDelayReviews } from './services/delayReview.js';
 import { review } from './routes/review.js';
@@ -45,7 +46,7 @@ export function bootstrap() {
     if (fresh) for (const [m, acts] of Object.entries(r.perms)) for (const a of acts) run('INSERT OR IGNORE INTO role_permissions (role_key,module,action) VALUES (?,?,?)', r.key, m, a);
   }
   // Módulos criados depois da primeira instalação: semeia uma vez as permissões padrão dos roles existentes
-  for (const mod of ['divisao', 'carteira', 'atrasos', 'performance']) {
+  for (const mod of ['divisao', 'carteira', 'atrasos', 'performance', 'repasses']) {
     const flag = `perm_seed:${mod}`;
     if (one('SELECT 1 FROM settings WHERE key=?', flag)) continue;
     for (const r of ROLE_DEFS) for (const a of r.perms[mod] || []) run('INSERT OR IGNORE INTO role_permissions (role_key,module,action) VALUES (?,?,?)', r.key, mod, a);
@@ -94,7 +95,7 @@ export function createApp() {
     if (!process.env.CRON_SECRET) return res.status(503).json({ error: 'CRON_SECRET não configurado.' });
     if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) return res.status(401).json({ error: 'Não autorizado.' });
     // Idempotente e com trava: se outra execução ainda estiver rodando, esta é ignorada (e registrada).
-    runJob('tick', tick, { trigger: 'cron', timeoutMs: 50e3 }).then((r) => res.status(r.ok || r.skipped ? 200 : 500).json({ ...r, at: new Date().toISOString() }));
+    runJob('tick', fullTick, { trigger: 'cron', timeoutMs: 50e3 }).then((r) => res.status(r.ok || r.skipped ? 200 : 500).json({ ...r, at: new Date().toISOString() }));
   });
   app.get('/api/cron/status', (req, res) => {
     if (!req.user || !can(req.user, 'automacoes')) return res.status(403).json({ error: 'Sem permissão.' });
@@ -112,6 +113,7 @@ export function createApp() {
   app.use('/api', clientOps);
   app.use('/api', atrasos);
   app.use('/api', produto);
+  app.use('/api', negocio);
   app.use('/api', editorial);
   app.use('/api', ops);
   app.use('/api', business);

@@ -47,7 +47,9 @@ export function journey(clientId) {
   });
   // "Você está aqui": a etapa mais atrasada que ainda tem conteúdos (prioridade para o que espera o cliente)
   const hereIdx = steps.findIndex((s) => s.state === 'you') >= 0 ? steps.findIndex((s) => s.state === 'you') : steps.findIndex((s) => s.state === 'current');
-  return { month: cycle.month, steps, here: hereIdx >= 0 ? hereIdx : null };
+  // Progresso do ciclo: conteúdos já agendados ou publicados sobre o total do ciclo (dado real, sem estimativa)
+  const ready = cs.filter((x) => ['agendado', 'publicado'].includes(x.stage)).length;
+  return { month: cycle.month, steps, here: hereIdx >= 0 ? hereIdx : null, progress: { ready, total: cs.length, percent: Math.round((ready / cs.length) * 100) } };
 }
 
 // ── Prazo do cliente para um conteúdo (vem da tarefa real de aprovação criada pelo engine) ──

@@ -162,3 +162,6 @@ export async function oauthCallback(provider, req, res) {
     res.redirect('/integracoes?erro=' + encodeURIComponent(e.message));
   }
 }
+
+// Memória de Decisões, Radar de Automações e preferências de notificação (routes/memoria.js)
+business.use((await import('./memoria.js')).memoria);

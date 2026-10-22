@@ -218,7 +218,7 @@ function Detail({ id, onClose, onChanged }) {
             {d.can.resolve_note && <span className="xs muted">{d.can.resolve_note}</span>}
             {p.client_id && <Link className="btn btn-sm btn-ghost" to={`/clientes/${p.client_id}`}>Abrir cliente</Link>}
             {p.content_id && <Link className="btn btn-sm btn-ghost" to={`/conteudos/${p.content_id}`}>Abrir processo</Link>}
-            {p.cause === 'financeiro' && <Link className="btn btn-sm btn-ghost" to="/financeiro">Abrir financeiro</Link>}
+            {p.cause === 'financeiro' && <Link className="btn btn-sm btn-ghost" to="/negocio?aba=recebimentos">Abrir financeiro</Link>}
           </section>
 
           {d.task && (d.can.reassign || d.can.edit_task) && (

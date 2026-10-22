@@ -20,6 +20,25 @@ const toLocalInput = (iso) => { if (!iso) return ''; const d = new Date(iso); co
 const REVIEW_STAGES = ['analise_cronograma', 'analise_producao', 'revisao_ajuste'];
 const CLIENT_STAGES = ['aprovacao_tema', 'aprovacao_cliente'];
 
+// AGORA → VOCÊ → THE BOLD → DEPOIS: leitura do conteúdo em 4 passos, a partir do estado real (etapa, tarefas, bloqueios)
+function NowStrip({ c, stage, tasks, na, me, availableAt }) {
+  const live = tasks.filter((t) => ['aberta', 'em_andamento', 'agendada'].includes(t.status));
+  const mine = live.filter((t) => t.assignee_id === me);
+  const others = live.filter((t) => t.assignee_id !== me);
+  const final = ['publicado', 'cancelado'].includes(c.stage);
+  const steps = [
+    ['Agora', `${stage.label}${availableAt ? ` · abre em ${fmtDate(availableAt)}` : ''}${c.blocked ? ' · bloqueado' : ''}`],
+    ['Você', mine.length ? mine.map((t) => `${t.title}${t.due_at ? ` até ${fmtDate(t.due_at)}` : ''}`).join(' · ') : 'Nada com você neste conteúdo.'],
+    ['The Bold', c.blocked && c.waiting_on === 'cliente' ? 'Aguardando o cliente (material ou resposta).' : others.length ? others.map((t) => `${t.assignee_name || 'sem responsável'}${t.function ? ` (${FUNCTIONS[t.function] || t.function})` : ''}`).join(' · ') : na.who ? `${na.who} · ${na.text}` : 'Ninguém com tarefa aberta.'],
+    ['Depois', final ? 'Ciclo encerrado para este conteúdo.' : stage.exit ? `Ao concluir: ${stage.exit}.` : '—'],
+  ];
+  return (
+    <ol className="now-strip mb-4" aria-label="Agora, você, The Bold, depois">
+      {steps.map(([k, v]) => <li key={k}><span className="caps">{k}</span><span className="sm">{v}</span></li>)}
+    </ol>
+  );
+}
+
 export default function ConteudoDetalhe() {
   const { id } = useParams();
   const { data, error, loading, reload } = useApi(`/contents/${id}`, [id]);
@@ -71,6 +90,8 @@ export default function ConteudoDetalhe() {
           {auth.can('conteudos', 'create') && <Button variant="ghost" size="sm" onClick={() => act(async () => { const n = await api.post(`/contents/${c.id}/duplicate`); nav(`/conteudos/${n.id}`); }, 'Estrutura duplicada.')}>Duplicar</Button>}
         </div>
       </header>
+
+      <NowStrip c={c} stage={stage} tasks={tasks} na={na} me={auth.user.id} availableAt={data.available_at} />
 
       <div className="next-action mb-5">
         <div className="caps">Próxima ação</div>

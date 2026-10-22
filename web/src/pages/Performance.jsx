@@ -64,6 +64,16 @@ export default function Performance() {
         <p className="xs muted mt-2">“—” = sem evento válido no período. Pessoas em ordem alfabética: não existe ranking.</p>
       </Section>
 
+      <Section kicker="Previsão · próximos 7 dias" title="Quem pode ficar sobrecarregado">
+        <p className="sm muted" style={{ margin: '0 0 12px' }}>Demanda com prazo na próxima semana × capacidade configurada. Confiança {data.forecast.confianca}. É só um alerta: nada é redistribuído sozinho.</p>
+        {data.forecast.state !== 'ativo' ? <StatePanel compact s="dados_insuficientes" title="Nenhuma tarefa nascida na plataforma com prazo nos próximos 7 dias." /> : (
+          <div className="table-wrap"><table className="table">
+            <thead><tr><th>Pessoa</th><th className="num">Demanda (7 dias)</th><th className="num">Capacidade configurada</th><th>Clientes</th><th>Situação</th></tr></thead>
+            <tbody>{data.forecast.items.filter((f) => f.demanda).map((f) => <tr key={f.id}><td className="strong">{f.name}</td><td className="num tnum">{f.demanda}</td><td className="num tnum">{f.capacidade}</td><td className="xs">{f.clientes.map(cleanName).join(' · ')}</td><td className="xs">{f.alerta ? <StateTag s="aguardando_decisao">Pode ficar sobrecarregado</StateTag> : 'Dentro da capacidade configurada'}</td></tr>)}</tbody>
+          </table></div>
+        )}
+      </Section>
+
       <Section kicker="Contexto" title="Atrasos e o que estava acontecendo">
         {!data.late.length ? <StatePanel compact s="dados_insuficientes" title="Nenhum atraso de trabalho nascido na plataforma no período." /> : (
           <div className="table-wrap"><table className="table">
