@@ -1,5 +1,18 @@
 # THE BOLD OS — Checklist oficial de conferência
 
+## Revisão 4.4 · 22/10/2026 — ficha do cliente redesenhada e camada Notion → The Bold OS
+
+| O que | Onde | Estado |
+|---|---|---|
+| **Ficha do cliente:** 4 grupos (Visão geral · Conteúdo · Relação · Gestão) com itens do grupo abaixo, em vez de 17 abas; no celular vira um menu de seleção agrupado. Visão geral: nome em destaque, status, 3 indicadores, PRÓXIMO PASSO, calendário editorial do mês (‹ mês anterior · mês · próximo ›, clique abre o conteúdo; CR Editorial do Notion marcado “Notion”), feed de aprovação (prévia + VER FEED), essência da marca e equipe compactas. Cronograma operacional saiu da visão principal → Gestão › Processo do mês. “Excluir cliente” foi para o menu ⋯ | Clientes → cliente | 🟢 |
+| **Mapa completo do Notion** com estados SINCRONIZAÇÃO ATIVA · IMPORTADO, MAS NÃO SINCRONIZADO · PARCIAL · AGUARDANDO MAPEAMENTO · AGUARDANDO DECISÃO · DOCUMENTAÇÃO / CONSULTA · FORA DO ESCOPO · BLOQUEADO POR CONFIGURAÇÃO; para cada base: origem, ID, destino, entidade, campos mapeados e não mapeados, direção, frequência real, estado, última alteração, última sincronização, erro, observações. NOVEMBRO mostra a diferença 108 × 106; OUTUBRO, edição posterior à extração | Integrações → Notion | 🟢 |
+| **Arquitetura Notion → The Bold OS:** webhook oficial (verificação + assinatura HMAC) ou polling por base (padrão 15 min, configurável), validação, deduplicação, mapeamento. Sem mapeamento: ALTERAÇÃO DETECTADA — AGUARDANDO MAPEAMENTO (guardada, nada criado). CR Editorial/calendários: espelho somente leitura; conteúdo vinculado nunca muda sozinho (CONFLITO); legado continua legado. Bases começam desligadas | Integrações → Notion | 🔵 BLOQUEADO — NOTION_TOKEN NÃO CONFIGURADO |
+| **The Bold OS → Notion:** desativado. O cliente HTTP só lê (GET de páginas e consulta de bases); qualquer escrita é recusada antes de sair (testado) | — | ⚪ por decisão |
+
+**Arquitetura pronta ≠ sincronização operacional ativa.** Para ativar: NOTION_TOKEN (integração interna com as bases compartilhadas), hospedagem persistente (BOLD_PERSISTENT_HOST=1) e a sua decisão de quais bases ligar.
+
+---
+
 ## Revisão 4.3 · 22/10/2026 — data de publicação ≠ prazo, classificação em Processos, página PROCESSO do Notion
 
 | O que | Onde | Estado |

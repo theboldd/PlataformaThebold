@@ -26,6 +26,7 @@ function remindClient(c, marker, { title, body, cta = 'Revisar agora', link = '/
 }
 import { runJob } from './jobs.js';
 import { billingRoutine, payoutRoutine } from '../services/negocio.js';
+import { pollDue } from '../services/notion-sync.js';
 
 const H = 3600e3;
 const cc = () => all("SELECT id FROM users WHERE active=1 AND role_key IN ('operacoes','ceo')").map((r) => r.id);
@@ -67,6 +68,8 @@ export async function fullTick() {
   const out = { ...r };
   try { out.cobrancas = await billingRoutine(); } catch (e) { console.error('[scheduler] cobranças:', e.message); out.cobrancas_erro = e.message; }
   try { await payoutRoutine(); } catch (e) { console.error('[scheduler] repasses:', e.message); out.repasses_erro = e.message; }
+  // Notion → The Bold OS: só roda com NOTION_TOKEN, hospedagem persistente e bases ligadas pela CEO (senão não faz nada)
+  try { out.notion = await pollDue(); } catch (e) { console.error('[scheduler] notion:', e.message); out.notion_erro = e.message; }
   return out;
 }
 

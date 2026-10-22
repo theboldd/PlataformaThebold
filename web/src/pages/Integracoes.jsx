@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import '../styles/admin.css';
 import '../styles/automations.css';
 import { LoadError } from './admin/Guard.jsx';
@@ -11,7 +11,7 @@ import { StateBadge, StateNotice } from '../components/State.jsx';
 import { ago, cleanName } from '../lib/format.js';
 
 // Ordem do resumo: o que funciona → o que precisa de ação → o que depende de decisão
-const ORDER = ['conectada', 'ativo', 'somente_leitura', 'erro', 'nao_conectada', 'aguardando_configuracao', 'aguardando_decisao', 'em_desenvolvimento'];
+const ORDER = ['conectada', 'ativo', 'somente_leitura', 'erro', 'bloqueado', 'nao_conectada', 'aguardando_configuracao', 'aguardando_decisao', 'em_desenvolvimento'];
 
 export default function Integracoes() {
   useCrumbs('Integrações');
@@ -76,6 +76,7 @@ function Card({ p, clients, reload }) {
         <div><div className="caps xs mb-2">Usado em</div><div className="stx-chips">{p.used_by.map((u) => <span key={u} className="stx-chip">{u}</span>)}</div></div>
       )}
       {p.depends_on?.length > 0 && <div className="xs faint">Depende de: {p.depends_on.join(' · ')}</div>}
+      {p.link && <Link className="btn btn-sm" to={p.link}>{p.link_label || 'Abrir'} →</Link>}
       {admin && p.provider && (p.action === 'connect' || p.connected) && (
         <div className="row wrap stx-actions">
           {p.connected

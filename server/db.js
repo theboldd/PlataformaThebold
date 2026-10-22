@@ -557,6 +557,28 @@ CREATE TABLE IF NOT EXISTS content_notion_links (
   notion_last_edited_time TEXT, last_synced_at TEXT, sync_status TEXT, sync_hash TEXT, linked_by TEXT, linked_at TEXT NOT NULL,
   history_id TEXT, before_snapshot TEXT -- valores da plataforma antes do vínculo (desvincular restaura)
 );
+-- SINCRONIZAÇÃO NOTION → THE BOLD OS (somente leitura do Notion; a escrita de volta está DESATIVADA por decisão da CEO)
+-- Fonte = uma base/página do Notion com destino conhecido. enabled=0 até a CEO decidir quais bases entram na sincronização viva.
+CREATE TABLE IF NOT EXISTS notion_sync_sources (
+  key TEXT PRIMARY KEY, label TEXT NOT NULL, notion_id TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'base', mapper TEXT, client_id TEXT,
+  enabled INTEGER NOT NULL DEFAULT 0, interval_min INTEGER NOT NULL DEFAULT 15, cursor TEXT, -- maior last_edited_time já lido
+  last_run_at TEXT, last_success_at TEXT, last_error TEXT, updated_by TEXT, updated_at TEXT, created_at TEXT NOT NULL
+);
+-- Cada alteração detectada no Notion (webhook ou polling). Nunca é descartada: sem mapeamento fica AGUARDANDO MAPEAMENTO.
+CREATE TABLE IF NOT EXISTS notion_changes (
+  id TEXT PRIMARY KEY, source_key TEXT, notion_page_id TEXT NOT NULL, notion_url TEXT, title TEXT,
+  kind TEXT NOT NULL, -- novo | alterado | arquivado | restaurado
+  via TEXT NOT NULL, -- webhook | polling | manual
+  notion_last_edited TEXT, hash TEXT, payload TEXT,
+  status TEXT NOT NULL, -- detectada | aguardando_mapeamento | aplicada | conflito | erro | ignorada
+  entity_type TEXT, entity_id TEXT, note TEXT, detected_at TEXT NOT NULL, processed_at TEXT,
+  UNIQUE (notion_page_id, notion_last_edited)
+);
+CREATE INDEX IF NOT EXISTS ix_notion_changes ON notion_changes(status, detected_at);
+CREATE TABLE IF NOT EXISTS notion_sync_runs (
+  id TEXT PRIMARY KEY, source_key TEXT, via TEXT NOT NULL, status TEXT NOT NULL, -- ok | erro | bloqueado
+  pages INTEGER NOT NULL DEFAULT 0, changes INTEGER NOT NULL DEFAULT 0, error TEXT, started_at TEXT NOT NULL, finished_at TEXT
+);
 -- Quem vê um evento/compromisso do Calendário quando ele não é "para toda a equipe"
 CREATE TABLE IF NOT EXISTS event_members (event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY (event_id, user_id));
 CREATE TABLE IF NOT EXISTS payout_manual_items (

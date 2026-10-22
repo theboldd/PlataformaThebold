@@ -30,6 +30,7 @@ const Insights = P(() => import('./pages/Insights.jsx'));
 const Brain = P(() => import('./pages/Brain.jsx'));
 const Automacoes = P(() => import('./pages/Automacoes.jsx'));
 const Integracoes = P(() => import('./pages/Integracoes.jsx'));
+const NotionSync = P(() => import('./pages/integracoes/NotionSync.jsx'));
 const Usuarios = P(() => import('./pages/Usuarios.jsx'));
 const Historico = P(() => import('./pages/Historico.jsx'));
 const Perfil = P(() => import('./pages/Perfil.jsx'));
@@ -107,6 +108,7 @@ export default function App() {
                     <Route path="/brain" element={<Brain />} />
                     <Route path="/automacoes" element={<Automacoes />} />
                     <Route path="/integracoes" element={<Integracoes />} />
+                    <Route path="/integracoes/notion" element={<NotionSync />} />
                     <Route path="/usuarios" element={<Usuarios />} />
                     <Route path="/historico" element={<Historico />} />
                     <Route path="/perfil" element={<Perfil />} />

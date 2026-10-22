@@ -124,8 +124,8 @@ function integrationsList() {
   };
   const notion = {
     key: 'notion', group: 'integracao', name: 'Notion', purpose: 'Origem dos dados migrados (clientes, conteúdos, tarefas e histórico editorial).',
-    state: 'somente_leitura', detail: 'Importação somente leitura a partir de exportação. Sem sincronização, por decisão. Ocear (cronograma editorial) aguardando decisão.',
-    missing: ['Decisão sobre o cronograma editorial do Ocear'], depends_on: ['Exportação do Notion'], used_by: ['Clientes', 'Conteúdos', 'Histórico', 'Atrasos (itens herdados)'], action: null, counts: notionCounts,
+    state: process.env.NOTION_TOKEN ? 'aguardando_decisao' : 'bloqueado', detail: process.env.NOTION_TOKEN ? 'Notion → The Bold OS pronto; bases ligam só por decisão da CEO. The Bold OS → Notion: desativado.' : 'BLOQUEADO — NOTION_TOKEN NÃO CONFIGURADO. Arquitetura Notion → The Bold OS pronta; o que existe hoje é importação única (não é sincronização). The Bold OS → Notion: desativado.',
+    missing: [...(process.env.NOTION_TOKEN ? [] : ['NOTION_TOKEN (integração interna do Notion, com as bases compartilhadas)']), ...(process.env.BOLD_PERSISTENT_HOST === '1' ? [] : ['Hospedagem persistente para a rotina contínua']), 'Decisão: quais bases entram na sincronização viva'], depends_on: ['NOTION_TOKEN', 'Hospedagem persistente'], link: '/integracoes/notion', link_label: 'Abrir painel do Notion', used_by: ['Clientes', 'Conteúdos', 'Histórico', 'Atrasos (itens herdados)'], action: null, counts: notionCounts,
   };
   const kp = safe(() => knowledgeProvider().name, 'banco');
   const obsidian = {

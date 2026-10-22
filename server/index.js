@@ -28,6 +28,7 @@ import { markMigratedTasks, markLegacy, syncDelayReviews } from './services/dela
 import { review } from './routes/review.js';
 import { clientOps } from './routes/client-ops.js';
 import { notion } from './routes/notion.js';
+import { notionSync } from './routes/notion-sync.js';
 import { performance } from './routes/performance.js';
 import { status } from './routes/status.js';
 import { reconcileMigratedForms } from './services/onboarding.js';
@@ -91,7 +92,7 @@ export function createApp() {
     next();
   });
   app.use(cookieParser());
-  app.use(express.json({ limit: '2mb' }));
+  app.use(express.json({ limit: '2mb', verify: (req, _res, buf) => { if (req.originalUrl.startsWith('/api/integrations/webhooks/')) req.rawBody = Buffer.from(buf); } })); // webhooks: assinatura sobre o corpo bruto
   app.use(loadUser);
   app.use(csrf);
   // Rotina agendada chamada de fora (Vercel Cron, cron do servidor): o mesmo agendador do processo contínuo.
@@ -109,6 +110,7 @@ export function createApp() {
   app.get('/api/health', (_req, res) => res.json({ ok: true, db: !!one('SELECT 1 ok'), version: (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || null }));
   app.get('/api/integrations/:provider/callback', (req, res) => oauthCallback(req.params.provider, req, res));
   app.use('/api', core);
+  app.use('/api', notionSync); // antes dos routers com requireInternal global: o webhook do Notion é público (assinado)
   app.use('/api/portal', portal);
   app.use('/api', comms);
   app.use('/api', review);
