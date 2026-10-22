@@ -531,6 +531,32 @@ CREATE TABLE IF NOT EXISTS payout_adjustments (
   created_by TEXT, created_at TEXT NOT NULL, revoked_at TEXT, revoked_by TEXT
 );
 -- Demandas lançadas à mão por pessoa (o que não passa pelo processo: ex. captação, edição avulsa), ligadas ao cliente quando houver
+-- FICHA DO CONTEÚDO (estrutura real do CR EDITORIAL do Notion: responsáveis por função, corpo por blocos, etapas de aprovação)
+-- Pessoas por função no conteúdo (Responsável geral, Estrategista, Copywriter, Designer, Editor de vídeo, Aprovador)
+CREATE TABLE IF NOT EXISTS content_people (
+  content_id TEXT NOT NULL REFERENCES contents(id) ON DELETE CASCADE, role TEXT NOT NULL, user_id TEXT REFERENCES users(id),
+  notion_user_id TEXT, source TEXT NOT NULL DEFAULT 'plataforma', updated_by TEXT, updated_at TEXT NOT NULL, PRIMARY KEY (content_id, role)
+);
+-- Corpo do conteúdo em blocos na ordem original: capa, cards do carrossel, roteiro, briefing, referências (texto integral com links)
+CREATE TABLE IF NOT EXISTS content_sections (
+  id TEXT PRIMARY KEY, content_id TEXT NOT NULL REFERENCES contents(id) ON DELETE CASCADE, kind TEXT NOT NULL, -- capa | card | roteiro | briefing | referencias | texto
+  position INTEGER NOT NULL, title TEXT, body TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT 'plataforma', -- plataforma | notion
+  updated_by TEXT, updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_sections ON content_sections(content_id, position);
+-- Etapas internas de aprovação, separadas da aprovação formal do cliente (que continua em approvals.kind='cliente' na versão)
+CREATE TABLE IF NOT EXISTS content_checks (
+  id TEXT PRIMARY KEY, content_id TEXT NOT NULL REFERENCES contents(id) ON DELETE CASCADE, step TEXT NOT NULL, -- texto | legenda | arte
+  decision TEXT NOT NULL, -- aprovado | ajuste | desfeito
+  version_id TEXT, note TEXT, source TEXT NOT NULL DEFAULT 'plataforma', actor_id TEXT, created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_checks ON content_checks(content_id, step, created_at);
+-- Vínculo de um conteúdo com a página do Notion de origem (CR EDITORIAL) — preenchido só após validação do mapeamento
+CREATE TABLE IF NOT EXISTS content_notion_links (
+  content_id TEXT PRIMARY KEY REFERENCES contents(id) ON DELETE CASCADE, notion_page_id TEXT NOT NULL UNIQUE, notion_url TEXT, data_source_id TEXT,
+  notion_last_edited_time TEXT, last_synced_at TEXT, sync_status TEXT, sync_hash TEXT, linked_by TEXT, linked_at TEXT NOT NULL,
+  history_id TEXT, before_snapshot TEXT -- valores da plataforma antes do vínculo (desvincular restaura)
+);
 -- Quem vê um evento/compromisso do Calendário quando ele não é "para toda a equipe"
 CREATE TABLE IF NOT EXISTS event_members (event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY (event_id, user_id));
 CREATE TABLE IF NOT EXISTS payout_manual_items (

@@ -22,6 +22,7 @@ import { atrasos } from './routes/atrasos.js';
 import { produto } from './routes/produto.js';
 import { negocio } from './routes/negocio.js';
 import { agenda } from './routes/agenda.js';
+import { fichaConteudo } from './routes/ficha-conteudo.js';
 import { editorial } from './routes/editorial.js';
 import { markMigratedTasks, markLegacy, syncDelayReviews } from './services/delayReview.js';
 import { review } from './routes/review.js';
@@ -122,6 +123,7 @@ export function createApp() {
   app.use('/api', produto);
   app.use('/api', negocio);
   app.use('/api', agenda);
+  app.use('/api', fichaConteudo);
   app.use('/api', editorial);
   app.use('/api', ops);
   app.use('/api', business);

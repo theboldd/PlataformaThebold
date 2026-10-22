@@ -107,3 +107,14 @@
 .nc-card-t b { -webkit-line-clamp: 3; text-overflow: clip; overflow-wrap: anywhere; word-break: normal; }
 .nc-check { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10px; letter-spacing: 0; }
 .nc-tags .nc-src { font-size: 9px; padding: 0 4px; line-height: 15px; }
+/* Feed para aprovação — um por um */
+.fd-list { display: flex; flex-direction: column; gap: 14px; max-width: 920px; }
+.fd-post { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: var(--surface); }
+.fd-media { aspect-ratio: 4 / 5; border-radius: 10px; overflow: hidden; background: #0B0B0B; color: #F6F3F0; display: flex; }
+.fd-media img { width: 100%; height: 100%; object-fit: cover; }
+.fd-media .ph { margin: auto; text-align: center; display: flex; flex-direction: column; gap: 6px; padding: 14px; }
+.fd-media .ph small { opacity: .6; font-size: 12px; }
+.fd-side { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.fd-t { margin: 0; font-size: 16px; }
+.fd-cap { white-space: pre-wrap; font-size: 13.5px; line-height: 1.5; max-height: 220px; overflow: auto; }
+@media (max-width: 720px) { .fd-post { grid-template-columns: 1fr; } }

@@ -53,6 +53,9 @@ function item(c, user) {
       return { tema: rec(tema), arte: rec(ver, ver?.number ? `V${ver.number}` : ''), legenda: rec(ver, ver?.number ? `V${ver.number}` : '') };
     })(),
     comments_n: one('SELECT COUNT(*) n FROM comments WHERE content_id=?', c.id).n,
+    // Versão atual e legenda (o mesmo registro que o cliente vê no feed) e o vínculo com o card do Notion
+    current: c.current_version_id ? one('SELECT number, caption, locked FROM content_versions WHERE id=?', c.current_version_id) : null,
+    notion_link: (() => { const l = one('SELECT l.history_id, l.notion_url, h.properties FROM content_notion_links l LEFT JOIN notion_history h ON h.id=l.history_id WHERE l.content_id=?', c.id); return l ? { history_id: l.history_id, notion_url: l.notion_url, properties: parseJSON(l.properties, {}) } : null; })(),
     tags: parseJSON(c.strategy_tags, []),
     versions: one('SELECT COUNT(*) n FROM content_versions WHERE content_id=?', c.id).n,
     open_adjustments: one("SELECT COUNT(*) n FROM adjustments WHERE content_id=? AND status='aberto'", c.id).n,

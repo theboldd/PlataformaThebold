@@ -5,7 +5,8 @@ import { Link } from 'react-router-dom';
 import { useApi, useToast } from '../../lib/hooks.js';
 import { api } from '../../lib/api.js';
 import { useUrlState } from '../../lib/nav.jsx';
-import { Seg, Loading, ErrorBox, Empty } from '../../components/ui.jsx';
+import { Seg, Loading, ErrorBox, Empty, Drawer, Button, Tag } from '../../components/ui.jsx';
+import { StateTag } from '../../components/State.jsx';
 import { fmtDate, fmtMonth } from '../../lib/format.js';
 import { FORMATS } from '../../lib/status.js';
 import '../../styles/editorial.css';
@@ -50,7 +51,7 @@ export default function Editorial({ clientId }) {
           })}
         </div>
       </div>
-      {view === 'calendario' && <NotionCalendar month={m} setMonth={setMonth} items={items.filter((i) => i.phase !== 'legado')} clientId={clientId} can={data.can || {}} onChanged={reload} />}
+      {view === 'calendario' && <NotionCalendar month={m} setMonth={setMonth} items={items.filter((i) => i.phase !== 'legado')} clientId={clientId} can={data.can || {}} onChanged={reload} onFeed={() => setView('feed')} />}
       {view === 'fases' && <Phases phases={data.phases} items={items} />}
       {/* legado não validado não é conteúdo operacional: só aparece no grupo próprio em Fases */}
       {view === 'mes' && <Month month={m} setMonth={setMonth} items={items.filter((i) => i.phase !== 'legado')} clientId={clientId} />}
@@ -69,7 +70,8 @@ const RED_TAGS = ['ENVIAR MATERIAL', 'REELS SEM CAPA', 'AGUARDANDO MATERIAL'];
 function Check({ on, label, title }) {
   return <div className={`nc-check ${on ? 'on' : ''}`} title={title}><span className="box" aria-hidden>{on ? '✓' : ''}</span>{label}</div>;
 }
-function NotionCalendar({ month, setMonth, items, clientId, can, onChanged }) {
+function NotionCalendar({ month, setMonth, items, clientId, can, onChanged, onFeed }) {
+  const [crOpen, setCrOpen] = useState(null);
   const toast = useToast();
   const [showNotion, setShowNotion] = useUrlState('notion', '1');
   const hist = useApi(showNotion === '1' ? `/clients/${clientId}/notion-history` : null, [clientId, showNotion], { live: false });
@@ -82,7 +84,9 @@ function NotionCalendar({ month, setMonth, items, clientId, can, onChanged }) {
   const lastWeekUsed = days.slice(35).some((k) => k.slice(0, 7) === month) ? 42 : 35;
   const byDay = {};
   for (const i of items.filter((x) => x.date)) (byDay[dayKey(i.date)] ||= []).push({ kind: 'p', i });
-  const crRows = (hist.data?.items || []).filter((r) => r.date_start);
+  const linkedHist = new Set(items.map((i) => i.notion_link?.history_id).filter(Boolean));
+  // card do Notion já vinculado a um conteúdo aparece uma vez só: como o conteúdo da plataforma
+  const crRows = (hist.data?.items || []).filter((r) => r.date_start && !linkedHist.has(r.id));
   for (const r of crRows) (byDay[r.date_start.slice(0, 10)] ||= []).push({ kind: 'n', r });
   const undated = items.filter((i) => !i.date);
   const step = (n) => { const d = new Date(`${month}-15T12:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); setMonth(d.toISOString().slice(0, 7)); };
@@ -103,6 +107,7 @@ function NotionCalendar({ month, setMonth, items, clientId, can, onChanged }) {
         <h3 className="nc-title">CR EDITORIAL</h3>
         <div className="row wrap gap-2" style={{ alignItems: 'center' }}>
           <label className="check xs"><input type="checkbox" checked={showNotion === '1'} onChange={(e) => setShowNotion(e.target.checked ? '1' : '0')} /> Mostrar o CR Editorial do Notion (somente leitura)</label>
+          <Button size="sm" onClick={onFeed}>VER FEED PARA APROVAÇÃO</Button>
           {can.create && <Link className="btn btn-sm btn-primary" to={`/conteudos/novo?client_id=${clientId}`}>Novo</Link>}
         </div>
       </div>
@@ -124,6 +129,7 @@ function NotionCalendar({ month, setMonth, items, clientId, can, onChanged }) {
                   {e.i.deps.material?.startsWith('aguardando') && <span className="nc-tag red">ENVIAR MATERIAL</span>}
                   {e.i.deps.blocked && !e.i.deps.material && <span className="nc-tag red">BLOQUEADO</span>}
                   {e.i.migrated && <span className="nc-tag">MIGRADO</span>}
+                  {e.i.notion_link && <span className="nc-tag soft">NOTION ↔</span>}
                   <span className="nc-tag soft">{e.i.stage_label}</span>
                 </div>
                 <Check on={e.i.checks?.arte?.ok} label="APROVAÇÃO ARTE" title={e.i.checks?.arte?.ok ? `Aprovada pelo cliente (${e.i.checks.arte.note}) · ${e.i.checks.arte.by}` : 'Sem registro de aprovação na plataforma'} />
@@ -131,16 +137,17 @@ function NotionCalendar({ month, setMonth, items, clientId, can, onChanged }) {
                 <Check on={e.i.checks?.tema?.ok} label="APROVAÇÃO TEMA" title={e.i.checks?.tema?.ok ? `Tema aprovado · ${e.i.checks.tema.by}` : 'Sem registro de aprovação do tema na plataforma'} />
               </Link>
             ) : (
-              <a key={e.r.id} href={e.r.notion_url || undefined} target="_blank" rel="noreferrer" className="nc-card notion" title="CR Editorial do Notion — histórico somente leitura">
+              <button type="button" key={e.r.id} onClick={() => setCrOpen(e.r)} className="nc-card notion" title="Card do CR Editorial (Notion) — abrir a ficha">
                 <div className="nc-card-t"><span className="nc-ico" aria-hidden>▤</span><b>{e.r.title || 'Sem título'}</b></div>
                 <div className="nc-tags"><span className="nc-src">Notion</span>{[].concat(e.r.properties['ESTRATÉGIA'] || []).filter((t) => typeof t === 'string').map((t) => <span key={t} className={`nc-tag ${RED_TAGS.includes(t.toUpperCase()) ? 'red' : 'soft'}`}>{t}</span>)}</div>
                 {['APROVAÇÃO ARTE', 'APROVAÇÃO LEGENDA', 'APROVAÇÃO TEMA'].filter((key) => key in e.r.properties || (key === 'APROVAÇÃO ARTE' && 'APRO ARTE/REELS' in e.r.properties)).map((key) => <Check key={key} on={!!(e.r.properties[key] ?? e.r.properties['APRO ARTE/REELS'])} label={key} title="Marcação feita no Notion (até a extração)" />)}
-              </a>
+              </button>
             )))}
           </div>
         ))}
       </div>
       <p className="xs muted mt-2">Checks da plataforma só aparecem marcados com registro: tema = aprovação do tema; arte e legenda = versão aprovada pelo cliente. Cartões “Notion” são o CR Editorial importado (extração de {hist.data?.extracted_at ? fmtDate(hist.data.extracted_at) : '—'}), somente leitura.{can.edit ? ' Arraste um cartão da plataforma (ou um “sem data”) para mudar a data.' : ''}</p>
+      {crOpen && <NotionItem row={crOpen} clientId={clientId} month={(crOpen.date_start || month).slice(0, 7)} canLink={can.edit} onClose={() => setCrOpen(null)} onLinked={() => { setCrOpen(null); onChanged(); }} />}
       {undated.length > 0 && (
         <section className="nc-undated">
           <h3 className="caps">Sem data ({undated.length})</h3>
@@ -150,6 +157,55 @@ function NotionCalendar({ month, setMonth, items, clientId, can, onChanged }) {
         </section>
       )}
     </div>
+  );
+}
+
+// Ficha de um card do CR Editorial (extração somente leitura) + vínculo confirmado pela pessoa a um conteúdo da plataforma
+const PEOPLE_PROPS = ['👤 Responsável Geral', '👤 Estrategista', '👤 Copywriter', '👤 Designer', '👤 Editor de Vídeo'];
+const pv = (v) => (v == null || v === '' ? null : typeof v === 'boolean' ? (v ? 'marcado' : 'não marcado') : Array.isArray(v) ? v.join(', ') : typeof v === 'object' ? (v.start || v.name || JSON.stringify(v)) : String(v).replace(/<[^>]+>/g, ''));
+function NotionItem({ row, clientId, month, canLink, onClose, onLinked }) {
+  const toast = useToast();
+  const { data } = useApi(`/clients/${clientId}/notion-vinculo?mes=${month}`, [clientId, month], { live: false });
+  const it = data?.items.find((x) => x.id === row.id);
+  const [pick, setPick] = useState('');
+  const p = row.properties || {};
+  const link = async () => {
+    const id = pick || it?.proposal?.id;
+    if (!id) return;
+    if (!confirm('Vincular este card do Notion ao conteúdo escolhido? Título, tema, data, objetivo, referência e estratégia passam a vir do Notion (os valores atuais ficam guardados e voltam se desvincular).')) return;
+    try { await api.post(`/contents/${id}/notion-vinculo`, { history_id: row.id }); toast('Vinculado. O conteúdo agora mostra os dados do card do Notion.'); onLinked(); } catch (e) { toast(e.message, 'err'); }
+  };
+  const shown = Object.entries(p).filter(([k]) => !PEOPLE_PROPS.includes(k) && !['Name', 'Date'].includes(k));
+  return (
+    <Drawer open onClose={onClose} title={pv(row.title) || 'Sem título'} kicker={`CR Editorial · Notion · ${row.date_start ? row.date_start.split('-').reverse().join('/') : 'sem data'}`} wide>
+      <div className="col gap-4">
+        <p className="xs muted" style={{ margin: 0 }}>Dados da extração somente leitura de {fmtDate(row.extracted_at)}. {row.notion_url && <a href={row.notion_url} target="_blank" rel="noreferrer">Abrir no Notion ↗</a>}</p>
+        <dl className="fc-dl">{shown.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{pv(v) ?? <span className="faint">—</span>}</dd></div>)}</dl>
+        <div><div className="caps mb-2">Responsáveis no Notion</div>
+          <dl className="fc-dl">{PEOPLE_PROPS.filter((k) => k in p).map((k) => <div key={k}><dt>{k.replace('👤 ', '')}</dt><dd>{/user:\/\//.test(JSON.stringify(p[k] || '')) ? <StateTag s="aguardando_configuracao">Pessoa do Notion · aguardando mapeamento</StateTag> : <span className="faint">—</span>}</dd></div>)}</dl>
+        </div>
+        <p className="sm muted" style={{ margin: 0 }}>Corpo do card (capa, cards, roteiro, links): <StateTag s="aguardando_configuracao">aguardando sincronização com o Notion</StateTag> — a extração de 21/10 trouxe só as propriedades.</p>
+        <div className="fc-sec">
+          <div className="caps">Vincular a um conteúdo da plataforma</div>
+          {!data ? <Loading rows={1} /> : it?.linked ? <p className="sm" style={{ margin: 0 }}>Já vinculado ao conteúdo <Link to={`/conteudos/${it.linked.content_id}`}>#{it.linked.number} {it.linked.title}</Link>.</p> : (
+            <>
+              <span className="xs muted">Formato: {it?.format ? it.format : '—'} · {it?.format_basis}</span>
+              {it?.proposal && <span className="sm">Proposta: <b>#{it.proposal.number} {it.proposal.title}</b> (primeiro conteúdo livre do mesmo formato no mês, em ordem)</span>}
+              {canLink ? (
+                <div className="row wrap gap-2">
+                  <select className="select" style={{ maxWidth: 380 }} value={pick || it?.proposal?.id || ''} onChange={(e) => setPick(e.target.value)}>
+                    <option value="">Escolha o conteúdo…</option>
+                    {(it?.candidates || []).map((c) => <option key={c.id} value={c.id}>#{c.number} {c.title}</option>)}
+                  </select>
+                  <Button size="sm" variant="primary" disabled={!(pick || it?.proposal)} onClick={link}>Vincular</Button>
+                </div>
+              ) : <span className="xs muted">Vincular exige permissão de editar conteúdos.</span>}
+              {!it?.candidates?.length && <span className="xs muted">Nenhum conteúdo livre deste formato no mês. Crie um conteúdo no dia (botão “+”) e vincule depois.</span>}
+            </>
+          )}
+        </div>
+      </div>
+    </Drawer>
   );
 }
 
@@ -226,21 +282,47 @@ function Month({ month, setMonth, items, clientId }) {
   );
 }
 
-// Prévia do feed: o que já tem data, do mais novo para o mais antigo (como no perfil); sem arte, mostra o formato
+// FEED PARA APROVAÇÃO (visão interna): os MESMOS conteúdos do calendário, na ordem do perfil, com mídia, legenda da versão atual,
+// comentários, versão e situação da aprovação. A aprovação formal acontece no portal do cliente (coração na versão).
 function Feed({ items }) {
   const dated = items.filter((i) => i.date && i.format !== 'stories').sort((a, b) => b.date.localeCompare(a.date));
+  const [mode, setMode] = useState('lista');
   if (!dated.length) return <Empty title="Nada com data para montar o feed.">O feed usa a data publicada, agendada ou prevista. Stories ficam fora.</Empty>;
+  const status = (i) => (i.approved ? ['ativo', 'Aprovado pelo cliente'] : i.stage === 'aprovacao_cliente' ? ['aguardando_decisao', 'Aguardando o cliente'] : i.deps.approval_missing ? ['erro', 'Aprovação não registrada'] : ['dados_insuficientes', i.stage_label]);
   return (
     <>
-      <p className="xs muted">Ordem do perfil: do mais recente para o mais antigo. Quadros sem imagem ainda não têm arte enviada na plataforma.</p>
-      <div className="ed-feed">
-        {dated.map((i) => (
-          <Link key={i.id} to={`/conteudos/${i.id}`} className={`ed-tile p-${i.phase}`} title={`#${i.number} ${i.title}`}>
-            {i.thumb ? <img src={i.thumb} alt="" loading="lazy" /> : <span className="ph"><b>{FORMATS[i.format] || i.format}</b><small>{i.title}</small></span>}
-            <span className="badge">{fmtDate(i.date)} · {i.date_kind === 'publicado' ? 'publicado' : i.date_kind === 'agendado' ? 'agendado' : i.approved ? 'aprovado' : 'previsto'}</span>
-          </Link>
-        ))}
+      <div className="row between wrap gap-2 mb-4">
+        <p className="xs muted" style={{ margin: 0 }}>Mesmos registros do calendário, do mais recente para o mais antigo. O cliente aprova no portal (coração na versão); pedido de alteração depois de aprovado abre ajuste e a nova versão volta para aprovação.</p>
+        <Seg value={mode} onChange={setMode} options={[{ value: 'grade', label: 'Grade' }, { value: 'lista', label: 'Um por um' }]} />
       </div>
+      {mode === 'grade' ? (
+        <div className="ed-feed">
+          {dated.map((i) => (
+            <Link key={i.id} to={`/conteudos/${i.id}`} className={`ed-tile p-${i.phase}`} title={`#${i.number} ${i.title}`}>
+              {i.thumb ? <img src={i.thumb} alt="" loading="lazy" /> : <span className="ph"><b>{FORMATS[i.format] || i.format}</b><small>{i.title}</small></span>}
+              <span className="badge">{fmtDate(i.date)} · {i.approved ? 'aprovado' : i.date_kind === 'publicado' ? 'publicado' : i.date_kind === 'agendado' ? 'agendado' : 'previsto'}</span>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="fd-list">{dated.map((i) => { const [tone, label] = status(i); return (
+          <article key={i.id} className="fd-post">
+            <div className="fd-media">{i.thumb ? <img src={i.thumb} alt="" loading="lazy" /> : <span className="ph"><b>{FORMATS[i.format] || i.format}</b><small>Sem arte enviada na plataforma</small></span>}</div>
+            <div className="fd-side">
+              <div className="row between wrap gap-2"><span className="caps">{FORMATS[i.format] || i.format} · {fmtDate(i.date)}</span><StateTag s={tone}>{label}</StateTag></div>
+              <h4 className="fd-t">#{i.number} {i.title}</h4>
+              <div className="fd-cap">{i.current?.caption ? i.current.caption : <span className="faint">Sem legenda na versão atual.</span>}</div>
+              <div className="row wrap gap-3 xs muted">
+                <span>{i.current ? `V${i.current.number}${i.current.locked ? ' · enviada' : ' · rascunho'}` : 'Ainda sem versão'}</span>
+                <span>💬 {i.comments_n} comentário(s)</span>
+                {i.open_adjustments > 0 && <span>{i.open_adjustments} ajuste(s) aberto(s)</span>}
+                {i.notion_link && <span>Notion ↔ vinculado</span>}
+              </div>
+              <div className="row wrap gap-2"><Link className="btn btn-sm" to={`/conteudos/${i.id}`}>Abrir ficha completa</Link></div>
+            </div>
+          </article>
+        ); })}</div>
+      )}
     </>
   );
 }

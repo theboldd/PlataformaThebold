@@ -1,5 +1,25 @@
 # THE BOLD OS — Checklist oficial de conferência
 
+## Revisão 4.2 · 22/10/2026 — ficha do conteúdo, aprovações separadas, vínculo com o CR Editorial e feed
+
+| O que | Onde | Estado |
+|---|---|---|
+| **Ficha do conteúdo:** data, tipo, estratégia, objetivo, referência; responsáveis por função (geral, estrategista, copywriter, designer, editor de vídeo, aprovador) | Conteúdo → Ficha (topo da página) | 🟢 |
+| **Etapas de aprovação separadas:** tema, texto/roteiro, legenda, arte, revisão interna e aprovação formal do cliente. “Pedir ajuste” exige nota; alteração depois de aprovado volta para ajuste e a nova versão passa por nova aprovação. Checks do Notion aparecem como informativos e nunca valem como aprovação | Conteúdo → Ficha → Etapas de aprovação | 🟢 |
+| **Corpo por formato:** Carrossel = capa + cards; Reels = roteiro; Estático/Foto = briefing; + referências e bloco livre, na ordem, com edição | Conteúdo → Ficha → Corpo do conteúdo | 🟢 |
+| **Vincular card do CR Editorial:** clicar no card “Notion” abre as propriedades reais e propõe o conteúdo do mesmo formato no mês; “Vincular” copia tema, data, objetivo, referência, estratégia e legenda; guarda os valores anteriores; “desvincular” (com motivo) restaura | Cliente → Calendário editorial → card Notion | 🟢 |
+| **VER FEED PARA APROVAÇÃO:** grade ou um por um, com mídia, legenda, comentários, versão e ação, usando os mesmos registros | Cliente → Calendário editorial | 🟢 |
+| Portal do cliente | Só vê a etapa “cliente”, versões e comentários marcados “cliente vê” — nada interno | 🟢 |
+
+**Campos sem mapeamento / pendências (honesto):**
+- 🔵 **Corpo do card do Notion** (CAPA, CARD 2…6, links do Pinterest): a extração de 21/10 não trouxe o corpo das páginas → “AGUARDANDO SINCRONIZAÇÃO COM O NOTION”. Depende do `NOTION_TOKEN`.
+- ⚪ **Pessoas do Notion** (👤 Responsável Geral, Estrategista, Copywriter, Designer, Editor de Vídeo) vêm como IDs do Notion → “aguardando mapeamento” para usuários da plataforma.
+- 🟡 **Tipo** está vazio na maioria dos cards do CR: o formato é proposto pelo prefixo do título (“proposta — confira”).
+- 🟡 **“Responsável pela aprovação” e aprovação de texto** não existem no schema do CR Editorial: são campos só da plataforma.
+- ⚪ Sincronização viva aguarda as 4 decisões (mapa, write-back, token, hospedagem persistente). Nenhum vínculo foi feito na base real — só na cópia de auditoria.
+
+---
+
 ## Revisão 4.1 · 22/10/2026 — calendário editorial como no Notion, agenda com permissão e demandas por pessoa
 
 | O que | Onde | Estado |

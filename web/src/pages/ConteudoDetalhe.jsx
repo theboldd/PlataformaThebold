@@ -8,6 +8,7 @@ import { MediaView } from '../components/MediaView.jsx';
 import { I } from '../components/Icons.jsx';
 import { fmtDate, fmtDateTime, ago, cleanName, bytes } from '../lib/format.js';
 import { FUNCTIONS, PRIORITY } from '../lib/status.js';
+import FichaConteudo from './production/Ficha.jsx';
 import { AdjustModal } from './production/AdjustModal.jsx';
 import { VersionChips, CompareVersions, versionStatusLabel } from './production/Versions.jsx';
 import { Comments } from './production/Comments.jsx';
@@ -42,6 +43,7 @@ function NowStrip({ c, stage, tasks, na, me, availableAt }) {
 export default function ConteudoDetalhe() {
   const { id } = useParams();
   const { data, error, loading, reload } = useApi(`/contents/${id}`, [id]);
+  const { data: team } = useApi('/users/directory', [], { live: false });
   const auth = useAuth();
   const toast = useToast();
   const nav = useNavigate();
@@ -92,6 +94,7 @@ export default function ConteudoDetalhe() {
       </header>
 
       <NowStrip c={c} stage={stage} tasks={tasks} na={na} me={auth.user.id} availableAt={data.available_at} />
+      <FichaConteudo contentId={c.id} people={team || []} />
 
       <div className="next-action mb-5">
         <div className="caps">Próxima ação</div>
