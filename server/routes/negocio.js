@@ -77,6 +77,36 @@ negocio.post('/negocio/repasses/ajustes/:id/revogar', ...guard, requirePerm('rep
   log({ actor: req.user.id, action: 'repasse.ajuste_revogado', entity: 'payout_adjustment', id: a.id, summary: `Ajuste de repasse revogado: R$ ${a.amount} — ${a.reason}`, before: JSON.stringify(a) });
   res.json({ ok: true });
 });
+// Demandas lançadas à mão por pessoa (botão "Adicionar demanda"): pessoa, função, cliente, quantidade, valor
+const MAN_STATUS = ['concluido', 'previsto', 'nao_realizado', 'cancelado'];
+const MAN_MOTIVO = ['cliente', 'processo', 'escopo', 'sem_motivo', 'outros'];
+negocio.post('/negocio/repasses/demandas', ...guard, requirePerm('repasses', 'edit'), (req, res) => {
+  const b = req.body || {};
+  if (!N.validMonth(b.competencia)) throw new HttpError(422, 'Competência inválida.');
+  if (N.closingOf(b.competencia)?.status === 'fechado') throw new HttpError(409, 'Competência fechada: reabra antes de adicionar demanda.');
+  if (!b.user_id || !one("SELECT 1 FROM users WHERE id=? AND role_key<>'cliente'", b.user_id)) throw new HttpError(422, 'Escolha a pessoa da equipe.');
+  if (!b.description?.trim()) throw new HttpError(422, 'Descreva a demanda.');
+  const qty = Number(b.quantity);
+  if (!Number.isInteger(qty) || qty < 1 || qty > 999) throw new HttpError(422, 'Quantidade: número inteiro de 1 a 999.');
+  const unit = b.unit_value === '' || b.unit_value == null ? null : Number(b.unit_value);
+  if (unit != null && !(unit >= 0)) throw new HttpError(422, 'Valor unitário inválido.');
+  const status = MAN_STATUS.includes(b.status) ? b.status : 'concluido';
+  if (status === 'nao_realizado' && !MAN_MOTIVO.includes(b.motivo)) throw new HttpError(422, 'Informe o motivo da não execução.');
+  if (b.client_id && !one("SELECT 1 FROM clients WHERE id=? AND kind<>'interno'", b.client_id)) throw new HttpError(422, 'Cliente inválido.');
+  const m = insert('payout_manual_items', { id: uid('pm_'), competencia: b.competencia, user_id: b.user_id, function: b.function || null, client_id: b.client_id || null, description: b.description.trim(),
+    quantity: qty, unit_value: unit, status, motivo: status === 'nao_realizado' ? b.motivo : status === 'cancelado' ? 'escopo' : null, note: b.note?.trim() || null, created_by: req.user.id, created_at: now() });
+  log({ actor: req.user.id, action: 'repasse.demanda_manual', entity: 'payout_manual_item', id: m.id, client: m.client_id, summary: `Demanda adicionada em ${m.competencia}: ${qty}× ${m.description}${unit != null ? ` (R$ ${unit} cada)` : ''}`, after: JSON.stringify(m) });
+  res.json(m);
+});
+negocio.post('/negocio/repasses/demandas/:id/revogar', ...guard, requirePerm('repasses', 'edit'), (req, res) => {
+  const m = one('SELECT * FROM payout_manual_items WHERE id=?', req.params.id);
+  if (!m || m.revoked_at) throw new HttpError(404, 'Demanda não encontrada.');
+  if (N.closingOf(m.competencia)?.status === 'fechado') throw new HttpError(409, 'Competência fechada: reabra antes.');
+  if (!req.body?.note?.trim()) throw new HttpError(422, 'Informe o motivo da remoção.');
+  update('payout_manual_items', { id: m.id }, { revoked_at: now(), revoked_by: req.user.id });
+  log({ actor: req.user.id, action: 'repasse.demanda_removida', entity: 'payout_manual_item', id: m.id, client: m.client_id, summary: `Demanda removida da apuração ${m.competencia}: ${m.quantity}× ${m.description} — ${req.body.note.trim()}`, before: JSON.stringify(m) });
+  res.json({ ok: true });
+});
 negocio.post('/negocio/repasses/:ym/status', ...guard, requirePerm('repasses', 'edit'), async (req, res) => {
   res.json(await N.moveClosing(req.params.ym, req.body?.to, req.user, { canApprove: can(req.user, 'repasses', 'approve'), note: req.body?.note }));
 });

@@ -1,8 +1,9 @@
-// CALENDÁRIO EDITORIAL do cliente: fases (planejado → publicado), mês e prévia do feed.
+// CALENDÁRIO EDITORIAL do cliente: calendário (como no Notion), fases (planejado → publicado), mês compacto e prévia do feed.
 // Opera sobre os conteúdos da plataforma; o que veio do Notion aparece marcado, com a origem da data.
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useApi } from '../../lib/hooks.js';
+import { useApi, useToast } from '../../lib/hooks.js';
+import { api } from '../../lib/api.js';
 import { useUrlState } from '../../lib/nav.jsx';
 import { Seg, Loading, ErrorBox, Empty } from '../../components/ui.jsx';
 import { fmtDate, fmtMonth } from '../../lib/format.js';
@@ -18,15 +19,14 @@ const TZ = 'America/Sao_Paulo';
 const dayKey = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: TZ });
 
 export default function Editorial({ clientId }) {
-  const { data, error, loading } = useApi(`/clients/${clientId}/editorial`, [clientId]);
-  const [view, setView] = useUrlState('ed', 'fases');
+  const { data, error, loading, reload } = useApi(`/clients/${clientId}/editorial`, [clientId]);
+  const [view, setView] = useUrlState('ed', 'calendario');
   const [flag, setFlag] = useUrlState('so', '');
   const [month, setMonth] = useUrlState('mes', '');
   const items = useMemo(() => (data?.items || []).filter((i) => !flag || FLAGS.find((f) => f[0] === flag)?.[2](i)), [data, flag]);
   if (error) return <ErrorBox error={error} />;
   if (loading || !data) return <Loading rows={6} />;
   const k = data.counts;
-  if (!k.total) return <Empty title="Nenhum conteúdo ainda.">Os conteúdos criados no cronograma aparecem aqui por fase, por data e na prévia do feed.</Empty>;
   const m = month || data.months.find((x) => x >= new Date().toISOString().slice(0, 7)) || data.months[data.months.length - 1] || new Date().toISOString().slice(0, 7);
 
   return (
@@ -41,7 +41,7 @@ export default function Editorial({ clientId }) {
         {k.cancelados > 0 && <span className="muted">{k.cancelados} cancelado(s) fora da lista</span>}
       </div>
       <div className="ed-bar">
-        <Seg label="Visualização" value={view} onChange={setView} options={[{ value: 'fases', label: 'Fases' }, { value: 'mes', label: 'Mês' }, { value: 'feed', label: 'Prévia do feed' }, { value: 'notion', label: 'Histórico do Notion' }]} />
+        <Seg label="Visualização" value={view} onChange={setView} options={[{ value: 'calendario', label: 'Calendário' }, { value: 'fases', label: 'Fases' }, { value: 'mes', label: 'Mês (compacto)' }, { value: 'feed', label: 'Prévia do feed' }, { value: 'notion', label: 'Histórico do Notion' }]} />
         <div className="ed-flags" role="group" aria-label="Filtrar">
           {FLAGS.map(([key, label, f]) => {
             const n = (data.items || []).filter(f).length;
@@ -50,11 +50,105 @@ export default function Editorial({ clientId }) {
           })}
         </div>
       </div>
+      {view === 'calendario' && <NotionCalendar month={m} setMonth={setMonth} items={items.filter((i) => i.phase !== 'legado')} clientId={clientId} can={data.can || {}} onChanged={reload} />}
       {view === 'fases' && <Phases phases={data.phases} items={items} />}
       {/* legado não validado não é conteúdo operacional: só aparece no grupo próprio em Fases */}
       {view === 'mes' && <Month month={m} setMonth={setMonth} items={items.filter((i) => i.phase !== 'legado')} clientId={clientId} />}
       {view === 'feed' && <Feed items={items.filter((i) => i.phase !== 'legado')} />}
       {view === 'notion' && <NotionHistory clientId={clientId} />}
+    </div>
+  );
+}
+
+// ═════ CALENDÁRIO EDITORIAL (como no Notion): mês, domingo a sábado, um cartão por post com o formato no título,
+// as marcas (ex.: ENVIAR MATERIAL) e os checks APROVAÇÃO ARTE / LEGENDA / TEMA — marcados só quando há registro na plataforma.
+// O CR EDITORIAL do Notion pode aparecer junto, como histórico somente leitura (marcado "Notion"), sem virar operação.
+const FMT_UP = { reel: 'REELS', video: 'VÍDEO', carrossel: 'CARROSSEL', estatico: 'ÚNICO', foto: 'FOTO', stories: 'STORIES' };
+const startsWithFormat = (t) => /^(REELS?|CARROSS+EL|ÚNICO|UNICO|ESTÁTICO|FOTO|STORIES|VÍDEO)\b/i.test(t || '');
+const RED_TAGS = ['ENVIAR MATERIAL', 'REELS SEM CAPA', 'AGUARDANDO MATERIAL'];
+function Check({ on, label, title }) {
+  return <div className={`nc-check ${on ? 'on' : ''}`} title={title}><span className="box" aria-hidden>{on ? '✓' : ''}</span>{label}</div>;
+}
+function NotionCalendar({ month, setMonth, items, clientId, can, onChanged }) {
+  const toast = useToast();
+  const [showNotion, setShowNotion] = useUrlState('notion', '1');
+  const hist = useApi(showNotion === '1' ? `/clients/${clientId}/notion-history` : null, [clientId, showNotion], { live: false });
+  const [drag, setDrag] = useState(null);
+  const [over, setOver] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const first = new Date(`${month}-01T12:00:00Z`);
+  const start = new Date(first); start.setUTCDate(1 - first.getUTCDay());
+  const days = Array.from({ length: 42 }, (_, n) => { const d = new Date(start); d.setUTCDate(start.getUTCDate() + n); return d.toISOString().slice(0, 10); });
+  const lastWeekUsed = days.slice(35).some((k) => k.slice(0, 7) === month) ? 42 : 35;
+  const byDay = {};
+  for (const i of items.filter((x) => x.date)) (byDay[dayKey(i.date)] ||= []).push({ kind: 'p', i });
+  const crRows = (hist.data?.items || []).filter((r) => r.date_start);
+  for (const r of crRows) (byDay[r.date_start.slice(0, 10)] ||= []).push({ kind: 'n', r });
+  const undated = items.filter((i) => !i.date);
+  const step = (n) => { const d = new Date(`${month}-15T12:00:00Z`); d.setUTCMonth(d.getUTCMonth() + n); setMonth(d.toISOString().slice(0, 7)); };
+  const today = new Date().toISOString().slice(0, 10);
+  const movable = (i) => can.edit && !['agendado', 'publicado'].includes(i.stage) && !i.migrated_locked;
+  const drop = async (day) => {
+    const i = drag; setDrag(null); setOver(null);
+    if (!i || dayKey(i.date || '') === day) return;
+    if (!confirm(`Mudar “${i.title}” para ${day.split('-').reverse().join('/')}? Fica registrado no histórico do conteúdo.`)) return;
+    setBusy(true);
+    try { await api.patch(`/contents/${i.id}`, { planned_at: `${day}T15:00:00.000Z` }); toast('Data alterada e registrada no histórico.'); onChanged(); }
+    catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
+  };
+  const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  return (
+    <div className={`nc ${busy ? 'busy' : ''}`}>
+      <div className="nc-bar">
+        <h3 className="nc-title">CR EDITORIAL</h3>
+        <div className="row wrap gap-2" style={{ alignItems: 'center' }}>
+          <label className="check xs"><input type="checkbox" checked={showNotion === '1'} onChange={(e) => setShowNotion(e.target.checked ? '1' : '0')} /> Mostrar o CR Editorial do Notion (somente leitura)</label>
+          {can.create && <Link className="btn btn-sm btn-primary" to={`/conteudos/novo?client_id=${clientId}`}>Novo</Link>}
+        </div>
+      </div>
+      <div className="nc-nav">
+        <b>{MONTHS[Number(month.slice(5)) - 1]} {month.slice(0, 4)}</b>
+        <div className="row gap-2"><button className="btn btn-sm btn-ghost" onClick={() => step(-1)} aria-label="Mês anterior">‹</button><button className="btn btn-sm btn-ghost" onClick={() => setMonth(today.slice(0, 7))}>Hoje</button><button className="btn btn-sm btn-ghost" onClick={() => step(1)} aria-label="Próximo mês">›</button></div>
+      </div>
+      <div className="nc-grid" role="grid" aria-label={`Calendário editorial de ${month}`}>
+        {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((d) => <div key={d} className="nc-dow">{d}</div>)}
+        {days.slice(0, lastWeekUsed).map((k) => (
+          <div key={k} role="gridcell" className={`nc-day ${k.slice(0, 7) !== month ? 'out' : ''} ${k === today ? 'today' : ''} ${over === k ? 'over' : ''}`}
+            onDragOver={(e) => { if (drag) { e.preventDefault(); setOver(k); } }} onDragLeave={() => setOver(null)} onDrop={(e) => { e.preventDefault(); drop(k); }}>
+            <div className="nc-dn">{can.create && <Link className="nc-add" to={`/conteudos/novo?client_id=${clientId}&data=${k}`} title="Novo conteúdo neste dia" aria-label={`Novo conteúdo em ${k}`}>+</Link>}<span>{k.slice(8) === '01' ? `${['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][Number(k.slice(5, 7)) - 1]} 1` : Number(k.slice(8))}</span></div>
+            {(byDay[k] || []).map((e) => (e.kind === 'p' ? (
+              <Link key={e.i.id} to={`/conteudos/${e.i.id}`} className={`nc-card p-${e.i.phase}`} draggable={movable(e.i)} onDragStart={() => setDrag(e.i)} onDragEnd={() => { setDrag(null); setOver(null); }}
+                title={`#${e.i.number} ${e.i.title} — ${e.i.stage_label}${movable(e.i) ? ' · arraste para mudar a data' : ''}`}>
+                <div className="nc-card-t"><span className="nc-ico" aria-hidden>▤</span><b>{startsWithFormat(e.i.title) ? e.i.title : `${FMT_UP[e.i.format] || (e.i.format || '').toUpperCase()}: ${e.i.title}`}</b>{e.i.comments_n > 0 && <span className="nc-cm">💬 {e.i.comments_n}</span>}</div>
+                <div className="nc-tags">
+                  {e.i.deps.material?.startsWith('aguardando') && <span className="nc-tag red">ENVIAR MATERIAL</span>}
+                  {e.i.deps.blocked && !e.i.deps.material && <span className="nc-tag red">BLOQUEADO</span>}
+                  {e.i.migrated && <span className="nc-tag">MIGRADO</span>}
+                  <span className="nc-tag soft">{e.i.stage_label}</span>
+                </div>
+                <Check on={e.i.checks?.arte?.ok} label="APROVAÇÃO ARTE" title={e.i.checks?.arte?.ok ? `Aprovada pelo cliente (${e.i.checks.arte.note}) · ${e.i.checks.arte.by}` : 'Sem registro de aprovação na plataforma'} />
+                <Check on={e.i.checks?.legenda?.ok} label="APROVAÇÃO LEGENDA" title={e.i.checks?.legenda?.ok ? `Aprovada pelo cliente (${e.i.checks.legenda.note}) · ${e.i.checks.legenda.by}` : 'Sem registro de aprovação na plataforma'} />
+                <Check on={e.i.checks?.tema?.ok} label="APROVAÇÃO TEMA" title={e.i.checks?.tema?.ok ? `Tema aprovado · ${e.i.checks.tema.by}` : 'Sem registro de aprovação do tema na plataforma'} />
+              </Link>
+            ) : (
+              <a key={e.r.id} href={e.r.notion_url || undefined} target="_blank" rel="noreferrer" className="nc-card notion" title="CR Editorial do Notion — histórico somente leitura">
+                <div className="nc-card-t"><span className="nc-ico" aria-hidden>▤</span><b>{e.r.title || 'Sem título'}</b></div>
+                <div className="nc-tags"><span className="nc-src">Notion</span>{[].concat(e.r.properties['ESTRATÉGIA'] || []).filter((t) => typeof t === 'string').map((t) => <span key={t} className={`nc-tag ${RED_TAGS.includes(t.toUpperCase()) ? 'red' : 'soft'}`}>{t}</span>)}</div>
+                {['APROVAÇÃO ARTE', 'APROVAÇÃO LEGENDA', 'APROVAÇÃO TEMA'].filter((key) => key in e.r.properties || (key === 'APROVAÇÃO ARTE' && 'APRO ARTE/REELS' in e.r.properties)).map((key) => <Check key={key} on={!!(e.r.properties[key] ?? e.r.properties['APRO ARTE/REELS'])} label={key} title="Marcação feita no Notion (até a extração)" />)}
+              </a>
+            )))}
+          </div>
+        ))}
+      </div>
+      <p className="xs muted mt-2">Checks da plataforma só aparecem marcados com registro: tema = aprovação do tema; arte e legenda = versão aprovada pelo cliente. Cartões “Notion” são o CR Editorial importado (extração de {hist.data?.extracted_at ? fmtDate(hist.data.extracted_at) : '—'}), somente leitura.{can.edit ? ' Arraste um cartão da plataforma (ou um “sem data”) para mudar a data.' : ''}</p>
+      {undated.length > 0 && (
+        <section className="nc-undated">
+          <h3 className="caps">Sem data ({undated.length})</h3>
+          <div className="nc-undated-list">{undated.slice(0, 80).map((i) => (
+            <Link key={i.id} to={`/conteudos/${i.id}`} className="nc-chip" draggable={movable(i)} onDragStart={() => setDrag(i)} onDragEnd={() => { setDrag(null); setOver(null); }} title={movable(i) ? 'Arraste para um dia do calendário' : i.stage_label}>{startsWithFormat(i.title) ? i.title : `${FMT_UP[i.format] || i.format}: ${i.title}`}</Link>
+          ))}</div>
+        </section>
+      )}
     </div>
   );
 }

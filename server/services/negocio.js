@@ -177,6 +177,7 @@ export async function invoiceAction(id, action, body, actor) {
 // ═════════════ PRODUÇÃO & REPASSES ═════════════
 export const EXEC = { concluido: 'Concluído', nao_realizado_cliente: 'Não realizado · aguardando cliente/material', nao_realizado_sem_motivo: 'Não realizado · sem motivo registrado', bloqueado: 'Bloqueado', cancelado: 'Cancelado', em_andamento: 'Em andamento', agendado: 'Agendado (etapa ainda não abriu)' };
 export const MOTIVO = { nao_realizado_cliente: 'cliente', bloqueado: 'processo', nao_realizado_sem_motivo: 'sem_motivo', cancelado: 'escopo' };
+const qsum = (ls) => ls.reduce((n, l) => n + (l.qty || 1), 0);
 const specificity = (r) => ['user_id', 'function', 'task_kind', 'client_id'].filter((k) => r[k]).length;
 export function rateFor(t, at, rates) {
   const ok = rates.filter((r) => r.active && (!r.user_id || r.user_id === t.user_id) && (!r.function || r.function === t.function) && (!r.task_kind || r.task_kind === t.kind)
@@ -202,26 +203,40 @@ export function apuracao(ym) {
       : t.blocked && t.waiting_on === 'cliente' ? 'nao_realizado_cliente' : t.blocked ? 'bloqueado' : t.due_at < nowIso ? 'nao_realizado_sem_motivo' : 'em_andamento';
     const conta = exec === 'concluido' || (MOTIVO[exec] && counted.includes(MOTIVO[exec]));
     const r = conta ? rateFor(t, (t.completed_at || t.due_at || s).slice(0, 10), rates) : null;
-    return { ...t, exec, exec_label: EXEC[exec], motivo: MOTIVO[exec] || null, reprogramado: reprog.has(t.id), conta, rate_id: r?.id || null, value: conta ? (r ? r.value : null) : 0 };
+    return { ...t, qty: 1, origem: 'processo', exec, exec_label: EXEC[exec], motivo: MOTIVO[exec] || null, reprogramado: reprog.has(t.id), conta, rate_id: r?.id || null, value: conta ? (r ? r.value : null) : 0 };
   });
+  // Demandas lançadas à mão (botão "Adicionar demanda"): mesma regra de contagem; valor informado ou o da regra cadastrada × quantidade
+  const MAN_EXEC = (m) => (m.status === 'concluido' ? 'concluido' : m.status === 'cancelado' ? 'cancelado' : m.status === 'previsto' ? 'em_andamento'
+    : m.motivo === 'cliente' ? 'nao_realizado_cliente' : m.motivo === 'processo' ? 'bloqueado' : 'nao_realizado_sem_motivo');
+  for (const m of all(`SELECT m.*, u.name user_name, cl.name client_name FROM payout_manual_items m JOIN users u ON u.id=m.user_id LEFT JOIN clients cl ON cl.id=m.client_id
+      WHERE m.competencia=? AND m.revoked_at IS NULL ORDER BY u.name, m.created_at`, ym)) {
+    const exec = MAN_EXEC(m);
+    const conta = exec === 'concluido' || (MOTIVO[exec] && counted.includes(MOTIVO[exec]));
+    const r = conta && m.unit_value == null ? rateFor({ ...m, kind: 'manual' }, `${ym}-15`, rates) : null;
+    const unit = m.unit_value != null ? m.unit_value : r ? r.value : null;
+    lines.push({ id: m.id, title: m.description, kind: 'manual', function: m.function, status: m.status, due_at: null, completed_at: null, client_id: m.client_id, user_id: m.user_id, user_name: m.user_name, client_name: m.client_name,
+      qty: m.quantity, unit_value: unit, value_source: m.unit_value != null ? 'informado' : r ? 'regra' : null, origem: 'manual', note: m.note, created_at: m.created_at,
+      exec, exec_label: EXEC[exec], motivo: exec === 'concluido' ? null : (m.motivo || MOTIVO[exec] || null), reprogramado: false, conta, rate_id: r?.id || null, value: conta ? (unit == null ? null : unit * m.quantity) : 0 });
+  }
   const adj = all('SELECT a.*, u.name user_name FROM payout_adjustments a JOIN users u ON u.id=a.user_id WHERE a.competencia=? AND a.revoked_at IS NULL', ym);
   const people = {};
   for (const l of lines) {
     const p = (people[l.user_id] ||= { user_id: l.user_id, name: l.user_name, previstas: 0, concluidas: 0, nao_realizadas: 0, bloqueadas: 0, canceladas: 0, contabilizadas: 0, pendentes_regra: 0, valor_apurado: 0, ajustes: 0 });
-    p.previstas++;
-    if (l.exec === 'concluido') p.concluidas++;
-    if (l.exec.startsWith('nao_realizado')) p.nao_realizadas++;
-    if (l.exec === 'bloqueado') p.bloqueadas++;
-    if (l.exec === 'cancelado') p.canceladas++;
-    if (l.conta) { p.contabilizadas++; if (l.value == null) p.pendentes_regra++; else p.valor_apurado += l.value; }
+    const q = l.qty || 1;
+    p.previstas += q;
+    if (l.exec === 'concluido') p.concluidas += q;
+    if (l.exec.startsWith('nao_realizado')) p.nao_realizadas += q;
+    if (l.exec === 'bloqueado') p.bloqueadas += q;
+    if (l.exec === 'cancelado') p.canceladas += q;
+    if (l.conta) { p.contabilizadas += q; if (l.value == null) p.pendentes_regra += q; else p.valor_apurado += l.value; }
   }
   for (const a of adj) (people[a.user_id] ||= { user_id: a.user_id, name: a.user_name, previstas: 0, concluidas: 0, nao_realizadas: 0, bloqueadas: 0, canceladas: 0, contabilizadas: 0, pendentes_regra: 0, valor_apurado: 0, ajustes: 0 }).ajustes += a.amount;
   const list = Object.values(people).map((p) => ({ ...p, valor_final: p.pendentes_regra ? null : p.valor_apurado + p.ajustes })).sort((a, b) => String(a.name).localeCompare(String(b.name)));
-  const motivos = lines.filter((l) => l.exec !== 'concluido' && l.exec !== 'em_andamento' && l.exec !== 'agendado').reduce((m, l) => ((m[l.motivo || 'outros'] = (m[l.motivo || 'outros'] || 0) + 1), m), {});
+  const motivos = lines.filter((l) => l.exec !== 'concluido' && l.exec !== 'em_andamento' && l.exec !== 'agendado').reduce((m, l) => ((m[l.motivo || 'outros'] = (m[l.motivo || 'outros'] || 0) + (l.qty || 1)), m), {});
   return {
     competencia: ym, lines, people: list, adjustments: adj, motivos,
-    totals: { previstas: lines.length, concluidas: lines.filter((l) => l.exec === 'concluido').length, contabilizadas: lines.filter((l) => l.conta).length, excluidas: lines.filter((l) => !l.conta).length,
-      pendentes_regra: lines.filter((l) => l.conta && l.value == null).length, valor_apurado: lines.reduce((s2, l) => s2 + (l.value || 0), 0), ajustes: adj.reduce((s2, a) => s2 + a.amount, 0) },
+    totals: { previstas: qsum(lines), concluidas: qsum(lines.filter((l) => l.exec === 'concluido')), contabilizadas: qsum(lines.filter((l) => l.conta)), excluidas: qsum(lines.filter((l) => !l.conta)),
+      pendentes_regra: qsum(lines.filter((l) => l.conta && l.value == null)), valor_apurado: lines.reduce((s2, l) => s2 + (l.value || 0), 0), ajustes: adj.reduce((s2, a) => s2 + a.amount, 0) },
     has_rates: rates.some((r) => r.active),
   };
 }
@@ -310,7 +325,8 @@ export function rentabilidade(ym) {
   const clients = all(`SELECT DISTINCT c.id, c.name FROM clients c WHERE ${external} AND (
       EXISTS (SELECT 1 FROM invoices i WHERE i.client_id=c.id AND substr(i.due_at,1,7)=?) OR EXISTS (SELECT 1 FROM finance_costs f WHERE f.client_id=c.id AND f.active=1)
       OR EXISTS (SELECT 1 FROM adjustments a JOIN contents ct ON ct.id=a.content_id WHERE ct.client_id=c.id AND ct.data_origin='plataforma' AND a.created_at >= ? AND a.created_at < ?)
-      OR EXISTS (SELECT 1 FROM tasks t WHERE t.client_id=c.id AND t.data_origin='plataforma' AND t.status='concluida' AND t.completed_at >= ? AND t.completed_at < ?)) ORDER BY c.name`, ym, s, e, s, e)
+      OR EXISTS (SELECT 1 FROM tasks t WHERE t.client_id=c.id AND t.data_origin='plataforma' AND t.status='concluida' AND t.completed_at >= ? AND t.completed_at < ?)
+      OR EXISTS (SELECT 1 FROM payout_manual_items m WHERE m.client_id=c.id AND m.competencia=? AND m.revoked_at IS NULL)) ORDER BY c.name`, ym, s, e, s, e, ym)
     .map((c) => {
       const r = revenueOf(ym, c.id);
       const direct = costs.filter((x) => x.client_id === c.id).reduce((s2, x) => s2 + x.amount, 0);
@@ -318,7 +334,7 @@ export function rentabilidade(ym) {
       const rep = cl.some((l) => l.value == null) ? null : cl.reduce((s2, l) => s2 + l.value, 0);
       const adjs = one(`SELECT SUM(a.origin='interno') i, SUM(a.origin='cliente') c FROM adjustments a JOIN contents ct ON ct.id=a.content_id WHERE ct.client_id=? AND ct.data_origin='plataforma' AND a.created_at >= ? AND a.created_at < ?`, c.id, s, e);
       const retrab = cl.filter((l) => l.kind === 'ajuste');
-      return { id: c.id, name: c.name, receita: r.faturado, recebido: r.recebido, custos_diretos: direct, repasses: rep, demandas: cl.length,
+      return { id: c.id, name: c.name, receita: r.faturado, recebido: r.recebido, custos_diretos: direct, repasses: rep, demandas: qsum(cl),
         ajustes_internos: adjs.i || 0, ajustes_cliente: adjs.c || 0, custo_retrabalho: retrab.some((l) => l.value == null) ? null : retrab.reduce((s2, l) => s2 + l.value, 0),
         margem: rep == null || !r.faturado ? null : r.faturado - direct - rep };
     });

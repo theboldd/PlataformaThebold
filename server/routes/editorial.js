@@ -4,7 +4,7 @@
 import { Router } from 'express';
 import { one, all, parseJSON } from '../db.js';
 import { requireInternal, requirePerm } from '../lib/auth.js';
-import { assertClient, HttpError } from '../lib/permissions.js';
+import { assertClient, HttpError, can } from '../lib/permissions.js';
 import { STAGES } from '../engine/process.js';
 import { contentCard } from './ops.js';
 
@@ -44,6 +44,16 @@ function item(c, user) {
       approval_missing: ['agendamento', 'agendado', 'publicado'].includes(c.stage) && !c.approved_version_id ? 'aprovação do cliente não registrada na plataforma' : null,
     },
     people: live.map((t) => ({ fn: t.function, name: t.name || 'sem responsável', scheduled: t.status === 'agendada' })),
+    // Checks do calendário (como no Notion), só com REGISTRO na plataforma (regra 14):
+    // tema = aprovação de tema registrada; arte e legenda = versão aprovada pelo cliente (a aprovação cobre arte + legenda daquela versão)
+    checks: (() => {
+      const tema = one("SELECT a.created_at, u.name FROM approvals a JOIN users u ON u.id=a.user_id WHERE a.content_id=? AND a.kind='tema' AND a.decision='aprovado' ORDER BY a.created_at DESC LIMIT 1", c.id);
+      const ver = c.approved_version_id ? one("SELECT a.created_at, u.name, v.number FROM approvals a JOIN users u ON u.id=a.user_id LEFT JOIN content_versions v ON v.id=a.version_id WHERE a.content_id=? AND a.kind='cliente' AND a.decision='aprovado' AND a.version_id=? ORDER BY a.created_at DESC LIMIT 1", c.id, c.approved_version_id) : null;
+      const rec = (r, extra = '') => (r ? { ok: true, by: r.name, at: r.created_at, note: extra } : { ok: false });
+      return { tema: rec(tema), arte: rec(ver, ver?.number ? `V${ver.number}` : ''), legenda: rec(ver, ver?.number ? `V${ver.number}` : '') };
+    })(),
+    comments_n: one('SELECT COUNT(*) n FROM comments WHERE content_id=?', c.id).n,
+    tags: parseJSON(c.strategy_tags, []),
     versions: one('SELECT COUNT(*) n FROM content_versions WHERE content_id=?', c.id).n,
     open_adjustments: one("SELECT COUNT(*) n FROM adjustments WHERE content_id=? AND status='aberto'", c.id).n,
   };
@@ -57,6 +67,7 @@ editorial.get('/clients/:id/editorial', requireInternal, requirePerm('conteudos'
   const items = rows.map((c) => item(c, req.user));
   const n = (f) => items.filter(f).length;
   res.json({
+    can: { create: can(req.user, 'conteudos', 'create'), edit: can(req.user, 'conteudos', 'edit') },
     client: cl, phases: PHASES.map(({ key, label, stages }) => ({ key, label, stages: stages.map((s) => ({ key: s, label: STAGES[s].label })), n: n((i) => i.phase === key) })),
     items,
     counts: {

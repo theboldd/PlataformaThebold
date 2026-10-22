@@ -19,7 +19,7 @@ export default function NovoConteudo() {
   const [params] = useSearchParams();
   const { data: clients } = useApi('/clients', [], { live: false });
   const canDirect = auth.can('conteudos', 'approve');
-  const [f, setF] = useState({ client_id: params.get('client_id') || '', format: 'carrossel', title: '', theme: '', objective: '', reference: '', briefing: '', internal_notes: '', planned_at: '', priority: 'media', strategy_tags: [], stage: 'cronograma', caption: '' });
+  const [f, setF] = useState({ client_id: params.get('client_id') || '', format: 'carrossel', title: '', theme: '', objective: '', reference: '', briefing: '', internal_notes: '', planned_at: params.get('data') ? `${params.get('data')}T12:00` : '', priority: 'media', strategy_tags: [], stage: 'cronograma', caption: '' });
   const [files, setFiles] = useState([]);
   const [deliver, setDeliver] = useState(false);
   const [busy, setBusy] = useState(false);

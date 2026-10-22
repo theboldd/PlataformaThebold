@@ -44,6 +44,7 @@ export default function Repasses() {
         </div>
         {data.can.edit && (
           <div className="row wrap gap-2">
+            {!data.frozen && <Button size="sm" variant="primary" onClick={() => setModal('demanda')}>+ Adicionar demanda</Button>}
             {nexts.filter((n) => !['aprovado', 'fechado', 'reaberto'].includes(n) || data.can.approve).map((n) => <Button key={n} size="sm" variant={n === 'fechado' || n === 'aprovado' ? 'primary' : 'ghost'} onClick={() => move(n)}>{status ? NEXT_LABEL[n] : 'Iniciar fechamento (rascunho)'}</Button>)}
             {cl && <Button size="sm" variant="ghost" onClick={async () => { const r = await api.post(`/negocio/repasses/${comp}/relatorio`); toast(r.sent ? 'Relatório enviado.' : `Relatório não enviado: ${r.error}`, r.sent ? 'ok' : 'err'); reload(); }}>Enviar relatório</Button>}
           </div>
@@ -79,9 +80,11 @@ export default function Repasses() {
         <Section title="Demandas da competência">
           {!a.lines.length ? <StatePanel compact s="dados_insuficientes" title="Nenhuma demanda." /> : (
             <div className="table-wrap"><table className="table">
-              <thead><tr><th>Demanda</th><th>Profissional</th><th>Cliente</th><th>Tipo</th><th>Prazo</th><th>Execução</th><th className="right">Valor</th></tr></thead>
-              <tbody>{a.lines.map((l) => <tr key={l.id}><td className="sm">{l.title}{l.reprogramado && <span className="tag tag-mig" style={{ marginLeft: 6 }}>Reprogramada</span>}</td><td className="sm">{l.user_name}</td><td className="sm">{cleanName(l.client_name || '—')}</td><td className="xs">{KINDS[l.kind] || l.kind} · {FUNCTIONS[l.function] || l.function || '—'}</td><td className="xs tnum">{l.due_at ? fmtDate(l.due_at) : '—'}</td>
-                <td className="xs">{l.exec_label}{l.exec === 'nao_realizado_cliente' && l.block_reason ? <div className="faint">{l.block_reason}</div> : null}</td><td className="right tnum">{!l.conta ? <span className="faint">fora</span> : l.value == null ? <StateTag s="aguardando_configuracao">sem regra</StateTag> : money(l.value)}</td></tr>)}</tbody>
+              <thead><tr><th>Demanda</th><th>Profissional</th><th>Cliente</th><th>Tipo · função</th><th className="num">Qtd.</th><th>Prazo</th><th>Execução</th><th className="right">Valor</th><th /></tr></thead>
+              <tbody>{a.lines.map((l) => <tr key={l.id}><td className="sm">{l.title}{l.origem === 'manual' && <span className="tag" style={{ marginLeft: 6 }}>Lançada à mão</span>}{l.reprogramado && <span className="tag tag-mig" style={{ marginLeft: 6 }}>Reprogramada</span>}{l.note && <div className="xs faint">{l.note}</div>}</td><td className="sm">{l.user_name}</td><td className="sm">{cleanName(l.client_name || '—')}</td><td className="xs">{KINDS[l.kind] || l.kind} · {FUNCTIONS[l.function] || l.function || '—'}</td><td className="num tnum">{l.qty || 1}</td><td className="xs tnum">{l.due_at ? fmtDate(l.due_at) : '—'}</td>
+                <td className="xs">{l.exec_label}{l.exec === 'nao_realizado_cliente' && l.block_reason ? <div className="faint">{l.block_reason}</div> : null}</td>
+                <td className="right tnum">{!l.conta ? <span className="faint">fora</span> : l.value == null ? <StateTag s="aguardando_configuracao">sem regra</StateTag> : <>{money(l.value)}{l.qty > 1 && l.unit_value != null && <div className="xs faint">{l.qty} × {money(l.unit_value)}{l.value_source === 'regra' ? ' (regra)' : ''}</div>}</>}</td>
+                <td className="right">{l.origem === 'manual' && data.can.edit && !data.frozen && <Button size="sm" variant="ghost" onClick={async () => { const note = prompt('Motivo para tirar esta demanda da apuração (fica no histórico):'); if (!note) return; try { await api.post(`/negocio/repasses/demandas/${l.id}/revogar`, { note }); toast('Demanda removida da apuração (registrada no histórico).'); reload(); } catch (e) { toast(e.message, 'err'); } }}>Remover</Button>}</td></tr>)}</tbody>
             </table></div>
           )}
         </Section>
@@ -141,6 +144,7 @@ export default function Repasses() {
       )}
 
       {modal === 'valor' && <RateModal data={data} onClose={() => setModal(null)} onDone={() => { setModal(null); toast('Valor cadastrado.'); reload(); }} />}
+      {modal === 'demanda' && <DemandModal data={data} comp={comp} onClose={() => setModal(null)} onDone={() => { setModal(null); setView('demandas'); toast('Demanda adicionada à apuração.'); reload(); }} />}
       {modal === 'ajuste' && <AdjModal data={data} comp={comp} onClose={() => setModal(null)} onDone={() => { setModal(null); toast('Ajuste lançado.'); reload(); }} />}
     </div>
   );
@@ -167,6 +171,38 @@ function RateModal({ data, onClose, onDone }) {
     </Modal>
   );
 }
+// ADICIONAR DEMANDA: pessoa da equipe, função, cliente (opcional), descrição, quantidade, valor unitário (vazio = valor da regra) e situação
+function DemandModal({ data, comp, onClose, onDone }) {
+  const toast = useToast();
+  const [f, setF] = useState({ user_id: '', function: '', client_id: '', description: '', quantity: 1, unit_value: '', status: 'concluido', motivo: '', note: '' });
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const person = data.people.find((p) => p.id === f.user_id);
+  const fns = (() => { try { return JSON.parse(person?.functions || '[]'); } catch { return []; } })();
+  const pickPerson = (e) => { const p = data.people.find((x) => x.id === e.target.value); let fn = ''; try { fn = JSON.parse(p?.functions || '[]')[0] || ''; } catch { /* sem função */ } setF({ ...f, user_id: e.target.value, function: fn }); };
+  const total = f.unit_value !== '' && Number(f.quantity) > 0 ? Number(f.unit_value) * Number(f.quantity) : null;
+  const submit = async () => { try { await api.post('/negocio/repasses/demandas', { ...f, competencia: comp, quantity: Number(f.quantity) }); onDone(); } catch (e) { toast(e.message, 'err'); } };
+  return (
+    <Modal open title={`Adicionar demanda · ${comp}`} onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" onClick={submit} disabled={!f.user_id || !f.description.trim()}>Adicionar</Button></>}>
+      <p className="xs muted" style={{ marginTop: 0 }}>Para o que não passa pelo processo (ex.: captação, edição avulsa, roteiro extra). Fica registrado quem lançou e quando; nada é apagado.</p>
+      <div className="grid-2 mt-4">
+        <Field label="Pessoa da equipe"><select className="select" value={f.user_id} onChange={pickPerson}><option value="">Selecione…</option>{data.people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
+        <Field label="Função"><select className="select" value={f.function} onChange={set('function')}><option value="">—</option>{[...new Set([...fns, ...Object.keys(FUNCTIONS)])].map((k) => <option key={k} value={k}>{FUNCTIONS[k] || k}{fns.includes(k) ? ' (função da pessoa)' : ''}</option>)}</select></Field>
+        <Field label="Cliente (opcional)"><select className="select" value={f.client_id} onChange={set('client_id')}><option value="">Sem cliente / interno da agência</option>{data.clients.map((c) => <option key={c.id} value={c.id}>{cleanName(c.name)}</option>)}</select></Field>
+        <Field label="Quantidade"><input className="input" type="number" min="1" max="999" value={f.quantity} onChange={set('quantity')} /></Field>
+      </div>
+      <div className="col gap-4 mt-4">
+        <Field label="Demanda (descrição)"><input className="input" value={f.description} onChange={set('description')} placeholder="Ex.: Carrossel extra · Captação de vídeo · Roteiro" /></Field>
+      </div>
+      <div className="grid-2 mt-4">
+        <Field label="Valor unitário (R$)" hint={f.unit_value === '' ? 'Vazio = usa o valor cadastrado em Valores (se houver).' : total != null ? `Total: ${money(total)}` : ''}><input className="input" type="number" min="0" step="0.01" value={f.unit_value} onChange={set('unit_value')} /></Field>
+        <Field label="Situação"><select className="select" value={f.status} onChange={set('status')}><option value="concluido">Concluída</option><option value="previsto">Prevista (ainda não feita)</option><option value="nao_realizado">Não realizada</option><option value="cancelado">Cancelada</option></select></Field>
+        {f.status === 'nao_realizado' && <Field label="Motivo"><select className="select" value={f.motivo} onChange={set('motivo')}><option value="">Selecione…</option>{Object.entries(MOT).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>}
+        <Field label="Observação"><input className="input" value={f.note} onChange={set('note')} /></Field>
+      </div>
+    </Modal>
+  );
+}
+
 function AdjModal({ data, comp, onClose, onDone }) {
   const toast = useToast();
   const [f, setF] = useState({ user_id: '', amount: '', reason: '' });

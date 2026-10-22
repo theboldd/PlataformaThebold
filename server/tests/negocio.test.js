@@ -133,3 +133,26 @@ test('custos, metas e rentabilidade: margem só com receita, custos e repasses; 
   assert.equal(fat.state, 'ativo');
   assert.equal(fat.desvio, -2000);
 });
+
+test('adicionar demanda à mão: pessoa, função, cliente, quantidade e valor entram na apuração; remover exige motivo', async () => {
+  const g = await login(ceo);
+  const add = (b) => g.post('/negocio/repasses/demandas', { competencia: '2026-12', user_id: des.id, function: 'design', client_id: A.id, ...b });
+  assert.equal((await add({ description: 'Carrossel extra', quantity: 3, unit_value: 50 })).status, 200);
+  assert.equal((await add({ description: 'Sem quantidade', quantity: 0 })).status, 422);
+  assert.equal((await add({ description: 'Não feita', quantity: 2, status: 'nao_realizado' })).status, 422, 'não realizada exige motivo');
+  assert.equal((await add({ description: 'Captação', quantity: 2, status: 'nao_realizado', motivo: 'cliente' })).status, 200);
+  const r = (await add({ description: 'Pela regra', quantity: 2 })).body;
+  const ap = N.apuracao('2026-12');
+  const p = ap.people.find((x) => x.user_id === des.id);
+  assert.equal(p.previstas, 7);
+  assert.equal(p.contabilizadas, 5, 'não realizada por cliente fica fora (motivo não configurado para contar)');
+  assert.equal(ap.lines.find((l) => l.title === 'Carrossel extra').value, 150);
+  const regra = ap.lines.find((l) => l.title === 'Pela regra');
+  assert.ok(regra.value_source === 'regra' || regra.value == null, 'sem valor informado usa a regra cadastrada (ou fica pendente)');
+  assert.equal((await g.post(`/negocio/repasses/demandas/${r.id}/revogar`, {})).status, 422);
+  assert.equal((await g.post(`/negocio/repasses/demandas/${r.id}/revogar`, { note: 'lançada em duplicidade' })).status, 200);
+  assert.ok(!N.apuracao('2026-12').lines.some((l) => l.id === r.id));
+  assert.ok(one("SELECT 1 FROM payout_manual_items WHERE id=? AND revoked_at IS NOT NULL", r.id), 'nada é apagado');
+  const d = await login(des);
+  assert.equal((await d.post('/negocio/repasses/demandas', { competencia: '2026-12', user_id: des.id, description: 'x', quantity: 1 })).status, 403, 'sem permissão de repasses não lança');
+});

@@ -530,6 +530,13 @@ CREATE TABLE IF NOT EXISTS payout_adjustments (
   id TEXT PRIMARY KEY, competencia TEXT NOT NULL, user_id TEXT NOT NULL REFERENCES users(id), amount REAL NOT NULL, reason TEXT NOT NULL,
   created_by TEXT, created_at TEXT NOT NULL, revoked_at TEXT, revoked_by TEXT
 );
+-- Demandas lançadas à mão por pessoa (o que não passa pelo processo: ex. captação, edição avulsa), ligadas ao cliente quando houver
+CREATE TABLE IF NOT EXISTS payout_manual_items (
+  id TEXT PRIMARY KEY, competencia TEXT NOT NULL, user_id TEXT NOT NULL REFERENCES users(id), function TEXT, client_id TEXT REFERENCES clients(id),
+  description TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 1, unit_value REAL, -- unit_value nulo = usa o valor cadastrado (regra)
+  status TEXT NOT NULL DEFAULT 'concluido', -- concluido | previsto | nao_realizado | cancelado
+  motivo TEXT, note TEXT, created_by TEXT, created_at TEXT NOT NULL, revoked_at TEXT, revoked_by TEXT
+);
 CREATE TABLE IF NOT EXISTS payout_daily (
   competencia TEXT NOT NULL, date TEXT NOT NULL, counted INTEGER NOT NULL, excluded INTEGER NOT NULL, total REAL, pending_rules INTEGER NOT NULL DEFAULT 0,
   diff REAL, created_at TEXT NOT NULL, PRIMARY KEY (competencia, date)

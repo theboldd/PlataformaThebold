@@ -55,3 +55,55 @@
 .ed-hist-p { display: inline-block; margin-right: 10px; }
 .ed-hist-t td { vertical-align: top; }
 .ed-hist-t .nowrap { white-space: nowrap; }
+
+/* ═════ Calendário editorial no formato do Notion ═════ */
+.nc { display: flex; flex-direction: column; gap: 10px; }
+.nc.busy { opacity: .6; pointer-events: none; }
+.nc-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.nc-title { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: .01em; }
+.nc-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.nc-nav b { font-size: 15px; }
+.nc-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+.nc-dow { padding: 6px 8px; font-size: 12px; color: var(--muted); text-align: center; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.nc-day { min-height: 150px; padding: 6px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; min-width: 0; position: relative; }
+.nc-day.out { background: color-mix(in srgb, var(--surface-2) 45%, transparent); }
+.nc-day.out .nc-dn span { color: var(--faint); }
+.nc-day.over { outline: 2px dashed var(--primary-text); outline-offset: -3px; }
+.nc-dn { display: flex; justify-content: flex-end; align-items: center; gap: 6px; font-size: 13px; }
+.nc-day.today .nc-dn span { background: var(--err, #c0392b); color: #fff; border-radius: 999px; padding: 1px 7px; }
+.nc-add { margin-right: auto; opacity: 0; font-size: 16px; line-height: 1; color: var(--muted); text-decoration: none; padding: 0 4px; border-radius: 4px; }
+.nc-day:hover .nc-add, .nc-add:focus { opacity: 1; }
+.nc-add:hover { background: var(--surface-2); color: var(--ink); }
+.nc-card { display: flex; flex-direction: column; gap: 3px; padding: 7px 8px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(0,0,0,.06); color: var(--ink); text-decoration: none; font-size: 11.5px; min-width: 0; }
+.nc-card:hover { border-color: var(--line-strong, var(--muted)); }
+.nc-card[draggable="true"] { cursor: grab; }
+.nc-card.notion { border-style: dashed; background: transparent; }
+.nc-card-t { display: flex; align-items: flex-start; gap: 5px; min-width: 0; }
+.nc-card-t b { font-weight: 700; font-size: 12px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; flex: 1; min-width: 0; }
+.nc-ico { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.nc-cm, .nc-src { font-size: 10px; color: var(--muted); white-space: nowrap; }
+.nc-src { border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; text-transform: uppercase; letter-spacing: .06em; }
+.nc-tags { display: flex; flex-wrap: wrap; gap: 3px; }
+.nc-tags:empty { display: none; }
+.nc-tag { font-size: 9.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 1px 5px; border-radius: 3px; background: var(--surface-2); color: var(--ink-2); }
+.nc-tag.red { background: #B34A3C; color: #fff; }
+.nc-tag.soft { background: var(--surface-2); color: var(--muted); }
+.nc-check { display: flex; align-items: center; gap: 6px; font-size: 10.5px; letter-spacing: .02em; color: var(--ink-2); }
+.nc-check .box { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--muted); display: inline-flex; align-items: center; justify-content: center; font-size: 9px; flex: none; }
+.nc-check.on .box { background: #2E7DD7; border-color: #2E7DD7; color: #fff; }
+.nc-undated { border-top: 1px solid var(--line); padding-top: 12px; }
+.nc-undated-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.nc-chip { font-size: 12px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); text-decoration: none; }
+.nc-chip[draggable="true"] { cursor: grab; }
+@media (max-width: 900px) {
+  .nc-grid { grid-template-columns: 1fr; border-left: 0; }
+  .nc-dow { display: none; }
+  .nc-day { min-height: 0; border-right: 0; }
+  .nc-day.out { display: none; }
+  .nc-day:not(:has(.nc-card)) { display: none; }
+  .nc-dn { justify-content: flex-start; font-weight: 600; }
+  .nc-add { opacity: 1; margin-right: 0; order: 2; }
+}
+.nc-card-t b { -webkit-line-clamp: 3; text-overflow: clip; overflow-wrap: anywhere; word-break: normal; }
+.nc-check { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10px; letter-spacing: 0; }
+.nc-tags .nc-src { font-size: 9px; padding: 0 4px; line-height: 15px; }
