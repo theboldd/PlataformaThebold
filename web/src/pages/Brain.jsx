@@ -4,7 +4,8 @@ import { Link } from 'react-router-dom';
 import { useApi, useToast, useAuth } from '../lib/hooks.js';
 import { api } from '../lib/api.js';
 import { useCrumbs } from '../components/Shell.jsx';
-import { Section, Loading, Empty, Button, Tag, Tabs } from '../components/ui.jsx';
+import { Section, Loading, Empty, Button, Tag, Tabs, PageHead, ErrorBox } from '../components/ui.jsx';
+import { StateNotice, Insufficient } from '../components/State.jsx';
 import { DecisionMemory, AutomationRadar } from './intel/Memoria.jsx';
 import { ago, cleanName } from '../lib/format.js';
 import '../styles/intel.css';
@@ -16,7 +17,7 @@ const LABELS = { cliente: 'Cliente', client_brain: 'Client Brain', conteudos: 'C
 export default function Brain() {
   useCrumbs('The Bold Brain');
   const toast = useToast();
-  const { data: meta, reload } = useApi('/brain/agents', [], { live: false });
+  const { data: meta, error: metaError, reload } = useApi('/brain/agents', [], { live: false });
   const { data: clients } = useApi('/clients', [], { live: false });
   const auth = useAuth();
   const canRadar = !!auth.permissions?.automacoes?.includes('view');
@@ -32,7 +33,7 @@ export default function Brain() {
   const [asked, setAsked] = useState('');
   const out = useRef(null);
   const ask = async (question = q) => {
-    if (!question.trim()) return;
+    if (!question.trim() || !meta?.configured) return;
     setBusy(true); setRes(null); setAsked(question); setTab('consultas');
     try {
       const r = await api.post('/brain/ask', { question, agent, client_id: client || null });
@@ -40,10 +41,22 @@ export default function Brain() {
       setTimeout(() => out.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
     } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
   };
-  if (!meta) return <div className="page"><Loading /></div>;
+  const head = <PageHead kicker="THE BOLD BRAIN" title="Sua inteligência operacional." sub="Perguntas sobre a operação respondidas pelo Claude com os dados que você tem permissão para ver." />;
+  if (metaError) return <div className="page">{head}<ErrorBox error={metaError} /></div>;
+  if (!meta) return <div className="page">{head}<Loading /></div>;
   const available = meta.agents.filter((a) => a.available);
+  const off = !meta.configured;
+  const reason = off ? 'Indisponível: o Claude (Anthropic) ainda não está configurado no servidor.' : !q.trim() ? 'Escreva uma pergunta.' : '';
   return (
     <div className="page">
+      {head}
+      {off && (
+        <div className="mb-5">
+          <StateNotice s="aguardando_configuracao" title="Claude (Anthropic)" action="Ver integrações" to="/integracoes">
+            Conecte o Claude para ativar consultas inteligentes. Nada é simulado: sem a chave, o Brain não responde.
+          </StateNotice>
+        </div>
+      )}
       <div className="brain-hero">
         <div className="row between wrap mb-5">
           <span className="caps">The Bold Brain · conhecimento + inteligência</span>
@@ -52,15 +65,6 @@ export default function Brain() {
             <Tag>Memória: {meta.knowledge_provider === 'banco' ? 'banco da plataforma' : meta.knowledge_provider}</Tag>
           </span>
         </div>
-        <h1 className="brain-title">THE BOLD BRAIN</h1>
-        <p className="brain-lede">Sua inteligência operacional.</p>
-        {!meta.configured && (
-          <div className="brain-off" role="status">
-            <StateTag s="aguardando_configuracao" />
-            <span><b>Conecte o Claude para ativar consultas inteligentes.</b> Sem a conexão, nenhuma resposta é gerada: a pergunta devolve só os dados que seriam usados, para conferência.</span>
-            <Link to="/integracoes" className="bordo">Configurar em Integrações →</Link>
-          </div>
-        )}
         <label htmlFor="brain-q" className="sr-only">Pergunta</label>
         <textarea id="brain-q" className="brain-q" rows={2} placeholder="Pergunte qualquer coisa sobre a operação…" value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } }} />
@@ -72,9 +76,10 @@ export default function Brain() {
             <option value="">Toda a operação (sem cliente)</option>
             {(clients || []).map((c) => <option key={c.id} value={c.id}>{cleanName(c.name)}</option>)}
           </select>
-          <Button variant="primary" magnetic arrow onClick={() => ask()} disabled={busy || !q.trim()} style={{ marginLeft: 'auto' }}>{busy ? 'Pensando…' : 'Perguntar'}</Button>
+          <Button variant="primary" magnetic arrow onClick={() => ask()} disabled={busy || off || !q.trim()} title={reason || undefined} aria-describedby={off ? 'brain-off' : undefined} style={{ marginLeft: 'auto' }}>{busy ? 'Pensando…' : 'Perguntar'}</Button>
         </div>
-        <div className="chips mt-5">{SUGGESTED.map((s) => <button key={s} className="chip" onClick={() => { setQ(s); ask(s); }}>{s}</button>)}</div>
+        {off && <p id="brain-off" className="xs mt-2" style={{ color: 'rgba(246,243,240,.75)', textAlign: 'right' }}>{reason}</p>}
+        <div className="chips mt-5">{SUGGESTED.map((s) => <button key={s} className="chip" onClick={() => { setQ(s); if (!off) ask(s); }}>{s}</button>)}</div>
         <p className="xs mt-4" style={{ color: 'rgba(246,243,240,.55)', maxWidth: 720 }}>{available.find((a) => a.key === agent)?.desc} Os dados enviados respeitam suas permissões: o agente só vê o que você pode ver.</p>
       </div>
 
@@ -114,6 +119,14 @@ export default function Brain() {
         )}
       </div>
 
+      <Section title="O que o Brain já usa hoje sem IA" kicker="Funciona sem a chave do Claude">
+        <p className="sm muted" style={{ marginTop: 0 }}>Os detectores determinísticos já analisam a operação (gargalos, retrabalho, carga, espera e prazos) com regras fixas e evidências. Não dependem do Claude.</p>
+        <div className="row wrap" style={{ gap: 12 }}>
+          <Link to="/insights" className="chip">Insights da operação →</Link>
+          <Link to="/torre" className="chip">Torre de Controle →</Link>
+        </div>
+      </Section>
+
       <div className="cols-even">
         <Section title="Agentes" kicker="Escopo de dados de cada agente">
           {meta.agents.map((a) => (
@@ -129,7 +142,7 @@ export default function Brain() {
               <div><div className="t">{h.prompt}</div><div className="s">{meta.agents.find((a) => a.key === h.agent)?.label || h.agent}</div></div>
               <div className="r col" style={{ alignItems: 'flex-end' }}><span>{ago(h.created_at)}</span><span>{h.status === 'ok' ? 'respondida' : h.status === 'nao_configurado' ? 'IA não configurada' : 'erro'}</span></div>
             </button>
-          )) : <Empty title="Nenhuma consulta ainda." />}
+          )) : <Insufficient title="NENHUMA CONSULTA AINDA">{off ? 'O histórico aparece aqui quando o Claude estiver configurado e você fizer a primeira pergunta.' : 'Suas perguntas ao Brain ficam registradas aqui.'}</Insufficient>}
         </Section>
       </div>
       </>}

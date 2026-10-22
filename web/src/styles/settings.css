@@ -1,0 +1,28 @@
+/* Configurações e Mapa do produto */
+.cfg-group { margin-top: var(--sp-7); }
+.cfg-group-t { margin: 0 0 var(--sp-3); color: var(--muted); }
+.cfg-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); }
+.cfg-card { display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: inherit; text-decoration: none; transition: border-color var(--t-fast), transform var(--t-fast); min-width: 0; }
+a.cfg-card:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+.cfg-card.static { background: transparent; border-style: dashed; }
+.cfg-card-h { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.cfg-card-t { font-weight: 600; font-size: 15px; }
+.cfg-card-d { margin: 0; color: var(--ink-2); font-size: 13px; line-height: 1.5; }
+.cfg-card-x { font-size: 12px; color: var(--muted); }
+.cfg-card-a { margin-top: auto; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--primary-text); }
+
+/* Mapa do produto */
+.map-summary { display: flex; flex-wrap: wrap; gap: 8px; margin: var(--sp-5) 0; }
+.map-summary button { background: none; border: 0; padding: 0; cursor: pointer; }
+.map-summary button[aria-pressed="true"] .st-badge { background: color-mix(in srgb, currentColor 12%, transparent); }
+.map-area { margin-top: var(--sp-6); }
+.map-area-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--line-strong); padding-bottom: 8px; }
+.map-area-h h2 { margin: 0; font-family: var(--font-editorial); font-weight: 400; font-size: 26px; }
+.map-rows { list-style: none; margin: 0; padding: 0; }
+.map-row { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: start; }
+.map-row .req { font-weight: 500; }
+.map-row .where { font-size: 12px; color: var(--muted); }
+.map-row .where a { color: var(--primary-text); }
+.map-row .miss { grid-column: 1 / -1; font-size: 12px; color: var(--ink-2); margin-top: -4px; }
+@media (max-width: 720px) { .map-row { grid-template-columns: 1fr; gap: 4px; } .map-row .miss { margin-top: 0; } }
+.map-check { list-style: decimal; padding-left: 20px; display: grid; gap: 6px; font-size: 13px; }

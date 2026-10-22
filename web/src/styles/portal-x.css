@@ -227,3 +227,9 @@ a.p-ev.meeting { color: var(--ink-2); }
 @media (max-width: 860px) { .p-filters { position: static; } }
 /* No visualizador em tela cheia, o contador de páginas desce para não ficar sob o botão de fechar */
 .p-overlay .mv-count { top: 64px; }
+
+/* Celular: o selo de estado do bloco e a data dividiam o mesmo canto e se sobrepunham. Com selo, a data sai (ela aparece ao abrir). */
+@media (max-width: 640px) {
+  .p-tile .p-tile-state ~ .p-tile-date { display: none; }
+  .p-tile-state { max-width: calc(100% - 44px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}

@@ -1,0 +1,21 @@
+/* Estados de produto (ATIVO · DADOS INSUFICIENTES · AGUARDANDO …). Discretos, legíveis no claro e no escuro. */
+.st-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; padding: 4px 9px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; line-height: 1.2; }
+.st-badge i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.st-ok { color: var(--ok); } .st-warn { color: var(--warn); } .st-err { color: var(--err); } .st-info { color: var(--info); }
+.st-muted { color: var(--muted); } .st-dev { color: var(--primary-text); }
+.st-badge.st-muted { border-style: dashed; }
+.st-badge.st-dev i { background: transparent; border: 1.5px solid currentColor; }
+
+.st-notice { border: 1px solid var(--line); border-left: 3px solid currentColor; background: var(--surface); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.st-notice.compact { padding: 10px 12px; }
+.st-notice-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.st-notice-t { color: var(--ink); font-weight: 600; font-size: 14px; letter-spacing: .01em; }
+.st-notice-b { color: var(--ink-2); font-size: 13px; line-height: 1.5; }
+.st-notice-a { align-self: flex-start; background: none; border: 0; padding: 0; color: var(--primary-text); font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; text-decoration: none; }
+.st-notice-a:hover { text-decoration: underline; }
+
+.st-insufficient { border: 1px dashed var(--line-strong); border-radius: 10px; padding: 16px; background: transparent; }
+.st-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+.st-list li span { color: var(--faint); margin-right: 4px; }
+
+.st-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }

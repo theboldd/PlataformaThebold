@@ -1,0 +1,35 @@
+/* ── Financeiro: Recebimentos · Produção & Repasses · Rentabilidade ── */
+.fin-body { margin-top: var(--sp-5, 20px); min-width: 0; }
+.fin-body .table-wrap { max-width: 100%; }
+.fin-table { min-width: 640px; }
+.fin-table td.fin-norule { padding: var(--sp-4) var(--sp-3); }
+.fin-skeleton th { color: var(--faint, var(--muted)); }
+.fin-filters { gap: var(--sp-2, 8px); }
+.fin-filters .select { width: 220px; max-width: 100%; }
+
+/* Evolução mensal */
+.fin-evo-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) 120px; gap: var(--sp-3); align-items: center; padding: var(--sp-2, 8px) 0; border-bottom: 1px solid var(--line); }
+.fin-evo-bars { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fin-bar { display: block; height: 8px; min-width: 1px; border-radius: 2px; }
+.fin-bar.fat, .fin-key.fat { background: var(--ink-2, var(--ink)); }
+.fin-bar.rec, .fin-key.rec { background: var(--bordo); }
+.fin-evo-v { text-align: right; line-height: 1.3; }
+.fin-key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+
+/* Mobile: tabelas viram cartões empilhados */
+@media (max-width: 640px) {
+  .fin-table { min-width: 0; }
+  .fin-table thead { display: none; }
+  .fin-table, .fin-table tbody, .fin-table tr, .fin-table td { display: block; width: 100%; }
+  .fin-table tr { border-bottom: 1px solid var(--ink); padding: var(--sp-2, 8px) 0; }
+  .fin-table td { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); border-bottom: 0; padding: 6px 0; text-align: right; overflow-wrap: anywhere; }
+  .fin-table td[data-label]::before { content: attr(data-label); flex: none; max-width: 45%; text-align: left; font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--muted); }
+  .fin-table td.fin-act:empty { display: none; }
+  .fin-table td.fin-act { justify-content: flex-end; }
+  .fin-table td.fin-norule { display: block; text-align: left; }
+  .fin-skeleton thead { display: block; }
+  .fin-skeleton thead tr { display: flex; flex-wrap: wrap; gap: 4px 12px; border-bottom: 1px solid var(--ink); }
+  .fin-skeleton th { display: inline; border: 0; padding: 4px 0; }
+  .fin-filters, .fin-filters .select { width: 100%; }
+  .fin-evo-row { grid-template-columns: 44px minmax(0, 1fr) 96px; }
+}

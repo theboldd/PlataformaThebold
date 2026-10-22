@@ -24,36 +24,40 @@ const NAV = [
   { group: 'Operação', primary: true, items: [
     { to: '/', label: 'Visão geral', icon: I.home, mod: 'dashboard', end: true },
     { to: '/torre', label: 'Torre de Controle', icon: I.tower, mod: 'torre' },
-    { to: '/processos', label: 'Processos', icon: I.flow, mod: 'processos' },
     { to: '/pendencias', label: 'Pendências', icon: I.alert, team: true },
-    { to: '/atrasos', label: 'Itens legados', icon: I.history, mod: 'atrasos' },
-    { to: '/performance', label: 'Equipe · Performance', icon: I.chart, mod: 'performance' },
+    { to: '/processos', label: 'Processos', icon: I.flow, mod: 'processos' },
   ] },
   { group: 'Clientes', items: [
     { to: '/clientes', label: 'Clientes', icon: I.clients, mod: 'clientes' },
-    { to: '/divisao', label: 'Divisão', icon: I.division, mod: 'divisao', anyAct: true },
     { to: '/conteudos', label: 'Conteúdos', icon: I.content, mod: 'conteudos' },
     { to: '/revisao', label: 'Sala de Revisão', icon: I.review, mod: 'revisao' },
-    { to: '/notion', label: 'Notion · histórico', icon: I.layers, mod: 'clientes' },
+    { to: '/divisao', label: 'Divisão', icon: I.division, mod: 'divisao', anyAct: true },
   ] },
   { group: 'Agenda', items: [
     { to: '/calendario', label: 'Calendário', icon: I.calendar, mod: 'calendario' },
     { to: '/reunioes', label: 'Reuniões', icon: I.meeting, mod: 'reunioes' },
-    { to: '/comunicacao', label: 'Comunicação', icon: I.chat, mod: 'chat', badge: 'chat' },
+    { to: '/comunicacao', label: 'Bold Chat', icon: I.chat, mod: 'chat', badge: 'chat' },
   ] },
   { group: 'Negócio', items: [
     { to: '/negocio', label: 'Negócio', icon: I.money, mods: ['crm', 'financeiro', 'repasses'] },
   ] },
-  { group: 'Inteligência', items: [
+  { group: 'Equipe & Inteligência', items: [
+    { to: '/performance', label: 'Equipe & Performance', icon: I.chart, mod: 'performance' },
     { to: '/insights', label: 'Insights', icon: I.spark, mod: 'insights' },
     { to: '/brain', label: 'The Bold Brain', icon: I.brain, mod: 'brain' },
-    { to: '/automacoes', label: 'Automações', icon: I.bolt, mod: 'automacoes' },
+  ] },
+  { group: 'Notion & legado', items: [
+    { to: '/notion', label: 'Notion & Histórico', icon: I.layers, mod: 'clientes' },
+    { to: '/atrasos', label: 'Itens legados', icon: I.history, mod: 'atrasos' },
   ] },
   { group: 'Sistema', items: [
     { to: '/configuracoes', label: 'Configurações', icon: I.gear, team: true },
     { to: '/integracoes', label: 'Integrações', icon: I.plug, mod: 'integracoes' },
+    { to: '/automacoes', label: 'Automações', icon: I.bolt, mod: 'automacoes' },
     { to: '/usuarios', label: 'Usuários e permissões', icon: I.users, mod: 'usuarios' },
     { to: '/historico', label: 'Histórico', icon: I.history, mod: 'historico' },
+    { to: '/mapa', label: 'Mapa do produto', icon: I.flow, team: true },
+    { to: '/perfil', label: 'Meu perfil', icon: I.edit, team: true },
   ] },
 ];
 

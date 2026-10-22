@@ -31,7 +31,7 @@ async function login(u) {
   return async (url) => { const res = await fetch(BASE + url, { headers: { cookie, 'x-bold-request': '1' } }); return { status: res.status, body: await res.text() }; };
 }
 const INTERNAL = (c, ct) => ['/auth/me', '/dashboard', '/torre', '/torre/automations', '/process/board', '/process/board?month=2026-11', '/process/definition', '/pendencias?escopo=minhas', '/pendencias?escopo=equipe',
-  '/atrasos', '/performance?dias=7', '/performance?dias=30', '/performance?dias=90', '/clients', `/clients/${c}`, `/clients/${c}/ficha`, `/clients/${c}/editorial`, `/clients/${c}/notion-history`, `/clients/${c}/notion-history?vazios=1`,
+  '/atrasos', '/performance?dias=7', '/performance?dias=30', '/performance?dias=90', '/performance/previsao', '/clients', `/clients/${c}`, `/clients/${c}/ficha`, `/clients/${c}/editorial`, `/clients/${c}/notion-history`, `/clients/${c}/notion-history?vazios=1`,
   `/clients/${c}/brand`, `/clients/${c}/pulse`, `/clients/${c}/health`, `/clients/${c}/decisions`, `/clients/${c}/requests`, `/clients/${c}/onboarding-card`, `/clients/${c}/origem`, '/divisao', '/onboarding/cards',
   '/contents', `/contents?client_id=${c}`, `/contents/${ct}`, '/review/clients', `/review/clients/${c}`, '/calendar', '/meetings', '/chat/channels', '/crm', '/finance', '/financeiro/estrutura',
   '/insights?status=aberto', '/brain/agents', '/automations', '/automations/estado', '/integrations', '/produto/integracoes', '/users', '/users/directory', '/client-access', '/history?limit=50',
@@ -54,7 +54,7 @@ test('base vazia: toda tela interna e do portal abre sem erro de servidor', asyn
   // telas novas mostram o estado honesto, não um número inventado
   const perf = JSON.parse((await get('/performance?dias=30')).body);
   assert.equal(perf.state, 'dados_insuficientes');
-  assert.equal(perf.score, null);
+  assert.ok(perf.score == null && !('ranking' in perf), 'sem score nem ranking');
   const fin = JSON.parse((await get('/financeiro/estrutura')).body);
   assert.equal(fin.repasses.state, 'aguardando_configuracao');
   assert.equal(fin.recebimentos.state, 'dados_insuficientes');

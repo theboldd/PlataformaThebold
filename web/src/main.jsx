@@ -3,6 +3,7 @@ import './styles/base.css';
 import './styles/components.css';
 import './styles/shell.css';
 import './styles/media.css';
+import './styles/state.css';
 import App from './App.jsx';
 
 // Tema escolhido no Perfil (claro/escuro/sistema) — aplicado antes do primeiro render

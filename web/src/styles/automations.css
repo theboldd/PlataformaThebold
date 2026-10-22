@@ -1,0 +1,55 @@
+/* Estado de integrações e automações (Integrações · Automações). Mobile primeiro: nada de tabela larga abaixo de 640px. */
+
+/* ── Resumo por estado ── */
+.stx-summary { display: flex; flex-wrap: wrap; gap: 10px; }
+.stx-sum { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); min-width: 0; }
+.stx-sum-n { font-size: 22px; font-weight: 600; color: var(--ink); line-height: 1; }
+
+/* ── Cards de integração ── */
+.stx-grid { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.stx-card { border: 1px solid var(--line); border-top: 3px solid var(--line-strong); border-radius: 10px; background: var(--surface); padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.stx-card.stx-conectada, .stx-card.stx-ativo { border-top-color: var(--ok); }
+.stx-card.stx-erro { border-top-color: var(--err); }
+.stx-card.stx-aguardando_configuracao, .stx-card.stx-nao_conectada { border-top-color: var(--warn); }
+.stx-card.stx-aguardando_decisao, .stx-card.stx-somente_leitura { border-top-color: var(--info); }
+.stx-card-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.stx-card-t { margin: 0; font-size: 16px; font-weight: 600; color: var(--ink); }
+.stx-p { margin: 0; line-height: 1.5; }
+.stx-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); }
+.stx-list li::before { content: '—'; color: var(--faint); margin-right: 6px; }
+.stx-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.stx-chip { font-size: 11.5px; padding: 3px 8px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); }
+.stx-counts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.stx-counts > div { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); }
+.stx-actions { gap: 10px; align-items: center; margin-top: auto; }
+.stx-map-row { display: flex; align-items: center; gap: 10px; }
+.stx-map-row .select { width: 200px; max-width: 55%; }
+
+/* ── Automações: visão de estado ── */
+.auto-overview { display: grid; gap: var(--sp-4); }
+.auto-jobs { display: grid; gap: 6px; font-size: 13px; }
+.auto-jobs > div { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+.auto-err { color: var(--err); font-size: 12px; }
+.auto-deps { font-size: 12px; color: var(--muted); }
+.auto-table td { vertical-align: top; }
+
+@media (max-width: 640px) {
+  .stx-sum { flex: 1 1 calc(50% - 10px); padding: 8px 10px; }
+  .stx-sum .st-badge { white-space: normal; }
+  .stx-map-row .select { width: auto; max-width: 60%; }
+
+  /* Tabela do mapa vira cartões empilhados */
+  .auto-table-wrap { overflow: visible; }
+  .auto-table, .auto-table tbody, .auto-table tr, .auto-table td { display: block; width: 100%; min-width: 0; }
+  .auto-table { min-width: 0 !important; }
+  .auto-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+  .auto-table tr { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 10px 12px; margin-bottom: 10px; }
+  .auto-table td { border: 0 !important; padding: 5px 0 !important; display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 10px; align-items: start; }
+  .auto-table td::before { content: attr(data-label); font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); padding-top: 2px; }
+  .auto-table td.auto-main { display: block; padding-bottom: 8px !important; border-bottom: 1px solid var(--line) !important; margin-bottom: 4px; }
+  .auto-table td.auto-main::before { content: none; }
+  .auto-table td:empty { display: none; }
+  .auto-table .switch { min-height: 32px; height: 32px; width: 54px; }
+  .auto-table .switch::after { top: 4px; left: 4px; width: 24px; height: 24px; }
+  .auto-table .switch.on::after { transform: translateX(22px); }
+}

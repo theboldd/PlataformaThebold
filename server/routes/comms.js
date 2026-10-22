@@ -66,6 +66,24 @@ function refDTO(m, viewer) {
 }
 const msgDTO = (m, viewer) => ({ ...m, ref: refDTO(m, viewer), converted_to: parseJSON(m.converted_to, []), file: m.file_id ? fileDTO(one('SELECT * FROM files WHERE id=?', m.file_id)) : null,
   replies: one('SELECT COUNT(*) n FROM messages WHERE parent_id=?', m.id).n, last_reply_at: one('SELECT MAX(created_at) t FROM messages WHERE parent_id=?', m.id).t });
+// MENÇÕES — onde me citaram (mensagens do chat e comentários de conteúdo), respeitando o que a pessoa pode ver
+comms.get('/chat/mentions', requireInternal, (req, res) => {
+  const rows = all('SELECT * FROM mentions WHERE user_id=? ORDER BY created_at DESC LIMIT 80', req.user.id);
+  const out = [];
+  for (const m of rows) {
+    if (m.source_type === 'message') {
+      const msg = one('SELECT m.id, m.body, m.channel_id, m.parent_id, m.created_at, u.name author FROM messages m JOIN users u ON u.id=m.author_id WHERE m.id=?', m.source_id);
+      const ch = msg && one('SELECT * FROM channels WHERE id=?', msg.channel_id);
+      if (!msg || !canSeeChannel(req.user, ch)) continue;
+      out.push({ id: m.id, kind: 'mensagem', body: msg.body, author: msg.author, at: msg.created_at, where: ch.name, link: `/comunicacao/${ch.id}${msg.parent_id ? `?thread=${msg.parent_id}` : ''}` });
+    } else if (m.source_type === 'comment') {
+      const cm = one('SELECT cm.id, cm.body, cm.content_id, cm.created_at, u.name author, c.number, c.title, c.client_id FROM comments cm JOIN users u ON u.id=cm.author_id JOIN contents c ON c.id=cm.content_id WHERE cm.id=?', m.source_id);
+      if (!cm || !canAccessClient(req.user, cm.client_id)) continue;
+      out.push({ id: m.id, kind: 'comentario', body: cm.body, author: cm.author, at: cm.created_at, where: `#${cm.number} ${cm.title}`, link: `/conteudos/${cm.content_id}` });
+    }
+  }
+  res.json(out.slice(0, 50));
+});
 comms.get('/chat/channels/:id/messages', requireAuth, (req, res) => {
   const ch = one('SELECT * FROM channels WHERE id=?', req.params.id);
   if (!canSeeChannel(req.user, ch)) throw new HttpError(404, 'Canal não encontrado.');

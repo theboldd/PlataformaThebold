@@ -1,102 +1,113 @@
 import { useEffect, useState } from 'react';
 import '../styles/admin.css';
+import '../styles/automations.css';
 import { api } from '../lib/api.js';
 import { useApi, useAuth, useToast } from '../lib/hooks.js';
 import { useCrumbs } from '../components/Shell.jsx';
 import { Button, Empty, ErrorBox, Loading, PageHead, Section, Seg, Stat, Tabs, Tag } from '../components/ui.jsx';
 import { ago, fmtDateTime, cleanName } from '../lib/format.js';
 import { useUrlState } from '../lib/nav.jsx';
-import { StateTag } from '../components/State.jsx';
+import { StateBadge, StateNotice } from '../components/State.jsx';
 
 const CLASS = { 1: 'Simples', 2: 'Regras', 3: 'Precisa de IA', 4: 'Aprovação humana' };
 const ENGINE = { regra: 'Regra', ia: 'IA', humano: 'Humano' };
 const MS_LABEL = { cronograma_entrega: 'Entrega de cronograma', revisao_cronograma: 'Revisão de cronograma (Rebeca/Raísa)', ajuste_cronograma: 'Ajuste de cronograma', cliente_aprova_temas: 'Clientes aprovam temas', leitura_comentarios: 'Estrategistas leem comentários', producao: 'Produção (legenda, design, reels)', revisao_producao: 'Revisão da produção', ajustes_equipe: 'Ajustes da equipe', tudo_pronto: 'Tudo pronto', cliente_aprova_final: 'Clientes aprovam produção', ajustes_cliente: 'Ajustes dos clientes', agendamento: 'Agendamento' };
+const ST_ORDER = ['ativo', 'aguardando_configuracao', 'aguardando_integracao', 'em_desenvolvimento', 'desligada'];
+const ST_LABEL = { desligada: 'DESLIGADA' };
+const JOB_ST = { ok: 'ok', erro: 'err', expirado: 'err', rodando: 'info', ignorado: '' };
+const Badge = ({ s }) => <StateBadge s={s} label={ST_LABEL[s]} />;
 const FN = { estrategia: 'Estrategista', revisao: 'Revisão', cliente: 'Cliente', agendamento: 'Agendamento', null: 'Por formato' };
 
 export default function Automacoes() {
   useCrumbs('Automações');
   const [tab, setTab] = useUrlState('aba', 'mapa');
+  const st = useApi('/status/automations');
   return (
     <div className="page">
       <PageHead kicker="Sistema" title="Automações" sub="O que o sistema faz sozinho: evento → condição → ação → responsável → notificação → prazo → motor → log. Regras determinísticas movem o processo; IA só interpreta." />
-      <Tabs value={tab} onChange={setTab} tabs={[{ key: 'mapa', label: 'Mapa de automações' }, { key: 'rotinas', label: 'Rotinas do sistema' }, { key: 'runs', label: 'Execuções' }, { key: 'regras', label: 'Regras do processo' }]} />
-      {tab === 'mapa' && <Mapa />}
-      {tab === 'rotinas' && <Rotinas />}
+      <Overview st={st} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ key: 'mapa', label: 'Mapa de automações' }, { key: 'runs', label: 'Execuções' }, { key: 'regras', label: 'Regras do processo' }]} />
+      {tab === 'mapa' && <Mapa status={st.data} reloadStatus={st.reload} />}
       {tab === 'runs' && <Runs />}
       {tab === 'regras' && <Regras />}
     </div>
   );
 }
 
-function Mapa() {
+// Estado real: o que roda, o que espera configuração/integração e o que não foi implementado
+function Overview({ st }) {
+  const { data, error, loading } = st;
+  if (loading && !data) return <div className="mb-5"><Loading rows={2} /></div>;
+  if (error) return <div className="mb-5"><ErrorBox error={error} /></div>;
+  const sch = data.scheduler;
+  return (
+    <div className="auto-overview mb-5">
+      <div className="stx-summary" aria-label="Automações por estado">
+        {ST_ORDER.filter((s) => data.summary[s]).map((s) => <div key={s} className="stx-sum"><span className="stx-sum-n tnum">{data.summary[s]}</span><Badge s={s} /></div>)}
+      </div>
+      {sch.active
+        ? <StateNotice s="ativo" title="Agendador (rotinas por horário)" compact>{sch.reason}</StateNotice>
+        : <StateNotice s="aguardando_configuracao" title="Agendador (rotinas por horário)" action="Ver integrações" to="/integracoes">
+            Rotinas por horário não rodam nesta hospedagem; precisam de <code>CRON_SECRET</code>/hospedagem persistente. As automações que dependem de alguém agir na plataforma funcionam normalmente. <span className="muted">{sch.reason}</span>
+          </StateNotice>}
+      <div className="auto-jobs">
+        <div className="caps xs">Últimas execuções das rotinas</div>
+        {data.jobs.length ? data.jobs.map((j) => (
+          <div key={j.job}><code className="xs">{j.job}</code><Tag tone={JOB_ST[j.status]}>{j.status}</Tag><span className="xs muted tnum">início {fmtDateTime(j.started_at)}{j.finished_at ? ` · fim ${fmtDateTime(j.finished_at)}` : ''}</span>{j.trigger && <span className="xs faint">via {j.trigger}</span>}{j.error && <span className="auto-err">{j.error}</span>}</div>
+        )) : <span className="xs muted">Nenhuma rotina por horário executou nesta base.</span>}
+      </div>
+    </div>
+  );
+}
+
+function Mapa({ status, reloadStatus }) {
   const { data, error, loading, reload } = useApi('/automations');
-  const est = useApi('/automations/estado');
-  const stOf = Object.fromEntries((est.data?.automations || []).map((a) => [a.key, a]));
   const auth = useAuth();
   const toast = useToast();
   const [phase, setPhase] = useUrlState('fase', 'todas');
   const [cls, setCls] = useUrlState('classe', 'todas');
+  const [est, setEst] = useUrlState('estado', 'todos');
   if (loading && !data) return <Loading />;
   if (error) return <ErrorBox error={error} />;
-  const list = data.automations.filter((a) => (phase === 'todas' || a.phase === phase) && (cls === 'todas' || String(a.class) === cls));
+  const byKey = Object.fromEntries((status?.automations || []).map((x) => [x.key, x]));
+  const list = data.automations.filter((a) => (phase === 'todas' || a.phase === phase) && (cls === 'todas' || String(a.class) === cls) && (est === 'todos' || byKey[a.key]?.state === est));
   const active = data.automations.filter((a) => a.implemented && a.enabled).length;
-  const toggle = async (a) => { try { const r = await api.post(`/automations/${a.key}/toggle`); toast(`${a.key} ${r.enabled ? 'ligada' : 'desligada'}`); reload(); } catch (e) { toast(e.message, 'err'); } };
+  const toggle = async (a) => { try { const r = await api.post(`/automations/${a.key}/toggle`); toast(`${a.key} ${r.enabled ? 'ligada' : 'desligada'}`); reload(); reloadStatus?.(); } catch (e) { toast(e.message, 'err'); } };
   return (
     <>
       <div className="stats mb-5">
         <Stat value={data.automations.length} label="Automações mapeadas" />
         <Stat value={active} label="Ativas nesta versão" />
-        <Stat value={(est.data?.automations || []).filter((a) => a.state === 'aguardando_integracao').length} label="Aguardando integração" />
-        <Stat value={data.automations.filter((a) => !a.implemented).length} label="Em desenvolvimento (V2/V3)" />
+        <Stat value={data.automations.filter((a) => !a.implemented).length} label="Planejadas (V2/V3)" />
         <Stat value={data.automations.reduce((s, a) => s + a.runs, 0)} label="Execuções registradas" />
       </div>
       <div className="row wrap mb-4 gap-4">
         <Seg label="Fase" value={phase} onChange={setPhase} options={[{ value: 'todas', label: 'Todas as fases' }, { value: 'MVP', label: 'MVP' }, { value: 'V2', label: 'V2' }, { value: 'V3', label: 'V3' }]} />
         <Seg label="Classe" value={cls} onChange={setCls} options={[{ value: 'todas', label: 'Todas' }, ...Object.entries(CLASS).map(([k, v]) => ({ value: k, label: `${k} · ${v}` }))]} />
+        {status && <Seg label="Estado" value={est} onChange={setEst} options={[{ value: 'todos', label: 'Todos os estados' }, ...ST_ORDER.filter((s) => status.summary[s]).map((s) => ({ value: s, label: { ativo: 'Ativas', aguardando_configuracao: 'Aguardando configuração', aguardando_integracao: 'Aguardando integração', em_desenvolvimento: 'Em desenvolvimento', desligada: 'Desligadas' }[s] }))]} />}
       </div>
-      <div className="table-wrap"><table className="table">
-        <thead><tr><th>Evento</th><th>Condição</th><th>Ação</th><th>Responsável</th><th>Notificação</th><th>Prazo</th><th>Motor</th><th>Fase</th><th>Log</th><th>Estado</th><th>Ligada</th></tr></thead>
-        <tbody>{list.map((a) => (
+      <div className="table-wrap auto-table-wrap"><table className="table auto-table">
+        <thead><tr><th>Evento</th><th>Condição</th><th>Ação</th><th>Responsável · aviso · prazo</th><th>Motor</th><th>Fase</th><th>Estado</th><th>Última execução</th><th>Próxima execução</th><th>Erro</th><th>Depende de</th><th>Ligar</th></tr></thead>
+        <tbody>{list.map((a) => { const s = byKey[a.key]; return (
           <tr key={a.key} className={`auto-row ${a.implemented ? '' : 'planned'}`}>
-            <td><div className="strong">{a.event}</div><code className="xs faint">{a.key}</code></td>
-            <td className="sm">{a.condition}</td><td className="sm">{a.action}</td><td className="sm">{a.owner}</td><td className="sm">{a.notification}</td><td className="sm">{a.deadline}</td>
-            <td><span className={`engine ${a.engine}`}>{ENGINE[a.engine]}</span><div className="xs faint mt-2">{a.class} · {CLASS[a.class]}</div></td>
-            <td><Tag tone={a.phase === 'MVP' ? 'bordo' : ''}>{a.phase}</Tag></td>
-            <td className="xs">{a.runs ? <><span className="strong tnum">{a.runs}×</span><div className="faint" style={{ whiteSpace: 'nowrap' }}>{ago(a.last_run)}</div></> : <span className="faint">—</span>}</td>
-            <td className="xs">{stOf[a.key] ? <StateTag s={stOf[a.key].state} /> : '—'}
-              {stOf[a.key]?.dependency && stOf[a.key].dependency.state !== 'conectada' && <div className="faint mt-2">Depende de {stOf[a.key].dependency.label}</div>}
-              {stOf[a.key]?.last_error && <div className="mt-2" style={{ color: 'var(--err)' }}>Erro {ago(stOf[a.key].last_error.at)}: {stOf[a.key].last_error.detail}</div>}
-            </td>
-            <td>
+            <td className="auto-main" data-label="Evento"><div className="strong">{a.event}</div><code className="xs faint">{a.key}</code></td>
+            <td className="sm" data-label="Condição">{a.condition}</td>
+            <td className="sm" data-label="Ação">{a.action}</td>
+            <td className="sm" data-label="Responsável"><div><div>{a.owner}</div><div className="xs muted">Aviso: {a.notification}</div><div className="xs muted">Prazo: {a.deadline}</div></div></td>
+            <td data-label="Motor"><div><span className={`engine ${a.engine}`}>{ENGINE[a.engine]}</span><div className="xs faint mt-2">{a.class} · {CLASS[a.class]}</div></div></td>
+            <td data-label="Fase"><span><Tag tone={a.phase === 'MVP' ? 'bordo' : ''}>{a.phase}</Tag></span></td>
+            <td data-label="Estado"><div>{s ? <Badge s={s.state} /> : <span className="faint">—</span>}{s?.reason && s.state !== 'ativo' && <div className="xs muted mt-2">{s.reason}</div>}</div></td>
+            <td className="xs" data-label="Última"><div>{a.runs ? <><span className="strong tnum">{a.runs}×</span><div className="faint" style={{ whiteSpace: 'nowrap' }}>{ago(a.last_run)}</div></> : <span className="faint">Nunca executou</span>}</div></td>
+            <td className="xs" data-label="Próxima"><div>{s?.next_run ? <span className="tnum">{fmtDateTime(s.next_run)}</span> : s?.schedule ? <span className="faint">{s.next_run_reason || '—'}</span> : <span className="faint">Quando alguém age</span>}{s?.schedule && <div className="faint mt-2">{s.schedule}</div>}</div></td>
+            <td className="xs" data-label="Erro"><div>{s?.last_error ? <span className="auto-err">{fmtDateTime(s.last_error.at)}{s.last_error.detail ? ` · ${s.last_error.detail}` : ''}</span> : <span className="faint">—</span>}</div></td>
+            <td data-label="Depende de"><div className="auto-deps">{s?.depends_on?.length ? s.depends_on.join(' · ') : '—'}</div></td>
+            <td data-label="Ligar">
               {!a.implemented ? <Tag tone="info">Planejada</Tag> : a.core ? <span className="xs muted" title="Parte do núcleo do processo — sempre ativa">Núcleo do processo</span> : (
                 <button className={`switch ${a.enabled ? 'on' : ''}`} role="switch" aria-checked={!!a.enabled} aria-label={`Ligar/desligar ${a.event}`} disabled={!auth.can('automacoes', 'admin')} onClick={() => toggle(a)} />
               )}
             </td>
           </tr>
-        ))}</tbody>
-      </table></div>
-    </>
-  );
-}
-
-// Rotinas: quando rodam, última e próxima execução, e o que impede de rodar no ambiente atual
-function Rotinas() {
-  const { data, error, loading } = useApi('/automations/estado');
-  if (loading && !data) return <Loading />;
-  if (error) return <ErrorBox error={error} />;
-  return (
-    <>
-      {data.hosting === 'vercel' && <p className="note mb-5">Este ambiente é a prévia na Vercel: as rotinas contínuas não rodam aqui. Elas dependem da hospedagem definitiva (aguardando aprovação).</p>}
-      <div className="table-wrap"><table className="table">
-        <thead><tr><th>Rotina</th><th>Quando</th><th>Estado</th><th>Última execução</th><th>Próxima</th></tr></thead>
-        <tbody>{data.routines.map((r) => (
-          <tr key={r.key}>
-            <td className="strong">{r.label}</td><td className="sm">{r.schedule}</td>
-            <td className="xs"><StateTag s={r.state} />{r.note && <div className="faint mt-2">{r.note}</div>}</td>
-            <td className="sm">{r.last ? <>{fmtDateTime(r.last)}{r.last_status && r.last_status !== 'ok' && <div className="xs" style={{ color: r.last_status === 'erro' ? 'var(--err)' : 'inherit' }}>{r.last_status}{r.last_error ? `: ${r.last_error}` : ''}</div>}</> : <span className="faint">Nunca executou</span>}</td>
-            <td className="sm">{r.next ? (r.next.includes('T') ? fmtDateTime(r.next) : r.next) : <span className="faint">—</span>}</td>
-          </tr>
-        ))}</tbody>
+        ); })}</tbody>
       </table></div>
     </>
   );

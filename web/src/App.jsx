@@ -34,8 +34,9 @@ const Usuarios = P(() => import('./pages/Usuarios.jsx'));
 const Historico = P(() => import('./pages/Historico.jsx'));
 const Perfil = P(() => import('./pages/Perfil.jsx'));
 const Performance = P(() => import('./pages/Performance.jsx'));
+const NotionHistorico = P(() => import('./pages/NotionHistorico.jsx'));
 const Configuracoes = P(() => import('./pages/Configuracoes.jsx'));
-const Notion = P(() => import('./pages/Notion.jsx'));
+const MapaProduto = P(() => import('./pages/MapaProduto.jsx'));
 const PortalApp = P(() => import('./portal/PortalApp.jsx'));
 
 // /financeiro (links e notificações antigos) → Negócio, preservando a aba
@@ -110,8 +111,9 @@ export default function App() {
                     <Route path="/historico" element={<Historico />} />
                     <Route path="/perfil" element={<Perfil />} />
                     <Route path="/performance" element={<Performance />} />
+                    <Route path="/notion" element={<NotionHistorico />} />
                     <Route path="/configuracoes" element={<Configuracoes />} />
-                    <Route path="/notion" element={<Notion />} />
+                    <Route path="/mapa" element={<MapaProduto />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </Suspense>

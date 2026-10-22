@@ -199,6 +199,14 @@ function Detail({ id, onClose, onChanged }) {
     <Drawer open history={false} onClose={onClose} title={p ? (p.problem || p.title) : 'Pendência'} kicker={p ? `${SEV1[p.severity]} · ${p.cause_label}` : 'Centro de Pendências'} wide>
       {loading || !d ? <Loading rows={6} /> : (
         <div className="pd-detail">
+          {/* A leitura pedida: o que aconteceu → por que está parado → quem precisa agir → o que fazer → até quando */}
+          <ol className="pd-story" aria-label="Resumo da pendência">
+            <li><span className="pd-k">O que aconteceu</span><p>{p.title}</p></li>
+            <li><span className="pd-k">Por que está parado</span><p>{p.problem || p.title}{p.cause_label ? <span className="faint"> · causa: {p.cause_label}</span> : null}</p></li>
+            <li><span className="pd-k">Quem precisa agir</span><p>{p.who || 'Operações define o responsável'}</p></li>
+            <li><span className="pd-k">O que precisa ser feito</span><p>{p.next || p.action || '—'}</p></li>
+            <li><span className="pd-k">Até quando</span><p>{p.due ? fmtDateTime(p.due) : 'sem prazo definido'}{p.late ? <span className="late"> · pendente há {p.late}</span> : null}</p></li>
+          </ol>
           <dl className="pd-dl">
             <div><dt>Cliente</dt><dd>{p.client_id ? <Link className="link" to={`/clientes/${p.client_id}`}>{cleanName(p.client)}</Link> : 'The Bold'}</dd></div>
             <div><dt>Origem</dt><dd>{{ task: 'Tarefa', content: 'Bloqueio de conteúdo', onboarding_item: 'Item de onboarding', invoice: 'Fatura' }[p.source?.type] || '—'}</dd></div>

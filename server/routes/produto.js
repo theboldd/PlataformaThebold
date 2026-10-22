@@ -79,7 +79,8 @@ export function performanceReport({ dias = 30 } = {}) {
     ],
   };
 }
-produto.get('/performance', requireInternal, requirePerm('performance', 'view'), (req, res) => res.json(performanceReport({ dias: req.query.dias })));
+// GET /performance é servido por routes/performance.js (relatório por pessoa); performanceReport daqui segue exportado para os resumos.
+produto.get('/performance/previsao', requireInternal, requirePerm('performance', 'view'), (_req, res) => { const r = performanceReport({ dias: 7 }); res.json({ ...r.forecast, period: r.period }); });
 
 // ═════════════ FINANCEIRO · estrutura completa (Recebimentos · Produção & Repasses · Rentabilidade) ═════════════
 produto.get('/financeiro/estrutura', requireInternal, requirePerm('financeiro', 'view'), (req, res) => {
