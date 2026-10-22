@@ -161,12 +161,18 @@ export function executiveOverview(user, qs = {}) {
   // ── Atalhos finais (resumo de uma linha, sempre real) ──
   const mon = new Date().toISOString().slice(0, 7);
   const finCount = one('SELECT (SELECT COUNT(*) FROM contracts) + (SELECT COUNT(*) FROM invoices) n').n;
-  const finance = { has_data: finCount > 0, recebido_mes: one('SELECT COALESCE(SUM(paid_amount),0) v FROM invoices WHERE substr(paid_at,1,7)=?', mon).v, atrasado: one("SELECT COALESCE(SUM(amount),0) v FROM invoices WHERE status='atrasada'").v };
+  // Atraso lido na hora: parcela aberta com vencimento passado também é atraso (o agendador que marca "atrasada" não roda em toda hospedagem)
+  const finance = { has_data: finCount > 0, recebido_mes: one('SELECT COALESCE(SUM(paid_amount),0) v FROM invoices WHERE substr(paid_at,1,7)=?', mon).v,
+    atrasado: one("SELECT COALESCE(SUM(amount),0) v FROM invoices WHERE status='atrasada' OR (status='aberta' AND due_at < ?)", nowIso).v,
+    pendente: one("SELECT COALESCE(SUM(amount),0) v FROM invoices WHERE status IN ('aberta','atrasada')").v,
+    recorrente: one("SELECT COALESCE(SUM(monthly_value),0) v FROM contracts WHERE status='ativo'").v,
+    contratos: one("SELECT COUNT(*) n FROM contracts WHERE status='ativo'").n };
   // Mesma regra da Torre (regras 24 e 25): carga e "acima da capacidade" só com tarefas nascidas na plataforma; herdadas à parte
   const team = all(`SELECT u.capacity, (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento') AND t.data_origin='plataforma') open,
     (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=u.id AND t.status IN ('aberta','em_andamento','agendada') AND t.data_origin='notion') inherited FROM users u WHERE u.active=1 AND u.role_key<>'cliente'`);
   const openPlat = team.reduce((a, x) => a + x.open, 0);
-  const capacity = { open: openPlat, inherited: team.reduce((a, x) => a + x.inherited, 0), acima: team.filter((x) => x.open > x.capacity).length, state: openPlat ? 'ativo' : 'dados_insuficientes' };
+  const capacity = { open: openPlat, inherited: team.reduce((a, x) => a + x.inherited, 0), acima: team.filter((x) => x.capacity && x.open > x.capacity).length,
+    people: team.length, configured: team.reduce((a, x) => a + (x.capacity || 0), 0), state: openPlat ? 'ativo' : 'dados_insuficientes' };
   const automations = { runs_7d: one('SELECT COUNT(*) n FROM automation_runs WHERE created_at > ?', new Date(Date.now() - 7 * DAY).toISOString()).n, errors_7d: one("SELECT COUNT(*) n FROM automation_runs WHERE status='erro' AND created_at > ?", new Date(Date.now() - 7 * DAY).toISOString()).n };
 
   // ── Está tudo bem? ──

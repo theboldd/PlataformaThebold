@@ -52,7 +52,7 @@ test('base vazia: toda tela interna e do portal abre sem erro de servidor', asyn
   // telas novas mostram o estado honesto, não um número inventado
   const perf = JSON.parse((await get('/performance?dias=30')).body);
   assert.equal(perf.state, 'dados_insuficientes');
-  assert.equal(perf.score, null);
+  assert.ok(perf.score == null && !('ranking' in perf), 'sem score nem ranking');
   const fin = JSON.parse((await get('/financeiro/estrutura')).body);
   assert.equal(fin.repasses.state, 'aguardando_decisao');
   assert.equal(fin.recebimentos.state, 'dados_insuficientes');

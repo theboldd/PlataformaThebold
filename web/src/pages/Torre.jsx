@@ -12,6 +12,7 @@ import { money, fmtDateTime, fmtDate, cleanName, ago } from '../lib/format.js';
 import { FUNCTIONS, FORMATS } from '../lib/status.js';
 import { ContentRows, MeetingRows, n2 } from './intel/parts.jsx';
 import '../styles/tower.css';
+import { StateBadge } from '../components/State.jsx';
 import { restoredOverlay } from '../lib/nav.jsx';
 
 const PERIODS = [{ value: 'hoje', label: 'Hoje' }, { value: '7d', label: '7 dias' }, { value: '30d', label: '30 dias' }, { value: 'custom', label: 'Personalizado' }];
@@ -210,6 +211,29 @@ export default function Torre() {
           <Responsibilities r={d.responsibilities} />
         </section>
       </div>
+
+      {/* DEPENDÊNCIAS */}
+      <section id="dependencias" className="tw-sec">
+        <div className="tw-sec-head"><h2 className="tw-h2">Dependências</h2>{d.dependencies && (d.dependencies.blocked.length || d.dependencies.waiting_client_decision) ? <StateBadge s="ativo" /> : <StateBadge s="dados_insuficientes" label="Nada esperando outra parte" />}</div>
+        <p className="tw-lead">O que está parado esperando outra parte — cliente, informação ou equipe — e o que aguarda decisão do cliente. Dependência entre tarefas ainda não é registrada pelo processo.</p>
+        {d.dependencies && (
+          <div className="tw-two">
+            <div>
+              <div className="caps mb-2">Bloqueios por quem precisa agir</div>
+              {!d.dependencies.by.length ? <p className="tw-empty">Nenhum conteúdo bloqueado.</p> : (
+                <ul className="tw-deps">{d.dependencies.by.map((x) => <li key={x.by}><span>{x.by}</span><b>{x.n}</b></li>)}</ul>
+              )}
+              {d.dependencies.blocked.length > 0 && <ul className="tw-deps-items">{d.dependencies.blocked.map((b) => <li key={b.id}><Link to={b.link}>{b.title}</Link><small>{b.client} · espera: {b.by}{b.reason ? ` · ${b.reason}` : ''}</small></li>)}</ul>}
+            </div>
+            <div>
+              <div className="caps mb-2">Aguardando decisão do cliente · {d.dependencies.waiting_client_decision}</div>
+              {!d.dependencies.waiting_client_items.length ? <p className="tw-empty">Nenhum conteúdo aguardando aprovação do cliente.</p> : (
+                <ul className="tw-deps-items">{d.dependencies.waiting_client_items.map((b) => <li key={b.id}><Link to={b.link}>{b.title}</Link><small>{b.client}</small></li>)}</ul>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* PERÍODO */}
       <section id="periodo" className="tw-sec">

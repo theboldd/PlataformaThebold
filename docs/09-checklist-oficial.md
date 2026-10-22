@@ -1,5 +1,322 @@
 # THE BOLD OS — Checklist oficial de conferência
 
+## Revisão 3.1 · 22/10/2026 — as duas versões combinadas
+
+A revisão 3 foi feita em paralelo por duas conversas. Esta revisão junta as duas, sem perder nada de nenhuma. Base: a versão publicada (`6f757bf`).
+
+**O que entrou além da revisão 3**
+
+| Tela | O que entrou |
+|---|---|
+| **Mapa do produto** (`/mapa`, novo) | 160 itens definidos, cada um com tela, estado e o que falta. Aba "O que revisar agora". O estado de cada item vem de `web/src/lib/productMap.js` e sai também neste documento (`node scripts/product-map-md.mjs`) |
+| **Integrações** | Estado real de cada conexão, vindo do servidor (`/api/status/integrations`): Google Calendar e Meet, Drive, Slack, Meta, e-mail, Claude, Notion, Obsidian, hospedagem, Railway, agendador e endereço público. Mostra o que falta (só nomes de variáveis), onde é usada e do que depende |
+| **Automações** | Estado de cada automação, última e próxima execução, último erro e dependência. Aviso do agendador e últimas rotinas. No celular, a tabela vira cartões |
+| **Financeiro** | Atraso calculado pela data, igual ao das Pendências (antes dependia do agendador). Cobrança e histórico de recebimentos. Demandas concluídas por pessoa no mês, sem valor. Rentabilidade por cliente com evolução de 6 meses. Metas: AGUARDANDO DECISÃO |
+| **Equipe & Performance** | Reaberturas, devoluções e bloqueios por pessoa, contexto dos atrasos, histórico recente, tendência (só com dado suficiente). Mínimo provisório de 20 eventos válidos (`performance_min_eventos`) |
+| **Notion & Histórico** | Números da migração (Client Brain, onboarding, histórico, legados, origem), fontes importadas e não importadas com o motivo, visão por cliente com link do Notion |
+| **Torre** | Seção Dependências: bloqueios por quem precisa agir e o que aguarda decisão do cliente |
+| **Bold Chat** | Caixa de Menções (chat e comentários de conteúdo) |
+| **Ficha do cliente** | Aba Comunicação. As abas quebram linha em vez de ficar escondidas |
+| **Pendências** | Ao abrir uma pendência: o que aconteceu → por que está parado → quem precisa agir → o que fazer → até quando |
+| **Visão geral** | Blocos Financeiro, Capacidade e Minhas pendências na própria tela |
+| **Menu** | Todos os módulos, com rolagem visível. Itens Mapa do produto e Meu perfil |
+| **Saúde do cliente, relatório, Torre** | O atraso de pagamento passou a ser calculado pela data |
+| **Portal no celular** | Corrigida a sobreposição do selo com a data nos blocos do feed |
+
+**Observações**
+- **Mínimo de eventos para medir performance:** provisório em 20 por período. A decisão final é da CEO.
+- **Reprogramações por pessoa:** o processo não registra mudança de prazo de tarefa, então a tela mostra "—" com o motivo.
+- **`reuniao.transcricao_detectada`:** roda pelo agendador e depende do Google. Aparece como AGUARDANDO INTEGRAÇÃO.
+- **Relatório semanal:** usa a hora do servidor (UTC). "Segunda 08h" pode não ser o horário de São Paulo.
+
+### Mapa do produto — estado atual por categoria
+
+| Estado | Itens |
+|---|---|
+| 🟢 ENTREGUE E VISÍVEL | 111 |
+| 🟡 VISÍVEL, MAS PARCIAL | 10 |
+| 🟠 EXISTE NO CÓDIGO, MAS NÃO ESTÁ VISÍVEL | 0 |
+| 🔵 AGUARDANDO CONFIGURAÇÃO | 21 |
+| 🔴 NÃO IMPLEMENTADO | 10 |
+| ⚪ PRECISA DE DECISÃO | 8 |
+| Sem dados na base real (mostram DADOS INSUFICIENTES) | 15 |
+
+### 🟢 ENTREGUE E VISÍVEL
+
+| Requisito | Tela | O que falta |
+|---|---|---|
+| **Visão geral** — Indicadores executivos (clientes em risco, pendências críticas, em produção, aguardando cliente) | Visão geral · topo (`/`) | — |
+| **Visão geral** — Precisa da sua atenção (impacto, responsável, onde, abrir pendência) | Visão geral (`/`) | — |
+| **Visão geral** — Próximos compromissos da plataforma | Visão geral · coluna direita (`/`) | — |
+| **Visão geral** — Operação: onde o trabalho está, por etapa | Visão geral · Operação (`/`) | — |
+| **Visão geral** — Inteligência (fato, padrão, hipótese, recomendação) | Visão geral · Inteligência (`/`) | — |
+| **Visão geral** — Financeiro (receita recorrente, recebido, em aberto, em atraso) *(sem dados na base real)* | Visão geral · Financeiro (`/`) | Base real sem contratos: mostra DADOS INSUFICIENTES |
+| **Visão geral** — Capacidade (tarefas da plataforma × capacidade configurada) *(sem dados na base real)* | Visão geral · Capacidade (`/`) | Capacidade é configurada, não medida |
+| **Visão geral** — Minhas pendências | Visão geral · Minhas pendências (`/`) | — |
+| **Visão geral** — O que os dados ainda não permitem afirmar | Visão geral · faixa abaixo do estado (`/`) | — |
+| **Visão geral** — Período (hoje, 7 dias, 30 dias, personalizado) | Visão geral · topo (`/`) | — |
+| **Torre de Controle** — Estado da operação | Torre · topo (`/torre`) | — |
+| **Torre de Controle** — Riscos, gargalos e bloqueios | Torre · Riscos & gargalos (`/torre`) | — |
+| **Torre de Controle** — Mapa da operação (etapas do Process Engine) | Torre · Mapa da operação (`/torre`) | — |
+| **Torre de Controle** — Pessoas: capacidade, carga, herdadas, atrasadas, próximos 7 dias | Torre · Capacidade da equipe (`/torre`) | — |
+| **Torre de Controle** — Concentração, sobrecarga e subutilização | Torre · Capacidade da equipe (`/torre`) | — |
+| **Torre de Controle** — Clientes & saúde da operação | Torre · Clientes (`/torre`) | — |
+| **Torre de Controle** — Itens sem responsável | Torre · Responsabilidades (`/torre`) | — |
+| **Torre de Controle** — Período e comparação *(sem dados na base real)* | Torre · Desempenho do período (`/torre`) | Comparação só quando há histórico |
+| **Torre de Controle** — Detalhamento e filtros (cliente, responsável, etapa, formato, status, tipo, origem) | Torre · Detalhamento (`/torre`) | — |
+| **Torre de Controle** — Prazos | Torre · Detalhamento (`/torre`) | — |
+| **Pendências** — Minhas / Equipe | Pendências · abas (`/pendencias`) | Equipe depende da permissão "pendencias" |
+| **Pendências** — Prioridade (crítica, alta, média, baixa) | Pendências (`/pendencias`) | — |
+| **Pendências** — Causa, responsável (quem age), cliente, processo | Pendências · filtros e cartões (`/pendencias`) | — |
+| **Pendências** — Impacto e próxima ação | Pendências · cartões e detalhe (`/pendencias`) | — |
+| **Pendências** — Leitura: o que aconteceu → por que está parado → quem age → o que fazer → até quando | Pendências · abrir uma pendência (`/pendencias`) | — |
+| **Pendências** — Origem e histórico (atividades relacionadas, comentários) | Pendências · detalhe (`/pendencias`) | — |
+| **Pendências** — Criar tarefa a partir da pendência | Pendências · detalhe (`/pendencias`) | — |
+| **Pendências** — Dado migrado não gera pendência (regra 23) | Pendências (`/pendencias`) | — |
+| **Clientes** — Carteira e onboarding geral | Clientes · Carteira / Onboarding (`/clientes`) | — |
+| **Clientes** — Visão geral do cliente (status, risco, próximos passos) | Cliente · Visão geral (`/clientes`) | — |
+| **Clientes** — Onboarding (formulário, migrado parcial, cards por seção) | Cliente · Onboarding (`/clientes`) | — |
+| **Clientes** — Calendário editorial e conteúdos (fases, mês, feed, histórico do Notion) | Cliente · Calendário editorial (`/clientes`) | — |
+| **Clientes** — Reuniões do cliente | Cliente · Reuniões (`/clientes`) | — |
+| **Clientes** — Comunicação do cliente | Cliente · Comunicação (`/clientes`) | — |
+| **Clientes** — Pendências do cliente | Cliente · Pendências (`/clientes`) | — |
+| **Clientes** — Solicitações e decisões | Cliente · Solicitações / Decisões (`/clientes`) | — |
+| **Clientes** — Marca & Pulso | Cliente · Marca & Pulso (`/clientes`) | — |
+| **Clientes** — Saúde do cliente (interno) | Cliente · Saúde (`/clientes`) | — |
+| **Clientes** — Arquivos, equipe, financeiro e histórico do cliente | Cliente · abas (todas visíveis, sem rolagem escondida) (`/clientes`) | — |
+| **Clientes** — Origem dos dados (selo Migrado do Notion, link do Notion) | Cliente · Ficha e Notion & Histórico (`/notion`) | — |
+| **Área do cliente (portal)** — Meu Momento Bold: saudação, onde estamos, progresso | Portal · Início | Ver com um login de cliente |
+| **Área do cliente (portal)** — O que preciso fazer (com prazo e consequência) | Portal · Início / Decisões | — |
+| **Área do cliente (portal)** — The Bold está cuidando · próximo passo (Depois) | Portal · Início | — |
+| **Área do cliente (portal)** — O que está acontecendo (timeline / histórico) | Portal · Início e Histórico | — |
+| **Área do cliente (portal)** — Calendário e conteúdos (prévia do feed, um por um) | Portal · Calendário / Conteúdos | — |
+| **Área do cliente (portal)** — Aprovação por coração (com confirmação, por versão) | Portal · Conteúdos | — |
+| **Área do cliente (portal)** — Comentários, perguntas e ajustes estruturados (página, ponto na imagem, timestamp) | Portal · Conteúdos | — |
+| **Área do cliente (portal)** — Versões (V1 substituída, V2 atual) | Portal · Conteúdos | — |
+| **Área do cliente (portal)** — Solicitações · pedir algo à The Bold | Portal · Solicitações e botão "Nova solicitação" | — |
+| **Área do cliente (portal)** — Central de decisões | Portal · Decisões | — |
+| **Área do cliente (portal)** — Mensagens com a equipe (com conteúdo anexado) | Portal · Mensagens | — |
+| **Área do cliente (portal)** — Reuniões: pauta, resumo publicado, reserva mensal (pós-reunião) | Portal · Reuniões | — |
+| **Área do cliente (portal)** — Feedback contextual ("Como foi essa etapa?") | Portal · Início | — |
+| **Conteúdos** — Lista, novo conteúdo e página do conteúdo | Conteúdos (`/conteudos`) | — |
+| **Conteúdos** — Produção, revisão interna (Sala de Revisão) e ajustes | Conteúdos / Sala de Revisão (`/revisao`) | — |
+| **Conteúdos** — Aprovação registrada (regras 14 e 18) | Conteúdo · Aprovações | — |
+| **Conteúdos** — Versões V1/V2/V3 e comparação (legenda palavra a palavra) | Conteúdo · Comparar versões | — |
+| **Conteúdos** — Comentários internos e visíveis ao cliente, menções | Conteúdo · Comentários | — |
+| **Conteúdos** — Legenda | Conteúdo · Legenda | — |
+| **Conteúdos** — Materiais e pedir material ao cliente | Conteúdo · Ações | — |
+| **Conteúdos** — Agendamento | Conteúdo · Agendar | — |
+| **Conteúdos** — Histórico do conteúdo | Conteúdo · Histórico | — |
+| **Process Engine** — Quadro de processos (kanban) | Processos (`/processos`) | Estava fora do ar (erro 500) — corrigido nesta etapa |
+| **Process Engine** — Etapas, status, responsáveis por função e prazos | Processos / Conteúdo (`/processos`) | — |
+| **Process Engine** — Janelas e "pronto ≠ disponível" (regra 20) | Sala de Revisão / Conteúdo (`/revisao`) | — |
+| **Process Engine** — Mover etapa com motivo e impacto | Processos (arrastar) / Conteúdo · Mover etapa (`/processos`) | — |
+| **Process Engine** — Exceção (bloquear, cancelar) | Conteúdo · Ações | — |
+| **Process Engine** — Regras do processo | Automações · Regras do processo (`/automacoes`) | — |
+| **Calendário** — Mês, semana, dia, agenda; conteúdos, prazos, ciclos e reuniões | Calendário (`/calendario`) | — |
+| **Reuniões** — Agenda, reuniões, pauta e ata *(sem dados na base real)* | Reuniões (`/reunioes`) | — |
+| **Reuniões** — Decisões, tarefas e responsáveis gerados pela reunião | Reuniões · reunião aberta | — |
+| **Reuniões** — Transcrição colada à mão | Reuniões · Pós-reunião | — |
+| **Reuniões** — Resumo interno e resumo do cliente (com bloqueio de vazamento) | Reuniões · Pós-reunião | — |
+| **Reuniões** — Reunião alimenta o Client Brain | Reuniões · Transformar em registros | — |
+| **Reuniões** — Sala de horários para o cliente reservar | Reuniões · Sala de horários | — |
+| **Bold Chat** — Canais, diretas e conversas oficiais com clientes *(sem dados na base real)* | Bold Chat (`/comunicacao`) | — |
+| **Bold Chat** — Menções (caixa própria) | Bold Chat · Menções (`/comunicacao?ver=mencoes`) | — |
+| **Bold Chat** — Threads e conteúdo relacionado à conversa | Bold Chat | — |
+| **Bold Chat** — Transformar mensagem em tarefa, pendência, ajuste ou evento | Bold Chat · Transformar em… | — |
+| **CRM** — Pipeline, etapas, negócios, responsável e próxima ação *(sem dados na base real)* | CRM (`/crm`) | — |
+| **CRM** — Follow-ups vencidos | CRM (`/crm`) | — |
+| **CRM** — Fechamento → cliente + onboarding | CRM · Fechado | — |
+| **Financeiro** — Recebimentos: contratos, parcelas, vencimentos, pagamentos *(sem dados na base real)* | Financeiro · Recebimentos (`/financeiro`) | — |
+| **Financeiro** — Atraso calculado na hora (mesmo sem o agendador) | Financeiro · Recebimentos (`/financeiro`) | — |
+| **Financeiro** — Cobrança: lista de atrasos e quem age | Financeiro · Recebimentos (`/financeiro`) | — |
+| **Financeiro** — Histórico de recebimentos *(sem dados na base real)* | Financeiro · Recebimentos (`/financeiro`) | — |
+| **Financeiro** — Rentabilidade: receita e retrabalho por cliente *(sem dados na base real)* | Financeiro · Rentabilidade (`/financeiro?aba=rentabilidade`) | — |
+| **Equipe & Performance** — Tela por pessoa com período (7/30/90 dias) | Equipe & Performance (`/performance`) | — |
+| **Equipe & Performance** — Eventos válidos e aviso DADOS INSUFICIENTES PARA MEDIR PERFORMANCE *(sem dados na base real)* | Equipe & Performance · topo (`/performance`) | — |
+| **Equipe & Performance** — Entregas, no prazo, com atraso, atrasadas abertas *(sem dados na base real)* | Equipe & Performance (`/performance`) | — |
+| **Equipe & Performance** — Reaberturas, devoluções e bloqueios por pessoa *(sem dados na base real)* | Equipe & Performance (`/performance`) | — |
+| **Equipe & Performance** — Capacidade configurada (não medida) e tendência *(sem dados na base real)* | Equipe & Performance (`/performance`) | Tendência só aparece com dados suficientes e período comparável |
+| **Equipe & Performance** — Contexto dos atrasos | Equipe & Performance (`/performance`) | — |
+| **The Bold Brain** — Interface: pergunta, agentes, escopo por cliente, sugestões, histórico | The Bold Brain (`/brain`) | — |
+| **The Bold Brain** — Recomendações sem IA (regras fixas) | Insights / Torre (`/insights`) | — |
+| **Insights** — Fatos, padrões observados, hipóteses, recomendações, tendências, evidência *(sem dados na base real)* | Insights (`/insights`) | — |
+| **Insights** — Aplicar, descartar, resolvidos sozinhos; rodar detectores | Insights (`/insights`) | — |
+| **Notion & Histórico** — Tela única da migração (números, fontes, por cliente) | Notion & Histórico (`/notion`) | — |
+| **Notion & Histórico** — Client Brain e onboarding migrados, com origem e link | Notion & Histórico / Cliente · Ficha (`/notion`) | — |
+| **Notion & Histórico** — CR Editorial e calendários históricos (somente leitura) | Notion & Histórico / Cliente · Calendário editorial (`/notion`) | — |
+| **Notion & Histórico** — Itens legados e revisão de atrasos (um a um) | Itens legados (`/atrasos`) | — |
+| **Notion & Histórico** — Decisões da migração (pontos de revisão) | Notion & Histórico / Configurações (`/migracao`) | — |
+| **Automações** — Mapa de automações com estado, última e próxima execução, erro e dependência | Automações (`/automacoes`) | — |
+| **Automações** — Execuções e regras do processo *(sem dados na base real)* | Automações · abas (`/automacoes`) | — |
+| **Integrações** — Painel com estado de cada integração (conectada, não conectada, aguardando, erro) | Integrações (`/integracoes`) | — |
+| **Integrações** — Notion (importação somente leitura) | Integrações / Notion & Histórico (`/notion`) | — |
+| **Configurações** — Tela única de configurações | Configurações (`/configuracoes`) | — |
+| **Configurações** — Usuários, perfis (funções), exceções e acessos dos clientes | Usuários e permissões (`/usuarios`) | — |
+| **Configurações** — Notificações na plataforma | Sino | — |
+| **Configurações** — Perfil (dados, aparência, senha) | Meu perfil (`/perfil`) | — |
+| **Mobile** — Todas as telas abrem no celular, sem rolagem lateral da página | Todas | — |
+
+### 🟡 VISÍVEL, MAS PARCIAL
+
+| Requisito | Tela | O que falta |
+|---|---|---|
+| **Visão geral** — Gargalos | Visão geral · Operação (`/torre`) | Na home só as barras por etapa; o detalhe fica na Torre |
+| **Torre de Controle** — Dependências (bloqueios por quem precisa agir, aguardando decisão do cliente) | Torre · Dependências (`/torre`) | Dependência entre tarefas ainda não é registrada pelo processo |
+| **Torre de Controle** — Inteligência e causa raiz (fato · padrão · hipótese não verificada · recomendação) | Torre · Inteligência (`/torre`) | Sem análise de causa raiz por item; hipótese nunca aponta culpado |
+| **Clientes** — Client Brain com origem separada | Cliente · Ficha / Resumo do Brain (`/clientes`) | Dois formatos (14 e 22 seções) ainda não unificados |
+| **Área do cliente (portal)** — Notificações inteligentes | Portal · sino | E-mail aguarda Resend; sem preferências por pessoa |
+| **Conteúdos** — Timestamp do vídeo e região na imagem | Conteúdo / Portal | Hoje só o cliente marca timestamp e região |
+| **Process Engine** — Reabertura e correção | Conteúdo · Mover etapa / nova versão | Sem botão "Reabrir" explícito |
+| **Financeiro** — Produção & Repasses: estrutura e demandas concluídas por pessoa | Financeiro · Produção & Repasses (`/financeiro?aba=producao`) | Valores de repasse dependem das regras |
+| **Mobile** — Tabelas administrativas (Usuários) no celular | Usuários (`/usuarios`) | Tabela larga com rolagem lateral |
+| **Mobile** — Torre e Histórico no celular | Torre / Histórico (`/torre`) | Páginas muito longas |
+
+### 🟠 EXISTE NO CÓDIGO, MAS NÃO ESTÁ VISÍVEL
+
+Nenhum item.
+
+### 🔵 AGUARDANDO CONFIGURAÇÃO
+
+| Requisito | Tela | O que falta |
+|---|---|---|
+| **Visão geral** — Compromissos da agenda Google | Visão geral · coluna direita (`/integracoes`) | Conectar o Google Calendar |
+| **Área do cliente (portal)** — Acesso real dos clientes (convites) | Usuários · Acessos dos clientes (`/usuarios`) | E-mail (Resend) e e-mails dos 22 clientes sem acesso |
+| **Conteúdos** — Publicação automática no Instagram | Conteúdo (`/integracoes`) | App da Meta |
+| **Process Engine** — Avisos por horário (prazo próximo, etapa disponível, processo parado) | Automações (`/automacoes`) | Agendador: CRON_SECRET + hospedagem persistente |
+| **Calendário** — Google Calendar no calendário | Calendário · aviso no topo (`/integracoes`) | Conectar o Google |
+| **Reuniões** — Evento no Google Calendar e link do Google Meet | Reuniões · avisos no topo (`/integracoes`) | Conectar o Google |
+| **Reuniões** — Detecção automática de transcrição | Reuniões (`/integracoes`) | Google |
+| **Reuniões** — Resumo e extração por IA | Reuniões · Gerar resumos com IA (`/integracoes`) | ANTHROPIC_API_KEY |
+| **Bold Chat** — Slack (envio de avisos) | Bold Chat / Integrações (`/integracoes`) | OAuth do Slack |
+| **CRM** — Follow-up automático (vira tarefa) | Automações (`/automacoes`) | Agendador |
+| **Financeiro** — Régua de cobrança automática | Financeiro · Recebimentos (`/financeiro`) | Agendador |
+| **The Bold Brain** — Respostas, explicação de insights, análise de clientes/operação/gargalos | The Bold Brain (`/integracoes`) | ANTHROPIC_API_KEY |
+| **Insights** — Narrativa por IA | Insights (`/integracoes`) | ANTHROPIC_API_KEY |
+| **Insights** — Detecção periódica (a cada 15 min) | Automações (`/automacoes`) | Agendador; hoje roda ao abrir Torre/Visão geral |
+| **Automações** — Rotinas por horário (prazos, cobrança, relatório, saúde) | Automações · aviso do agendador (`/automacoes`) | CRON_SECRET + hospedagem |
+| **Integrações** — Google Calendar e Google Meet | Integrações (`/integracoes`) | OAuth do Google |
+| **Integrações** — Slack | Integrações (`/integracoes`) | OAuth do Slack |
+| **Integrações** — Meta / Instagram | Integrações (`/integracoes`) | App da Meta + PUBLIC_BASE_URL |
+| **Integrações** — E-mail (Resend) | Integrações (`/integracoes`) | RESEND_API_KEY + BOLD_MAIL_FROM com domínio verificado |
+| **Integrações** — Anthropic / Claude | Integrações (`/integracoes`) | ANTHROPIC_API_KEY |
+| **Configurações** — Domínio próprio | Configurações · Infraestrutura (`/configuracoes`) | Configurar |
+
+### 🔴 NÃO IMPLEMENTADO
+
+| Requisito | Tela | O que falta |
+|---|---|---|
+| **Conteúdos** — Arrastar conteúdo no calendário para mudar a data | Calendário (`/calendario`) | Construir |
+| **Reuniões** — Videochamada nativa | Reuniões · Sala de reunião | Especificada (V2), não construída |
+| **Bold Chat** — Espelhamento automático para o Slack | Integrações (`/integracoes`) | Construir |
+| **Equipe & Performance** — Reprogramações por pessoa | Equipe & Performance (`/performance`) | O processo ainda não registra mudança de prazo (tarefa.prazo_alterado): aparece "—" com o motivo |
+| **Equipe & Performance** — Registro auditável de eventos válidos (perfEvents) e capacidade medida | — | Bloco 6 |
+| **The Bold Brain** — Previsão de atraso e feedback recorrente → Brain | — | Construir |
+| **Automações** — 6 automações do catálogo (brain.feedback, ciclo.criar, drive.material, estoque.videos, previsao.atraso, slack.espelhar) | Automações (`/automacoes`) | Construir |
+| **Integrações** — Google Drive | Integrações (`/integracoes`) | Especificado (docs/integracoes/google-drive.md); aguarda definição Workspace × Gmail |
+| **Configurações** — Preferências de notificação por pessoa | Configurações (`/configuracoes`) | Construir |
+| **Configurações** — Backup automático com restauração testada | Configurações · Infraestrutura (`/configuracoes`) | Construir com a hospedagem |
+
+### ⚪ PRECISA DE DECISÃO
+
+| Requisito | Tela | O que falta |
+|---|---|---|
+| **Clientes** — Status dos 23 clientes "a confirmar" | Clientes (`/clientes`) | A CEO definir o status real de cada cliente |
+| **Financeiro** — Regras de repasse (valor, competência, fechamento) | Financeiro · Produção & Repasses (`/financeiro?aba=producao`) | A CEO definir |
+| **Financeiro** — Custos, repasses e margem por cliente | Financeiro · Rentabilidade (`/financeiro?aba=rentabilidade`) | Sem regra de custo/repasse; margem não é calculada |
+| **Equipe & Performance** — Mínimo de eventos válidos para medir performance | Equipe & Performance · topo (`/performance`) | Provisório: 20 por período (configuração performance_min_eventos). A CEO definir |
+| **Equipe & Performance** — Score e ranking | — | Fora do escopo por decisão; não exibido |
+| **Notion & Histórico** — Ocear — Cronograma editorial | Notion & Histórico · Fontes (`/notion`) | Importar como histórico, trazer para o calendário ou deixar fora |
+| **Notion & Histórico** — Sincronização com o Notion | Notion & Histórico (`/notion`) | Nenhuma, por decisão (somente leitura) |
+| **Integrações** — Hospedagem persistente (Railway) | Integrações / Configurações (`/configuracoes`) | Aprovar o plano de docs/08 |
+
+## O QUE VOCÊ DEVE REVISAR MANUALMENTE AGORA
+
+Na ordem de navegação. O mesmo roteiro está na plataforma em **Sistema → Mapa do produto → O que revisar agora**.
+
+**1. Visão geral** (`/`)
+- [ ] Os 4 indicadores levam a algo ao clicar
+- [ ] Precisa da sua atenção abre a pendência certa
+- [ ] Os blocos Financeiro, Capacidade e Minhas pendências aparecem (com DADOS INSUFICIENTES se não houver dado)
+- [ ] A faixa "o que os dados ainda não permitem afirmar" faz sentido
+
+**2. Torre de Controle** (`/torre`)
+- [ ] A ordem estado → riscos → operação → pessoas → clientes → dependências → período → inteligência → detalhamento
+- [ ] Filtros (inclusive "Origem")
+- [ ] A nova seção Dependências
+- [ ] Capacidade marcada como configurada, não medida
+
+**3. Pendências** (`/pendencias`)
+- [ ] Minhas × Equipe
+- [ ] Abrir uma pendência: a leitura em 5 passos (o que aconteceu → até quando)
+- [ ] Criar tarefa a partir da pendência
+
+**4. Clientes** (`/clientes`)
+- [ ] Todas as 16 abas aparecem sem rolagem escondida
+- [ ] Abas novas: Pendências e Comunicação
+- [ ] Ficha: selo de origem e "Migrado do Notion"
+- [ ] Saúde (interno)
+
+**5. Área do cliente** (`/usuarios`)
+- [ ] Entrar com um login de cliente (Usuários → Acessos dos clientes)
+- [ ] Início: onde estamos, o que preciso fazer, The Bold está cuidando, depois
+- [ ] Aprovar com ♡ pede confirmação
+- [ ] Pedir ajuste com ponto na imagem
+
+**6. Conteúdos** (`/conteudos`)
+- [ ] Abrir um conteúdo: versões, comparar, comentários, mover etapa
+- [ ] Pedir material, bloquear, cancelar
+
+**7. Processos** (`/processos`)
+- [ ] O quadro carrega (estava com erro)
+- [ ] Arrastar um card mostra impacto e pede motivo
+
+**8. Calendário** (`/calendario`)
+- [ ] Aviso "Google Calendar · aguardando conexão"
+- [ ] Mês, semana, dia, agenda
+
+**9. Reuniões** (`/reunioes`)
+- [ ] Avisos de Google Calendar, Meet e IA
+- [ ] Abrir uma reunião: pauta, ata, pós-reunião, transformar em registros
+
+**10. Bold Chat** (`/comunicacao`)
+- [ ] Caixa de Menções
+- [ ] Transformar em… (tarefa, ajuste, pendência, evento)
+- [ ] Aviso do Slack
+
+**11. CRM** (`/crm`)
+- [ ] Pipeline, novo negócio, próxima ação
+
+**12. Financeiro** (`/financeiro`)
+- [ ] As 3 abas: Recebimentos, Produção & Repasses, Rentabilidade
+- [ ] DADOS INSUFICIENTES e AGUARDANDO DECISÃO onde não há regra
+- [ ] Atraso igual ao das Pendências
+
+**13. Equipe & Performance** (`/performance`)
+- [ ] Aviso DADOS INSUFICIENTES PARA MEDIR PERFORMANCE
+- [ ] Métricas por pessoa, sem score e sem ranking
+- [ ] Métricas sem fonte mostram "—" com o motivo
+
+**14. The Bold Brain** (`/brain`)
+- [ ] "Sua inteligência operacional." e o aviso para conectar o Claude
+- [ ] O botão Perguntar fica desativado com o motivo
+
+**15. Insights** (`/insights`)
+- [ ] Fato, padrão, hipótese, recomendação, evidência
+
+**16. Notion & Histórico** (`/notion`)
+- [ ] Números da migração, fontes importadas e não importadas, por cliente
+- [ ] Ocear aparece como PRECISA DE DECISÃO
+
+**17. Configurações** (`/configuracoes`)
+- [ ] Todos os cartões levam à tela certa
+- [ ] Integrações: estado de cada uma, o que falta
+- [ ] Automações: estado, última/próxima execução, erro, dependência
+- [ ] Mapa do produto
+
+
+---
+
 **Revisão 3 · 21/10/2026 · PRODUTO VISÍVEL.** Esta revisão troca a pergunta “existe no código?” por **“a usuária entra na plataforma e encontra, entende e usa?”**.
 
 **Fonte dos requisitos.** Inventário de **457 requisitos definidos**, reconciliados de três fontes:

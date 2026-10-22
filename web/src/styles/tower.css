@@ -198,3 +198,10 @@ button.tw-tr:hover { background: var(--bordo-soft); }
   .tw-cap-table .tw-tr { grid-template-columns: minmax(0, 1fr) auto; }
   .tw-rc > div { grid-template-columns: 1fr; gap: 2px; }
 }
+
+/* Dependências */
+.tw-deps { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+.tw-deps li { display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 6px 0; font-size: var(--fs-sm); }
+.tw-deps-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.tw-deps-items li { display: grid; gap: 2px; font-size: var(--fs-sm); }
+.tw-deps-items small { color: var(--muted); font-size: var(--fs-xs); }

@@ -81,18 +81,10 @@ function Agenda({ data, onOpen }) {
   return (
     <>
       <MeetingIntegrations google={data.google} />
-      <div className="cols">
+      <div>
         <div>
           <Section title="Próximas" kicker={`${upcoming.length} reunião(ões)`}>{upcoming.length ? upcoming.map((m) => <MeetingRow key={m.id} m={m} onOpen={onOpen} />) : <Empty title="Nenhuma reunião agendada." />}</Section>
           <Section title="Realizadas e canceladas">{past.length ? past.slice(0, 20).map((m) => <MeetingRow key={m.id} m={m} onOpen={onOpen} />) : <Empty title="Sem histórico." />}</Section>
-        </div>
-        <div>
-          <Section title="Sala de reunião" kicker="Videochamada dentro da plataforma">
-            <div className="note-v2">
-              A videochamada nativa (LiveKit), gravação com consentimento, transcrição e resumos gerados pelo Claude estão especificados em <code>docs/modulos/reunioes.md</code> e entram na V2.
-              Hoje a reunião acontece no link registrado em “local” (ex.: Google Meet) e a ata estruturada é feita aqui, na aba Inteligência.
-            </div>
-          </Section>
         </div>
       </div>
     </>

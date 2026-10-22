@@ -70,7 +70,7 @@ export function performanceReport({ dias = 30 } = {}) {
     ],
   };
 }
-produto.get('/performance', requireInternal, requirePerm('performance', 'view'), (req, res) => res.json(performanceReport({ dias: req.query.dias })));
+// GET /performance é servido por routes/performance.js (relatório por pessoa); performanceReport daqui segue exportado para os resumos.
 
 // ═════════════ FINANCEIRO · estrutura completa (Recebimentos · Produção & Repasses · Rentabilidade) ═════════════
 produto.get('/financeiro/estrutura', requireInternal, requirePerm('financeiro', 'view'), (req, res) => {

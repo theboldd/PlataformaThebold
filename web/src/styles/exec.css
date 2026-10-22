@@ -156,3 +156,16 @@
 .ex-notes li { font-size: var(--fs-sm); }
 .ex-notes li a, .ex-notes li b { font-weight: 600; color: var(--ink); }
 .ex-notes li small { display: block; color: var(--muted); font-size: 12px; }
+
+/* Financeiro · Capacidade · Minhas pendências */
+.ex-trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-5); margin: var(--sp-7) 0 var(--sp-6); }
+@media (max-width: 1100px) { .ex-trio { grid-template-columns: 1fr; } }
+.ex-mini { border-top: 1px solid var(--line-strong); padding-top: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.ex-mini .ex-sh { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.ex-kv { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin: 0; }
+.ex-kv dt { font-size: var(--fs-xs); letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--muted); }
+.ex-kv dd { margin: 2px 0 0; font-size: var(--fs-lg, 18px); font-weight: 500; }
+.ex-kv dd.late { color: var(--primary-text); }
+.ex-mylist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ex-mylist a { display: grid; gap: 2px; text-decoration: none; color: inherit; }
+.ex-mylist b { font-weight: 500; font-size: var(--fs-sm); } .ex-mylist small { color: var(--muted); font-size: var(--fs-xs); }
