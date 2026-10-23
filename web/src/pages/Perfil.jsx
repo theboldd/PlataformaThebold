@@ -37,7 +37,7 @@ export default function Perfil() {
             </ul>
           </Section>
           <Section title="Aparência">
-            <Seg label="Tema" value={theme} onChange={(t) => { setTheme(t); saveTheme(t); }} options={[{ value: 'system', label: 'Sistema' }, { value: 'light', label: 'Claro' }, { value: 'dark', label: 'Escuro' }]} />
+            <Seg label="Tema" value={theme} onChange={(t) => { setTheme(t); saveTheme(t); }} options={[{ value: 'system', label: 'Padrão (escuro)' }, { value: 'light', label: 'Claro' }, { value: 'dark', label: 'Escuro' }]} />
             <p className="xs faint mt-4">Preferência salva neste navegador.</p>
           </Section>
         </div>

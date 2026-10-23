@@ -1,5 +1,15 @@
 # THE BOLD OS — Checklist oficial de conferência
 
+## Revisão 4.5 · 23/10/2026 — linguagem visual editorial em toda a plataforma
+
+| O que | Onde | Estado |
+|---|---|---|
+| **Design editorial (referência “Content OS”)** com a marca: canvas escuro como padrão, barra lateral off-white com itens numerados (00, 01…), títulos em grotesca pesada (Inter Tight), rótulos em mono espaçada (JetBrains Mono), subtítulos em serifa itálica, cantos retos, linhas finas. Bordô no item ativo, na ação principal e no foco. Cores de informação (estados, riscos, pastéis da Torre, classificações) mantidas | Todas as telas internas (camada `styles/editorial-os.css`) | 🟢 |
+| Tema: “Padrão (escuro)” é o padrão; o claro continua disponível no Perfil e no botão do topo | Perfil · topo | 🟢 |
+| Login e portal do cliente | mantêm o desenho próprio (já editorial); ajustes por tela quando você pedir | ⚪ |
+
+---
+
 ## Revisão 4.4 · 22/10/2026 — ficha do cliente redesenhada e camada Notion → The Bold OS
 
 | O que | Onde | Estado |

@@ -42,12 +42,14 @@ export function Stat({ value, label, hint, alert, to, onClick }) {
 export function PageHead({ kicker, title, sub, children }) {
   return (
     <header className="page-head">
-      <div>
-        {kicker && <div className="caps kicker">{kicker}</div>}
-        <h1 className="ed-xl">{title}</h1>
-        {sub && <p className="muted mt-2" style={{ margin: '8px 0 0', maxWidth: 640 }}>{sub}</p>}
+      <div className="ph-top"><span className="caps kicker">{kicker || title}</span><span className="caps ph-brand">The Bold OS · Operating System</span></div>
+      <div className="ph-body">
+        <div>
+          <h1 className="ed-xl">{title}</h1>
+          {sub && <p className="ph-sub">{sub}</p>}
+        </div>
+        {children && <div className="row wrap">{children}</div>}
       </div>
-      {children && <div className="row wrap">{children}</div>}
     </header>
   );
 }

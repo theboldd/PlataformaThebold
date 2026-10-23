@@ -1,0 +1,139 @@
+/* ═══════════════════════════════════════════════════════════════
+   THE BOLD OS — camada editorial (referência: “Content OS”, 23/10/2026)
+   Canvas escuro, barra lateral off-white numerada, títulos em grotesca pesada, rótulos em mono espaçada,
+   destaques em serifa itálica, cantos retos, linhas finas. Bordô = acento da marca (ativo, ação principal, foco).
+   As cores de informação (estados, riscos, pastéis da Torre) continuam como estão.
+   Carregada por último e com ':root' na frente para vencer os estilos de cada página.
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  --font-display: 'Inter Tight', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --r-sm: 0px; --r-md: 0px; --r-lg: 0px; --r-xl: 0px;
+  --tracking-caps: 0.2em;
+  --side-bg: #F4F1EC; --side-ink: #0B0B0B; --side-muted: #7A726B; --side-line: rgba(11, 11, 11, 0.12);
+}
+/* Escuro editorial (padrão da plataforma) */
+:root:root[data-theme="dark"] {
+  --bg: #0A0909; --surface: #111010; --surface-2: #1A1717;
+  --ink: #F4F1EC; --ink-2: #D7D1CA; --muted: #9C958E; --faint: #67605A;
+  --line: rgba(244, 241, 236, 0.12); --line-strong: rgba(244, 241, 236, 0.30);
+  --primary: var(--wine-500); --primary-hover: var(--wine-400); --primary-ink: var(--wine-600); --primary-text: #CF9499;
+  --primary-soft: rgba(207, 148, 153, 0.10); --primary-line: rgba(207, 148, 153, 0.42); --tint-rgb: 244, 239, 234;
+  --ok: #7FB08E; --warn: #D7A55B; --err: #DB7A6C; --info: #8FA9C4;
+  --shadow-1: none; --shadow-2: 0 30px 80px -30px rgba(0, 0, 0, .8);
+  color-scheme: dark;
+}
+
+/* ── Tipografia ── */
+:root .ed-xxl, :root .ed-xl, :root .cf-name, :root .page-head h1 {
+  font-family: var(--font-display); font-weight: 800; letter-spacing: -0.045em; line-height: .92;
+}
+:root .ed-xxl, :root .cf-name { font-size: clamp(46px, 6.6vw, 108px); }
+:root .ed-xl { font-size: clamp(40px, 5.2vw, 84px); }
+:root .caps, :root .label, :root .field > label, :root .nav-label, :root .table th, :root .tab, :root .crumbs, :root .stat .label, :root .cf .caps {
+  font-family: var(--font-mono); font-weight: 400; letter-spacing: 0.2em;
+}
+:root .caps { font-size: 11px; }
+:root .ed-it, :root .ph-sub em { font-family: var(--font-editorial); font-style: italic; }
+
+/* ── Cabeçalho de página: linha superior em mono + título grande + subtítulo em serifa itálica ── */
+:root .page-head { display: block; border-bottom: 0; padding-bottom: var(--sp-6); margin-bottom: var(--sp-6); }
+.ph-top { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--ink); margin-bottom: clamp(28px, 4vw, 52px); }
+.ph-top .caps { color: var(--ink-2); }
+.ph-brand { color: var(--muted) !important; }
+.ph-body { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-5); flex-wrap: wrap; }
+.ph-sub { margin: 16px 0 0; max-width: 760px; font-family: var(--font-editorial); font-style: italic; font-size: clamp(18px, 1.6vw, 23px); line-height: 1.3; color: var(--ink-2); }
+@media (max-width: 720px) { .ph-brand { display: none; } }
+
+/* ── Barra lateral off-white, numerada ── */
+:root .sidebar { background: var(--side-bg); color: var(--side-ink); border-right: 1px solid var(--side-line); padding: 0 0 16px; }
+:root .brand { flex-direction: column; align-items: flex-start; gap: 6px; padding: 30px 28px 24px; border-bottom: 1px solid var(--side-line); }
+:root .brand .word { font-family: var(--font-display); font-weight: 800; font-size: 30px; letter-spacing: -0.045em; color: var(--side-ink); }
+:root .brand .word i { color: var(--wine-700); }
+:root .brand .os { font-family: var(--font-editorial); font-style: italic; font-size: 20px; letter-spacing: 0; color: #4E4842; text-transform: none; }
+:root .nav { padding: 22px 18px 28px; gap: 26px; counter-reset: navn -1; }
+:root .nav-label { color: var(--side-muted); font-size: 11px; padding: 0 12px 8px; }
+:root .nav-group.primary .nav-label { color: var(--side-muted); }
+:root .nav a, :root .nav-group.primary a { counter-increment: navn; border-radius: 0; padding: 10px 12px; gap: 16px; font-size: 15px; font-weight: 400; color: #1C1917; }
+:root .nav a::before { content: counter(navn, decimal-leading-zero); position: static; width: auto; height: auto; border-radius: 0; background: none; font-family: var(--font-mono); font-size: 12px; color: #8D857E; min-width: 20px; }
+:root .nav a svg { display: none; }
+:root .nav a:hover { background: rgba(11, 11, 11, .05); color: #000; }
+:root .nav a.active { background: #0B0B0B; color: #F4F1EC; box-shadow: inset 3px 0 0 var(--wine-500); }
+:root .nav a.active::before { color: #D59CA1; }
+:root .nav .count { border-radius: 0; background: var(--wine-700); color: #F4F1EC; font-family: var(--font-mono); }
+:root .side-foot { border-top: 1px solid var(--side-line); color: var(--side-ink); padding: 16px 24px 0; }
+:root .side-foot .role { color: var(--side-muted); font-family: var(--font-mono); letter-spacing: .18em; }
+:root .side-foot .btn { color: var(--side-ink) !important; }
+:root .sidebar .nav { scrollbar-color: rgba(11, 11, 11, .25) transparent; }
+:root .sidebar .nav::-webkit-scrollbar-thumb { background: rgba(11, 11, 11, .25); }
+
+/* ── Barra superior ── */
+:root .topbar { height: 74px; padding: 0 clamp(16px, 3.4vw, 64px); background: color-mix(in srgb, var(--bg) 94%, transparent); border-bottom: 1px solid var(--line); }
+:root .crumbs { font-size: 11px; color: var(--muted); }
+:root .crumbs b { font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: .06em; text-transform: uppercase; }
+:root .live { font-family: var(--font-mono); letter-spacing: .18em; font-size: 10.5px; }
+:root .theme-toggle { border-radius: 0; }
+
+/* ── Botões: retangulares, caixa alta; principal em bordô; “tinta” = branco sobre o escuro ── */
+:root .btn { border-radius: 0; height: 42px; padding: 0 20px; font-family: var(--font-sans); font-weight: 600; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; border-color: var(--line-strong); }
+:root .btn:hover { border-color: var(--ink); background: rgba(var(--tint-rgb), .04); }
+:root .btn:active { transform: none; }
+:root .btn-primary { background: var(--primary); border-color: var(--primary); color: #F4F1EC; }
+:root .btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+:root .btn-ink { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+:root .btn-ghost { border-color: transparent; }
+:root .btn-ghost:hover { background: rgba(var(--tint-rgb), .06); border-color: transparent; }
+:root .btn-sm { height: 32px; padding: 0 12px; font-size: 11px; }
+:root .btn-lg { height: 54px; padding: 0 28px; font-size: 13px; }
+:root .btn-icon { padding: 0; }
+:root .seg, :root .seg button, :root .jb-view, :root .jb-view button, :root .jb-select, :root .jb-btn, :root .jb-search input { border-radius: 0; }
+:root .seg button { font-family: var(--font-mono); letter-spacing: .1em; text-transform: uppercase; font-size: 11px; }
+
+/* ── Etiquetas e estados: retângulo fino, texto mono (as cores seguem as de hoje) ── */
+:root .tag, :root .st-badge, :root .state-tag, :root .cf-pill, :root .status-select, :root .cf-src, :root .cf-n, :root .stx-chip, :root .ed-flag {
+  border-radius: 0; font-family: var(--font-mono); letter-spacing: .12em; text-transform: uppercase; font-size: 10.5px; font-weight: 500;
+}
+:root .st-badge i { border-radius: 0; }
+
+/* ── Superfícies: sem cantos, sem sombra, linha fina ── */
+:root .panel, :root .modal, :root .drawer, :root .ccard, :root .np-item, :root .cf-next, :root .cf-more-menu, :root .stx-card, :root .state-panel, :root .st-notice, :root .jb-card, :root .jb-col {
+  border-radius: 0;
+}
+:root .panel { background: transparent; border-color: var(--line-strong); }
+:root .ccard:hover { transform: none; box-shadow: none; border-color: var(--ink); }
+:root .modal, :root .drawer { border: 1px solid var(--line-strong); }
+:root .toast { border-radius: 0; font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; }
+:root .input, :root .select, :root .textarea { border-radius: 0; background: transparent; }
+:root .input:focus, :root .select:focus, :root .textarea:focus { box-shadow: none; border-color: var(--primary-text); }
+:root .cf-more > summary { border-radius: 0; }
+
+/* ── Números, tabelas, abas, listas ── */
+:root .stat { border-top-color: var(--line-strong); }
+:root .stat .label { font-size: 10.5px; color: var(--muted); }
+:root .table th { font-size: 10.5px; border-bottom-color: var(--line-strong); }
+:root .tab { font-size: 11px; }
+:root .section-head { border-bottom-color: var(--line-strong); }
+:root .idx, :root .ns-step { font-family: var(--font-mono); font-size: 13px; color: var(--faint); }
+:root .rule-strong, :root .cf-nav, :root .cf-block { border-top-color: var(--ink); }
+
+/* ── Escuro: o quadro de Processos e os cartões claros usam as mesmas variáveis ── */
+:root:root[data-theme="dark"] .jb { --col: #121010; --card: #1A1717; --jb-ink: #F4F1EC; --jb-muted: #9C958E; --jb-line: rgba(244, 241, 236, .14); }
+:root:root[data-theme="dark"] .jb-card { box-shadow: none; border: 1px solid rgba(244, 241, 236, .10); }
+:root:root[data-theme="dark"] .jb-col-head[class*="cls-"] { background: #121010; }
+:root .jb-titlebar h1 { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.04em; font-size: clamp(34px, 3.6vw, 52px); }
+
+/* Celular: barra lateral continua off-white na gaveta */
+@media (max-width: 900px) { :root .sidebar { box-shadow: none; } }
+
+/* ── Ajustes da conferência visual ── */
+/* Todo título principal de página (Visão geral, Torre, telas próprias) na grotesca pesada */
+:root .page h1:not(.cf-h), :root .jb h1 { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.045em; line-height: .95; }
+/* Nome do cliente: grande, mas sem quebrar a palavra no meio */
+:root .cf-name { font-size: clamp(40px, 5vw, 80px); overflow-wrap: normal; word-break: normal; hyphens: manual; }
+/* Cantos retos em controles e superfícies (avatares e marcadores redondos continuam redondos) */
+:root :is(.page, .jb, .drawer, .modal) :is(button, select, input, textarea, [class*="card"], [class*="panel"], [class*="banner"], [class*="notice"], [class*="pill"], [class*="chip"], [class*="filter"], [class*="box"]):not(.avatar):not(.jb-av):not(.theme-toggle):not([class*="dot"]) { border-radius: 0; }
+:root .nav a, :root .nav-group.primary a { font-size: 14px; white-space: nowrap; }
+:root .nav a { overflow: hidden; text-overflow: ellipsis; }
+:root :is(.page, .jb, .drawer, .modal) :is(section, article, aside, details, header, li, a, div[class*="now"], div[class*="hero"], div[class*="att"], div[class*="alert"], div[class*="strip"], div[class*="focus"], div[class*="wrap"]):not(.avatar):not(.jb-av) { border-radius: 0; }
+/* Regra geral: dentro das telas, nada arredondado — exceto avatares e marcadores (pontos, bolinhas de estado, ícones) */
+:root :is(.page, .jb, .drawer, .modal, .toasts) *:not(i):not(svg):not(svg *):not(img):not(.avatar):not([class*="avatar"]):not(.jb-av):not([class*="dot"]):not([class*="mark"]):not([class*="pip"]):not([class*="av-"]):not(input[type="checkbox"]):not(input[type="radio"]) { border-radius: 0; }

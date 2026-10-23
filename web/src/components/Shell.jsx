@@ -93,7 +93,7 @@ export function Shell({ children }) {
     <CrumbCtx.Provider value={setCrumbs}>
       <div className={`shell ${navOpen ? 'nav-open' : ''}`}>
         <aside className="sidebar" aria-label="Navegação principal">
-          <Link to="/" className="brand" data-cursor="B."><span className="word">THE BOLD<i>.</i></span><span className="os">OS</span></Link>
+          <Link to="/" className="brand" data-cursor="B."><span className="word">THE BOLD<i>.</i></span><span className="os">Operating System</span></Link>
           <nav className="nav">
             {groups.map((g) => (
               <div key={g.group} className={`nav-group ${g.primary ? 'primary' : ''}`} role="group" aria-label={g.group}>
