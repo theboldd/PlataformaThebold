@@ -71,7 +71,9 @@ function feedItem(c, client) {
   const hrs = lastClient ? (Date.now() - new Date(lastClient.created_at).getTime()) / 3600e3 : 99;
   const canUnlike = lastClient?.decision === 'aprovado' && hrs <= 24 && ((c.stage === 'agendamento' && !c.scheduled_at && lastClient.kind === 'cliente') || (c.stage === 'producao' && lastClient.kind === 'tema' && !c.current_version_id));
   const adjustState = openAdj.length || c.stage === 'revisao_ajuste' ? 'solicitado' : c.stage === 'aprovacao_cliente' && c.client_adjust_rounds > 0 ? 'concluido' : null;
-  const canDecide = ['aprovacao_tema', 'aprovacao_cliente'].includes(c.stage) && !c.blocked;
+  // Nunca pedir ao cliente que aprove uma peça sem arquivo nem legenda na plataforma (ex.: conteúdo trazido do Notion antes do upload)
+  const hasPiece = c.stage !== 'aprovacao_cliente' || (!!c.current_version_id && (!!one('SELECT 1 FROM version_media WHERE version_id=?', c.current_version_id) || !!one("SELECT 1 FROM content_versions WHERE id=? AND trim(caption)<>''", c.current_version_id)));
+  const canDecide = ['aprovacao_tema', 'aprovacao_cliente'].includes(c.stage) && !c.blocked && hasPiece;
   // Solicitação vinculada a conteúdo: só conteúdo operacional da plataforma (regras 22–24)
   const canRequest = (c.data_origin === 'plataforma' || c.legacy_status === 'reprogramado') && !['nao_validado', 'historico', 'cancelado'].includes(c.legacy_status);
   return {

@@ -28,7 +28,8 @@ export function computePendencies() {
     const base = { id: `task:${k.id}`, client_id: k.client_id, client: k.client_name, content_id: k.content_id, content: k.content_id ? `#${k.content_number} ${k.content_title}` : null,
       process: k.content_stage ? STAGES[k.content_stage]?.label : k.kind, since: k.created_at, due: k.due_at, link: k.content_id ? `/conteudos/${k.content_id}` : '/processos',
       source: { type: 'task', id: k.id }, who_id: k.assignee_id, function: k.function, publish_at: k.planned_at };
-    if (!k.assignee_id) {
+    // Aprovação do cliente sem acesso ao portal não é "tarefa sem responsável": é espera do cliente (cobrada pela régua abaixo)
+    if (!k.assignee_id && !isClient) {
       out.push({ ...base, severity: 'critica', title: `Tarefa sem responsável: ${k.title}`, problem: `${k.client_name && k.title.endsWith(` — ${k.client_name}`) ? k.title.slice(0, -(k.client_name.length + 3)) : k.title} — sem responsável`, cause: 'responsavel', late_ms: ago(k.created_at), late: fmtDays(ago(k.created_at)), impact_w: 3,
         who: 'Operações (definir responsável)', impact: 'O fluxo para: ninguém foi notificado.', action: 'Atribuir responsável', next: `Vincular uma pessoa com a função “${k.function}” ao cliente ou atribuir manualmente.` });
       continue;

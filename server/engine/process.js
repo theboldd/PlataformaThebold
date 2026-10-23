@@ -578,6 +578,8 @@ export function clientDecision(contentId, actor, { decision, note, carousel_page
     const onBehalf = actor.role_key !== 'cliente';
     if (onBehalf && !on_behalf_note) throw new HttpError(422, 'Ao registrar em nome do cliente, informe a origem (ex.: “aprovado no WhatsApp 19/10 14h”).');
     const v = c.stage === 'aprovacao_cliente' ? currentVersion(c.id) : null;
+    // O cliente só aprova o que pode ver: sem arquivo nem legenda na plataforma, só a equipe registra (com a origem: “aprovado no WhatsApp…”)
+    if (c.stage === 'aprovacao_cliente' && !onBehalf && decision === 'aprovar' && !(v && (versionMedia(v.id).length || v.caption?.trim()))) throw new HttpError(409, 'Esta peça ainda não tem arquivo na plataforma. A equipe vai anexar antes da sua aprovação.');
     const kind = c.stage === 'aprovacao_tema' ? 'tema' : 'cliente';
     insert('approvals', { id: uid('ap_'), content_id: c.id, version_id: v?.id || null, kind, decision: decision === 'aprovar' ? 'aprovado' : 'ajuste', user_id: actor.id,
       note: onBehalf ? `[registrado pela equipe] ${on_behalf_note}${note ? ` — ${note}` : ''}` : note, ip: req?.ip, user_agent: req?.headers?.['user-agent']?.slice(0, 200), created_at: now() });
