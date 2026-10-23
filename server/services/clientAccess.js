@@ -4,7 +4,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { one, all, insert, run, uid, now } from '../db.js';
+import { one, all, insert, run, update, uid, now } from '../db.js';
 import { hashPassword } from '../lib/auth.js';
 import { log } from '../lib/core.js';
 
@@ -91,4 +91,33 @@ export function accessList() {
       candidates: all("SELECT id, email, source, source_url, confidence FROM client_email_candidates WHERE client_id=? AND status='a_confirmar'", c.id),
     };
   });
+}
+
+// LOGIN PELO NOME (decisão da CEO, 23/10): o cliente entra com o próprio nome e a senha inicial combinada pela equipe;
+// no primeiro acesso a plataforma pede uma senha nova só dele (a inicial é igual para todos e não pode continuar valendo).
+// O nome de login ignora maiúsculas, acentos, espaços e pontos ("Alanna Santoro" = "alanna.santoro").
+export const loginSlug = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+export const loginLabel = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.|\.$/g, '');
+export function createNameLogins(password, actor, clientIds = null) {
+  const out = { created: [], updated: [], skipped: [] };
+  const clients = all("SELECT id, name FROM clients WHERE kind<>'interno' ORDER BY name").filter((c) => !clientIds || clientIds.includes(c.id));
+  for (const c of clients) {
+    const name = contactName(c.name).replace(/\s+[|lI]?\s*$/, '').trim();
+    let slug = loginSlug(name);
+    const taken = (x, uidSelf) => one('SELECT id FROM users WHERE username=? AND id<>?', x, uidSelf || '');
+    const u = clientUser(c.id);
+    if (u) {
+      if (!u.username) { if (taken(slug, u.id)) slug = loginSlug(`${name} ${c.id.slice(-4)}`); update('users', { id: u.id }, { username: slug }); out.updated.push({ client: c.name, login: loginLabel(name), user_id: u.id, note: 'já tinha acesso: senha mantida' }); }
+      else out.skipped.push({ client: c.name, login: u.username, user_id: u.id });
+      continue;
+    }
+    if (taken(slug)) slug = loginSlug(`${name} ${c.id.slice(-4)}`);
+    const nu = insert('users', { id: uid('u_'), name, email: `${slug}@login.thebold`, username: slug, password_hash: hashPassword(password), must_change_password: 1,
+      role_key: 'cliente', title: 'Cliente', functions: '[]', capacity: 0, active: 1, avatar_color: '#000000', created_at: now(), email_source: 'Sem e-mail: login pelo nome (senha inicial da equipe)' });
+    run("INSERT OR IGNORE INTO client_members (client_id,user_id,function) VALUES (?,?,'cliente')", c.id, nu.id);
+    run("INSERT OR IGNORE INTO channel_members (channel_id,user_id) SELECT id, ? FROM channels WHERE client_id=? AND kind='cliente'", nu.id, c.id);
+    log({ actor: actor?.id || null, action: 'acesso.cliente_preparado', entity: 'user', id: nu.id, client: c.id, summary: `Acesso de cliente criado para ${c.name}: login pelo nome “${loginLabel(name)}”, senha inicial a trocar no primeiro acesso` });
+    out.created.push({ client: c.name, login: loginLabel(name), user_id: nu.id });
+  }
+  return out;
 }

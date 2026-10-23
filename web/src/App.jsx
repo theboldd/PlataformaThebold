@@ -5,7 +5,7 @@ import { AuthContext, ToastContext } from './lib/hooks.js';
 import { Shell } from './components/Shell.jsx';
 import { Cursor } from './components/Cursor.jsx';
 import { Loading } from './components/ui.jsx';
-import Login from './pages/Login.jsx';
+import Login, { FirstPassword } from './pages/Login.jsx';
 import { applyTheme } from './lib/theme.js';
 
 const P = (f) => lazy(f);
@@ -79,7 +79,7 @@ export default function App() {
     <ToastContext.Provider value={toast}>
       <BrowserRouter>
         <Cursor />
-        {!auth || window.location.pathname === '/redefinir-senha' ? <Login onLogin={async () => { window.history.replaceState(null, '', '/'); await load(); }} /> : (
+        {!auth || window.location.pathname === '/redefinir-senha' ? <Login onLogin={async () => { window.history.replaceState(null, '', '/'); await load(); }} /> : auth.user.must_change_password ? <FirstPassword name={auth.user.name} onDone={load} onLogout={logout} /> : (
           <AuthContext.Provider value={{ ...auth, logout, reload: load, can }}>
             {auth.internal ? (
               <Shell>

@@ -78,3 +78,16 @@
 .lg-note { margin: 0; font-size: 14px; line-height: 1.5; color: #3B3734; }
 .lg-link { align-self: center; border: 0; background: none; color: #736C66; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; padding: 6px; }
 .lg-link:hover { color: #0B0B0B; }
+
+/* Primeiro acesso — cria a própria senha (linguagem editorial, escuro) */
+.fp { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: var(--bg, #0B0B0B); color: var(--ink, #F2EEE9); }
+.fp-card { width: min(440px, 100%); display: flex; flex-direction: column; gap: 14px; padding: 28px 24px; border: 1px solid var(--line-strong, #333); border-top: 3px solid var(--primary, #6B1E2E); }
+.fp-k { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted, #8a8580); }
+.fp-t { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 40px; letter-spacing: -0.04em; line-height: 1; }
+.fp-p { margin: 0; font-family: var(--font-editorial); font-style: italic; font-size: 18px; line-height: 1.35; color: var(--ink-2, #cfc9c2); }
+.fp-f { display: flex; flex-direction: column; gap: 6px; }
+.fp-f span { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted, #8a8580); }
+.fp-h { margin: 0; font-size: 12px; color: var(--muted, #8a8580); }
+.fp-err { font-size: 13px; color: var(--primary-text, #E9868F); }
+.fp-link { align-self: center; background: none; border: 0; color: var(--muted, #8a8580); font: inherit; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.fp .btn { border-radius: 0; }

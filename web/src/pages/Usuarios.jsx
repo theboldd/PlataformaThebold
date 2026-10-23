@@ -43,7 +43,7 @@ export default function Usuarios() {
           </div>
           {!users.length ? <Empty title="Ninguém encontrado." /> : (
             <div className="table-wrap"><table className="table">
-              <thead><tr><th>Pessoa</th><th>Perfil</th><th>{kind === 'equipe' ? 'Funções' : 'Projeto'}</th><th>Clientes vinculados</th><th>Exceções</th><th>Último acesso</th><th>Acesso</th></tr></thead>
+              <thead><tr><th>Pessoa</th><th>Perfil</th><th>{kind === 'equipe' ? 'Funções' : 'Projeto'}</th><th>Clientes vinculados</th><th>Exceções</th><th>Último acesso</th><th>Acesso</th>{admin && <th />}</tr></thead>
               <tbody>{users.map((u) => (
                 <tr key={u.id} className={`link ${u.active ? '' : 'user-off'}`} onClick={() => admin && setEdit(u)} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && admin && setEdit(u)}>
                   <td><div className="row"><Avatar name={u.name} tone={u.role_key === 'cliente' ? 'ink' : ''} /><div><div className="strong sm">{u.name}</div><div className="xs muted">{u.email}</div></div></div></td>
@@ -52,7 +52,8 @@ export default function Usuarios() {
                   <td className="xs">{data.roles.find((r) => r.key === u.role_key)?.all_clients ? <Tag tone="bordo">Todos</Tag> : [...new Set(u.clients.map((c) => cleanName(c.name)))].join(', ') || <span style={{ color: 'var(--err)' }}>nenhum</span>}</td>
                   <td className="xs">{u.overrides.length ? <Tag tone="warn">{u.overrides.length}</Tag> : '—'}</td>
                   <td className="xs muted">{u.last_login_at ? ago(u.last_login_at) : 'nunca'}</td>
-                  <td>{u.active ? <Tag tone="ok">Ativo</Tag> : <Tag>Desativado</Tag>}</td>
+                  <td>{u.active ? <Tag tone="ok">Ativo</Tag> : <Tag>Desativado</Tag>}{u.must_change_password && <div className="xs muted mt-1">senha inicial</div>}</td>
+                  {admin && <td onClick={(e) => e.stopPropagation()}>{u.active && <AccessMessageButton userId={u.id} name={u.name} />}</td>}
                 </tr>
               ))}</tbody>
             </table></div>
@@ -246,6 +247,7 @@ function ClientAccess({ admin }) {
         <span className="ca-n s-sem_email"><b>{counts.sem_email || 0}</b> sem e-mail</span>
         <span className="ca-n s-bloqueado"><b>{counts.bloqueado || 0}</b> bloqueado</span>
       </div>
+      {admin && <NameLogins onDone={reload} missing={data.filter((r) => r.status === 'sem_email').length} />}
       <p className="xs muted">O e-mail de acesso vem só de dados reais (Notion e plataforma), com a origem registrada. Cliente sem e-mail continua com ficha, onboarding e Brain migrados — só o acesso fica pendente.</p>
       <div className="table-wrap"><table className="table ca-table">
         <thead><tr><th>Cliente</th><th>E-mail</th><th>Usuário</th><th>Status do acesso</th><th>Origem do e-mail</th><th>Último acesso</th><th>Permissão</th>{admin && <th />}</tr></thead>
@@ -268,6 +270,7 @@ function ClientAccess({ admin }) {
             {admin && <td className="ca-actions">
               {r.status === 'sem_email' && <Button size="sm" variant="ghost" onClick={() => { setAdding(r); setEmail(''); }}>Informar e-mail</Button>}
               {(r.status === 'convite' || r.status === 'ativo') && <Button size="sm" variant="ghost" disabled={busy} onClick={() => sendInvite(r)}>{r.status === 'convite' ? 'Enviar convite' : 'Link de nova senha'}</Button>}
+              {r.user_id && r.status !== 'bloqueado' && <AccessMessageButton userId={r.user_id} name={r.user} />}
               {r.user_id && <Button size="sm" variant="ghost" disabled={busy} onClick={() => act(() => api.patch(`/users/${r.user_id}`, { active: r.status === 'bloqueado' }), r.status === 'bloqueado' ? 'Acesso desbloqueado.' : 'Acesso bloqueado.')}>{r.status === 'bloqueado' ? 'Desbloquear' : 'Bloquear'}</Button>}
             </td>}
           </tr>
@@ -284,5 +287,49 @@ function ClientAccess({ admin }) {
         </div>}
       </Modal>
     </div>
+  );
+}
+
+// Mensagem pronta para mandar o acesso (WhatsApp ou e-mail): link, login e senha inicial ou link para criar a senha
+function AccessMessageButton({ userId, name }) {
+  const toast = useToast();
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const open = async () => { setBusy(true); try { setMsg(await api.get(`/users/${userId}/mensagem-acesso`)); } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); } };
+  return (
+    <>
+      <Button size="sm" variant="ghost" disabled={busy} onClick={open}>Mensagem de acesso</Button>
+      <Modal open={!!msg} onClose={() => setMsg(null)} title={`Mensagem de acesso — ${name || ''}`}
+        footer={<><Button variant="ghost" onClick={() => setMsg(null)}>Fechar</Button><a className="btn" href={`https://wa.me/?text=${encodeURIComponent(msg?.text || '')}`} target="_blank" rel="noreferrer">Abrir no WhatsApp</a><Button variant="primary" onClick={() => { navigator.clipboard?.writeText(msg.text); toast('Mensagem copiada.'); }}>Copiar mensagem</Button></>}>
+        {msg && <div className="col gap-3">
+          <textarea className="textarea" rows={12} value={msg.text} readOnly onFocus={(e) => e.target.select()} />
+          <p className="xs muted" style={{ margin: 0 }}>{msg.has_initial ? 'Inclui a senha inicial: no primeiro acesso a pessoa cria uma senha só dela, e a inicial deixa de valer.' : 'A pessoa já tem senha própria (ou não tem senha inicial): a mensagem leva um link para criar a senha, que vale 1 hora.'}</p>
+        </div>}
+      </Modal>
+    </>
+  );
+}
+
+// Criar de uma vez o acesso pelo nome para os clientes sem acesso (senha inicial igual; troca obrigatória no 1º acesso)
+function NameLogins({ onDone, missing }) {
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [pw, setPw] = useState('thebold');
+  const [res, setRes] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const go = async () => { setBusy(true); try { const r = await api.post('/client-access/login-por-nome', { password: pw }); setRes(r); toast(`${r.created.length} acesso(s) criado(s).`); onDone(); } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); } };
+  return (
+    <>
+      <div className="row wrap gap-2" style={{ alignItems: 'center' }}><Button variant="primary" size="sm" onClick={() => { setRes(null); setOpen(true); }}>Criar acessos pelo nome{missing ? ` (${missing})` : ''}</Button><span className="xs muted">Login = nome do cliente · senha inicial igual para todos · cada um cria a própria senha no primeiro acesso.</span></div>
+      <Modal open={open} onClose={() => setOpen(false)} title="Acessos pelo nome" footer={res ? <Button variant="primary" onClick={() => setOpen(false)}>Fechar</Button> : <><Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button><Button variant="primary" disabled={busy || pw.length < 6} onClick={go}>Criar acessos</Button></>}>
+        {!res ? <div className="col gap-3">
+          <p className="sm" style={{ margin: 0 }}>Cria o acesso de cada cliente que ainda não tem. O login é o nome (ex.: <b>alanna.santoro</b>; maiúsculas, acentos e espaços não importam). Quem já tem acesso mantém a senha.</p>
+          <Field label="Senha inicial" hint="Vale só para o primeiro acesso: a plataforma pede uma senha nova (mínimo 10 caracteres) antes de mostrar qualquer coisa."><input className="input" value={pw} onChange={(e) => setPw(e.target.value)} /></Field>
+        </div> : <div className="col gap-2">
+          <p className="sm" style={{ margin: 0 }}>{res.created.length} criado(s){res.updated.length ? ` · ${res.updated.length} já tinham acesso (ganharam o login pelo nome, senha mantida)` : ''}. Use “Mensagem de acesso” em cada linha para enviar.</p>
+          <ul className="xs" style={{ margin: 0, paddingLeft: 18, maxHeight: 260, overflow: 'auto' }}>{[...res.created, ...res.updated].map((x) => <li key={x.user_id}>{cleanName(x.client)} → <b>{x.login}</b>{x.note ? ` (${x.note})` : ''}</li>)}</ul>
+        </div>}
+      </Modal>
+    </>
   );
 }

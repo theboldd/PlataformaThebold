@@ -110,7 +110,7 @@ export function createApp() {
     if (!req.user || !can(req.user, 'automacoes')) return res.status(403).json({ error: 'Sem permissão.' });
     res.json(lastRuns());
   });
-  app.get('/api/health', (_req, res) => res.json({ ok: true, db: !!one('SELECT 1 ok'), version: (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || null }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, db: !!one('SELECT 1 ok'), version: (process.env.VERCEL_GIT_COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7) || null, host: process.env.RAILWAY_ENVIRONMENT ? 'railway' : process.env.VERCEL ? 'vercel' : 'local', persistent: process.env.BOLD_PERSISTENT_HOST === '1' }));
   app.get('/api/integrations/:provider/callback', (req, res) => oauthCallback(req.params.provider, req, res));
   app.use('/api', core);
   app.use('/api', notionSync); // antes dos routers com requireInternal global: o webhook do Notion é público (assinado)

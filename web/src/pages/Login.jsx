@@ -121,7 +121,7 @@ export default function Login({ onLogin }) {
             <div className="lg-form-head"><span className="lg-meta">Acesso</span><span className="lg-meta">01 / 01</span></div>
             <h2 className="lg-enter">Entrar<span>.</span></h2>
             {mode === 'pronto' && <p className="lg-note" role="status">Senha nova salva. Entre com ela.</p>}
-            <label className="lg-field"><span>E-mail</span><input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="voce@thebold.com.br" /></label>
+            <label className="lg-field"><span>Login</span><input type="text" autoComplete="username" autoCapitalize="none" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="seu nome ou e-mail" /></label>
             <label className="lg-field"><span>Senha</span><input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••••" /></label>
             {err && <div className="lg-err" role="alert">{err}</div>}
             <Button variant="ink" size="lg" magnetic arrow disabled={busy} type="submit" className="lg-cta" cursor="ENTRAR">{busy ? 'Entrando…' : 'Viver o efeito Bold'}</Button>
@@ -134,6 +134,36 @@ export default function Login({ onLogin }) {
         <div className="lg-marquee-in">{[...MARQUEE, ...MARQUEE, ...MARQUEE].map((w, i) => <span key={i}>{w}<em>✦</em></span>)}</div>
       </div>
       <div className="lg-word" aria-hidden>THE BOLD<span>.</span></div>
+    </div>
+  );
+}
+
+// PRIMEIRO ACESSO: quem entrou com a senha inicial da equipe cria a própria senha antes de usar a plataforma
+export function FirstPassword({ name, onDone, onLogout }) {
+  const [a, setA] = useState('');
+  const [b, setB] = useState('');
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const save = async (e) => {
+    e.preventDefault(); setErr(null);
+    if (a.length < 10) return setErr('A senha precisa ter pelo menos 10 caracteres.');
+    if (a !== b) return setErr('As duas senhas não são iguais.');
+    setBusy(true);
+    try { await api.post('/auth/first-password', { password: a }); await onDone(); } catch (x) { setErr(x.message); } finally { setBusy(false); }
+  };
+  return (
+    <div className="fp">
+      <form className="fp-card" onSubmit={save}>
+        <span className="fp-k">THE BOLD · Primeiro acesso</span>
+        <h1 className="fp-t">Olá, {String(name || '').split(' ')[0]}.</h1>
+        <p className="fp-p">Para proteger o seu projeto, crie agora uma senha só sua. A senha que você recebeu vale apenas para este primeiro acesso.</p>
+        <label className="fp-f"><span>Nova senha</span><input className="input" type="password" autoComplete="new-password" value={a} onChange={(e) => setA(e.target.value)} minLength={10} required /></label>
+        <label className="fp-f"><span>Repita a nova senha</span><input className="input" type="password" autoComplete="new-password" value={b} onChange={(e) => setB(e.target.value)} minLength={10} required /></label>
+        <p className="fp-h">Pelo menos 10 caracteres. Dica: uma frase curta fácil de lembrar.</p>
+        {err && <div className="fp-err" role="alert">{err}</div>}
+        <button className="btn btn-primary" disabled={busy} type="submit">{busy ? 'Salvando…' : 'Criar minha senha e entrar'}</button>
+        <button type="button" className="fp-link" onClick={onLogout}>Sair</button>
+      </form>
     </div>
   );
 }

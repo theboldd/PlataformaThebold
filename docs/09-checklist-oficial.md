@@ -1,5 +1,14 @@
 # THE BOLD OS — Checklist oficial de conferência
 
+## Revisão 5.4 · 23/10/2026 — Railway e acessos dos clientes pelo nome
+
+| O que | Onde | Estado |
+|---|---|---|
+| Railway (aprovado pela CEO): Dockerfile (Node 22 + ffmpeg), railway.json com healthcheck, entrada server/boot.js com volume /data, carga única da base a partir do snapshot cifrado, backup diário (7 diários + 4 semanais) | Hospedagem | 🟡 falta criar o projeto no painel do Railway |
+| Login pelo nome do cliente (maiúsculas, acentos, espaços e pontos não importam) com senha inicial da equipe; criação de senha própria obrigatória no primeiro acesso | Login · Portal | 🟢 |
+| 22 acessos de clientes criados (login = nome, senha inicial thebold); Bruna Moura manteve a senha dela | Usuários → Acessos dos clientes | 🟢 |
+| “Mensagem de acesso” em cada pessoa (equipe e clientes): texto pronto com link, login e senha inicial (ou link para criar a senha), copiar ou abrir no WhatsApp | Usuários | 🟢 |
+
 ## Revisão 5.3 · 23/10/2026 — Ciclos, direcionamento, portal e acertos para começar dezembro/janeiro
 
 | O que | Onde | Estado |

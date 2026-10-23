@@ -6,26 +6,39 @@ import { MODULES, ACTIONS, permissionMap, roleOf, can, canAccessClient, isIntern
 import { bus, log } from '../lib/core.js';
 import { storage, fileDTO } from '../services/media.js';
 import { verifyAssetSig } from '../integrations/meta.js';
-import { accessList, createClientLogin } from '../services/clientAccess.js';
+import { accessList, createClientLogin, createNameLogins, loginSlug, loginLabel } from '../services/clientAccess.js';
+import { seal, open as unseal } from '../integrations/vault.js';
 
 export const core = Router();
 
-const userDTO = (u) => ({ id: u.id, name: u.name, email: u.email, role_key: u.role_key, title: u.title, functions: parseJSON(u.functions, []), active: !!u.active, avatar_color: u.avatar_color, capacity: u.capacity, last_login_at: u.last_login_at, theme: u.theme || 'system' });
+const userDTO = (u) => ({ id: u.id, name: u.name, email: u.email, username: u.username || null, must_change_password: !!u.must_change_password, role_key: u.role_key, title: u.title, functions: parseJSON(u.functions, []), active: !!u.active, avatar_color: u.avatar_color, capacity: u.capacity, last_login_at: u.last_login_at, theme: u.theme || 'system' });
 
 // ── AUTH ──
 core.post('/auth/login', (req, res) => {
-  const email = String(req.body?.email || '').trim().toLowerCase();
+  // Login: e-mail ou nome de login (o nome ignora maiúsculas, acentos, espaços e pontos)
+  const email = String(req.body?.email || req.body?.login || '').trim().toLowerCase();
   const key = `${req.ip}:${email}`;
   checkRate(key);
-  const u = one('SELECT * FROM users WHERE email=?', email);
+  const u = email.includes('@') ? one('SELECT * FROM users WHERE email=?', email) : one('SELECT * FROM users WHERE username=?', loginSlug(email));
   const pw = String(req.body?.password || '');
   // senha colada costuma vir com espaço ou quebra de linha nas pontas
-  if (!u || !(verifyPassword(pw, u.password_hash) || (pw !== pw.trim() && verifyPassword(pw.trim(), u.password_hash)))) throw new HttpError(401, 'E-mail ou senha incorretos.');
+  if (!u || !(verifyPassword(pw, u.password_hash) || (pw !== pw.trim() && verifyPassword(pw.trim(), u.password_hash)))) throw new HttpError(401, 'Login ou senha incorretos.');
   if (!u.active) throw new HttpError(403, 'Acesso desativado. Fale com a administração.');
   clearRate(key);
   const s = createSession(u, req);
   res.cookie(COOKIE, s.token, { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', expires: new Date(s.expires), path: '/' });
   log({ actor: u.id, action: 'auth.login', entity: 'user', id: u.id, summary: `${u.name} entrou`, ip: req.ip });
+  res.json({ ok: true });
+});
+// Primeiro acesso com a senha inicial da equipe: a pessoa cria a senha dela antes de usar a plataforma
+core.post('/auth/first-password', requireAuth, (req, res) => {
+  const u = one('SELECT * FROM users WHERE id=?', req.user.id);
+  if (!u.must_change_password) throw new HttpError(409, 'Sua senha já foi definida.');
+  const next = String(req.body?.password || '');
+  validatePassword(next);
+  if (verifyPassword(next, u.password_hash)) throw new HttpError(422, 'Escolha uma senha diferente da senha inicial.');
+  update('users', { id: u.id }, { password_hash: hashPassword(next), must_change_password: 0 });
+  log({ actor: u.id, action: 'auth.senha', entity: 'user', id: u.id, summary: `${u.name} criou a própria senha no primeiro acesso`, ip: req.ip });
   res.json({ ok: true });
 });
 core.post('/auth/logout', (req, res) => { destroySession(req.cookies?.[COOKIE]); res.clearCookie(COOKIE, { path: '/' }); res.json({ ok: true }); });
@@ -56,9 +69,11 @@ core.post('/auth/password', requireAuth, (req, res) => {
 // A pessoa recebe um link no próprio e-mail e escolhe a senha nova. A senha nunca é guardada em texto nem mostrada
 // a ninguém (só o hash); a administração vê QUANDO a senha foi redefinida e pode definir uma senha provisória.
 const baseUrl = (req) => process.env.PUBLIC_BASE_URL || `${req.headers['x-forwarded-proto'] || req.protocol}://${req.headers['x-forwarded-host'] || req.headers.host}`;
-async function sendResetLink(u, req) {
+async function sendResetLink(u, req, { send = true } = {}) {
   const link = `${baseUrl(req)}/redefinir-senha?t=${encodeURIComponent(createResetToken(u))}`;
   const first = u.name.split(' ')[0];
+  // Acesso pelo nome não tem e-mail real (…@login.thebold): o link só volta para a equipe mandar pelo WhatsApp
+  if (!send || /@login\.thebold$/.test(u.email)) return { link, mail: { sent: false, reason: 'sem e-mail: envie o link pelo WhatsApp' } };
   const mail = await sendMail({
     to: u.email,
     subject: 'Redefinir sua senha — The Bold',
@@ -122,6 +137,54 @@ core.post('/client-access/:clientId/candidates/:cid', requirePerm('usuarios', 'a
   const u = createClientLogin(c, cand.email, { source: `${cand.source} — confirmado por ${req.user.name} (MIGRADO DO NOTION)`, source_url: cand.source_url, actor: req.user });
   update('client_email_candidates', { id: cand.id }, { status: 'usado', decided_by: req.user.id, decided_at: now() });
   res.json({ ok: true, user_id: u.id });
+});
+
+// Acessos pelo nome com senha inicial (a senha fica só no cofre cifrado, para entrar na mensagem de acesso)
+core.post('/client-access/login-por-nome', requirePerm('usuarios', 'admin'), (req, res) => {
+  const pw = String(req.body?.password || '');
+  if (pw.length < 6) throw new HttpError(422, 'A senha inicial precisa ter pelo menos 6 caracteres.');
+  const out = tx(() => {
+    const r = createNameLogins(pw, req.user, Array.isArray(req.body?.client_ids) ? req.body.client_ids : null);
+    run('INSERT INTO settings (key,value,updated_by,updated_at) VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_by=excluded.updated_by, updated_at=excluded.updated_at', 'acesso.senha_inicial', JSON.stringify(seal({ password: pw })), req.user.id, now());
+    return r;
+  });
+  res.json(out);
+});
+// Mensagem de acesso pronta para enviar (WhatsApp/e-mail): link, login e senha inicial (só enquanto a pessoa não trocou)
+core.get('/users/:id/mensagem-acesso', requirePerm('usuarios', 'admin'), async (req, res) => {
+  const u = one('SELECT * FROM users WHERE id=?', req.params.id);
+  if (!u) throw new HttpError(404, 'Usuário não encontrado.');
+  const first = u.name.split(' ')[0];
+  const base = baseUrl(req);
+  const isClient = u.role_key === 'cliente';
+  const login = u.username ? loginLabel(u.name) || u.username : u.email;
+  let initial = null;
+  if (u.must_change_password) { try { initial = unseal(parseJSON(one("SELECT value FROM settings WHERE key='acesso.senha_inicial'")?.value))?.password || null; } catch { initial = null; } }
+  let link = null;
+  if (!initial) link = (await sendResetLink(u, req, { send: false })).link;
+  const lines = isClient ? [
+    `Oi, ${first}! Tudo bem? 💛`,
+    '',
+    'A partir de agora você acompanha tudo do seu projeto com a The Bold pela nossa plataforma: os temas e conteúdos para aprovar, o calendário, os materiais e as nossas conversas, tudo num lugar só.',
+    '',
+    `Acesse: ${base}`,
+    `Login: ${login}`,
+    initial ? `Senha: ${initial}` : `Crie sua senha por este link (vale 1 hora): ${link}`,
+    '',
+    initial ? 'No primeiro acesso, a plataforma vai pedir para você criar uma senha só sua. Depois é só entrar com o seu login e essa senha nova.' : 'Depois de criar a senha, é só entrar com o seu login.',
+    '',
+    'Qualquer dúvida, é só chamar a gente por aqui. ✨',
+  ] : [
+    `Oi, ${first}! Seu acesso à THE BOLD OS está pronto.`,
+    '',
+    `Acesse: ${base}`,
+    `Login: ${login}`,
+    initial ? `Senha inicial: ${initial} (a plataforma pede uma senha nova no primeiro acesso)` : `Crie sua senha por este link (vale 1 hora): ${link}`,
+    '',
+    'Lá você encontra as suas tarefas, os cartões dos clientes no quadro de Processos e as notificações do que chega para você.',
+  ];
+  log({ actor: req.user.id, action: 'auth.senha_link', entity: 'user', id: u.id, summary: `Mensagem de acesso gerada para ${u.name}${initial ? ' (com a senha inicial)' : ' (com link de criação de senha)'}` });
+  res.json({ text: lines.join('\n'), login, has_initial: !!initial, link });
 });
 
 // ── USUÁRIOS E PERMISSÕES (admin) ──
