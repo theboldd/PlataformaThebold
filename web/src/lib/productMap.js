@@ -16,19 +16,16 @@ export const MAP_STATES = {
 const A = (area, path, items) => ({ area, path, items: items.map(([req, state, where, to, miss, dados]) => ({ req, state, where, to, miss, dados: !!dados })) });
 
 export const PRODUCT_MAP = [
-  A('Visão geral', '/', [
-    ['Indicadores executivos (clientes em risco, pendências críticas, em produção, aguardando cliente)', 'ok', 'Visão geral · topo', '/'],
-    ['Precisa da sua atenção (impacto, responsável, onde, abrir pendência)', 'ok', 'Visão geral', '/'],
-    ['Próximos compromissos da plataforma', 'ok', 'Visão geral · coluna direita', '/'],
-    ['Compromissos da agenda Google', 'config', 'Visão geral · coluna direita', '/integracoes', 'Conectar o Google Calendar'],
-    ['Operação: onde o trabalho está, por etapa', 'ok', 'Visão geral · Operação', '/'],
-    ['Inteligência (fato, padrão, hipótese, recomendação)', 'ok', 'Visão geral · Inteligência', '/'],
-    ['Gargalos', 'parcial', 'Visão geral · Operação', '/torre', 'Na home só as barras por etapa; o detalhe fica na Torre'],
-    ['Financeiro (receita recorrente, recebido, em aberto, em atraso)', 'ok', 'Visão geral · Financeiro', '/', 'Base real sem contratos: mostra DADOS INSUFICIENTES', true],
-    ['Capacidade (tarefas da plataforma × capacidade configurada)', 'ok', 'Visão geral · Capacidade', '/', 'Capacidade é configurada, não medida', true],
-    ['Minhas pendências', 'ok', 'Visão geral · Minhas pendências', '/'],
-    ['O que os dados ainda não permitem afirmar', 'ok', 'Visão geral · faixa abaixo do estado', '/'],
-    ['Período (hoje, 7 dias, 30 dias, personalizado)', 'ok', 'Visão geral · topo', '/'],
+  A('BoldBoard', '/', [
+    ['Indicadores executivos (clientes em risco, pendências críticas, em produção, aguardando cliente)', 'ok', 'BoldBoard · topo', '/'],
+    ['Precisa da sua atenção por cliente (próxima situação, total na bolinha, detalhe na gaveta)', 'ok', 'BoldBoard', '/'],
+    ['Próximos compromissos da plataforma (post-it)', 'ok', 'BoldBoard · coluna direita', '/'],
+    ['Compromissos da agenda Google', 'config', 'BoldBoard · coluna direita', '/integracoes', 'Conectar o Google Calendar'],
+    ['Gargalos', 'ok', 'Torre de Controle', '/torre', 'Saíram do BoldBoard; ficam na Torre'],
+    ['Financeiro (receita recorrente, recebido, em aberto, em atraso)', 'ok', 'BoldBoard · Financeiro', '/', 'Base real sem contratos: mostra DADOS INSUFICIENTES', true],
+    ['Capacidade (tarefas da plataforma × capacidade configurada)', 'ok', 'BoldBoard · Capacidade', '/', 'Capacidade é configurada, não medida', true],
+    ['Minhas pendências', 'ok', 'BoldBoard · Minhas pendências', '/'],
+    ['Período (hoje, 7 dias, 30 dias, personalizado)', 'ok', 'BoldBoard · topo', '/'],
   ]),
   A('Torre de Controle', '/torre', [
     ['Estado da operação', 'ok', 'Torre · topo', '/torre'],
@@ -191,7 +188,7 @@ export const PRODUCT_MAP = [
     ['Fatos, padrões observados, hipóteses, recomendações, tendências, evidência', 'ok', 'Insights', '/insights', '', true],
     ['Aplicar, descartar, resolvidos sozinhos; rodar detectores', 'ok', 'Insights', '/insights'],
     ['Narrativa por IA', 'config', 'Insights', '/integracoes', 'ANTHROPIC_API_KEY'],
-    ['Detecção periódica (a cada 15 min)', 'config', 'Automações', '/automacoes', 'Agendador; hoje roda ao abrir Torre/Visão geral'],
+    ['Detecção periódica (a cada 15 min)', 'config', 'Automações', '/automacoes', 'Agendador; hoje roda ao abrir Torre/BoldBoard'],
   ]),
   A('Notion & Histórico', '/notion', [
     ['Tela única da migração (números, fontes, por cliente)', 'ok', 'Notion & Histórico', '/notion'],
@@ -238,7 +235,7 @@ export const PRODUCT_MAP = [
 
 // Roteiro de revisão manual, na ordem de navegação
 export const REVIEW_ROUTE = [
-  ['Visão geral', '/', ['Os 4 indicadores levam a algo ao clicar', 'Precisa da sua atenção abre a pendência certa', 'Os blocos Financeiro, Capacidade e Minhas pendências aparecem (com DADOS INSUFICIENTES se não houver dado)', 'A faixa "o que os dados ainda não permitem afirmar" faz sentido']],
+  ['BoldBoard', '/', ['Os 4 indicadores levam a algo ao clicar', 'Cada cartão de cliente em Precisa da sua atenção abre o detalhe e leva à situação certa', 'Os blocos Financeiro, Capacidade e Minhas pendências aparecem (com DADOS INSUFICIENTES se não houver dado)']],
   ['Torre de Controle', '/torre', ['A ordem estado → riscos → operação → pessoas → clientes → dependências → período → inteligência → detalhamento', 'Filtros (inclusive "Origem")', 'A nova seção Dependências', 'Capacidade marcada como configurada, não medida']],
   ['Pendências', '/pendencias', ['Minhas × Equipe', 'Abrir uma pendência: a leitura em 5 passos (o que aconteceu → até quando)', 'Criar tarefa a partir da pendência']],
   ['Clientes', '/clientes', ['Todas as 16 abas aparecem sem rolagem escondida', 'Abas novas: Pendências e Comunicação', 'Ficha: selo de origem e "Migrado do Notion"', 'Saúde (interno)']],

@@ -22,7 +22,7 @@ export function useCrumbs(...parts) {
 // Navegação: cada item exige uma permissão de módulo (vinda do servidor). O cliente nunca vê módulos internos.
 const NAV = [
   { group: 'Operação', primary: true, items: [
-    { to: '/', label: 'Visão geral', icon: I.home, mod: 'dashboard', end: true },
+    { to: '/', label: 'BoldBoard', icon: I.home, mod: 'dashboard', end: true },
     { to: '/torre', label: 'Torre de Controle', icon: I.tower, mod: 'torre' },
     { to: '/pendencias', label: 'Pendências', icon: I.alert, team: true },
     { to: '/processos', label: 'Processos', icon: I.flow, mod: 'processos' },

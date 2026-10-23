@@ -1,5 +1,18 @@
 # THE BOLD OS — Checklist oficial de conferência
 
+## Revisão 4.7 · 23/10/2026 — Visão geral vira BoldBoard
+
+| O que | Onde | Estado |
+|---|---|---|
+| Página renomeada para BoldBoard (menu, trilha, permissões) | Menu · topo | 🟢 |
+| Período (Hoje/7 dias/30 dias/Personalizado) menor, na mesma linha da data | BoldBoard · topo | 🟢 |
+| “Como está a operação da The Bold?” centralizada, com o cartão de estado logo abaixo, em cor (verde em dia · amarelo atenção · rosa crítico) | BoldBoard | 🟢 |
+| Faixa “O que os dados ainda não permitem afirmar” removida | BoldBoard | 🟢 |
+| 4 indicadores em cartões menores e coloridos | BoldBoard | 🟢 |
+| Precisa da sua atenção por cliente: a próxima situação a resolver (prazo, com quem, onde), o resumo do que há e a bolinha com o total; o cartão abre o detalhe completo na gaveta, o nome (↗) abre a ficha e o botão vai direto à situação | BoldBoard | 🟢 |
+| Próximos compromissos como post-it preso por alfinete | BoldBoard · coluna direita | 🟢 |
+| Operação e Inteligência The Bold saíram do BoldBoard (ficam na Torre e em Insights) | BoldBoard | 🟢 |
+
 ## Revisão 4.6 · 23/10/2026 — Torre de Controle reorganizada
 
 | O que | Onde | Estado |

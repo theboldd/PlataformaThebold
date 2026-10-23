@@ -188,7 +188,7 @@ const TIMED = {
   'financeiro.vencimento': { run: 'tick', every: 1, schedule: 'A cada minuto' },
   'saude.calcular': { run: 'tick', every: 1, schedule: 'A cada minuto (uma fotografia por dia)' },
   'meta.publicar': { run: 'loop', every: 1, schedule: 'A cada minuto (processo contínuo)' },
-  'insights.detectar': { run: 'loop', every: 15, schedule: 'A cada 15 minutos (também ao abrir a Torre ou a Visão geral)' },
+  'insights.detectar': { run: 'loop', every: 15, schedule: 'A cada 15 minutos (também ao abrir a Torre ou o BoldBoard)' },
   'reuniao.transcricao_detectada': { run: 'loop', every: 15, schedule: 'A cada 15 minutos (processo contínuo)' },
   'relatorio.semanal': { run: 'loop', weekly: true, schedule: 'Segunda-feira, a partir das 08h' },
 };

@@ -21,7 +21,7 @@ const PARENTS = [
   [/^\/revisao\/[^/]+$/, '/revisao', 'Sala de Revisão'],
   [/^\/comunicacao\/[^/]+$/, '/comunicacao', 'Comunicação'],
   [/^\/migracao$/, '/clientes', 'Clientes'],
-  [/^\/perfil$/, '/', 'Visão geral'],
+  [/^\/perfil$/, '/', 'BoldBoard'],
 ];
 export const parentOf = (path) => {
   const hit = PARENTS.find(([re]) => re.test(path));

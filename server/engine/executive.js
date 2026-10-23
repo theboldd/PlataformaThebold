@@ -80,25 +80,25 @@ export function executiveOverview(user, qs = {}) {
   // ── Precisa da sua atenção: situações (não tarefas soltas), com impacto, responsável, tempo e ação ──
   const attention = [];
   for (const p of pend.filter((x) => ['critica', 'alta'].includes(x.severity))) {
-    attention.push({ id: p.id, level: p.severity === 'critica' ? 'critico' : 'atencao', client: p.client, client_id: p.client_id, problem: p.client && p.title.endsWith(` — ${p.client}`) ? p.title.slice(0, -(p.client.length + 3)) : p.title,
+    attention.push({ id: p.id, kind: 'pendencia', level: p.severity === 'critica' ? 'critico' : 'atencao', client: p.client, client_id: p.client_id, problem: p.client && p.title.endsWith(` — ${p.client}`) ? p.title.slice(0, -(p.client.length + 3)) : p.title,
       context: [p.process, p.content].filter(Boolean).join(' · '), impact: p.impact, who: p.who, time: p.late ? `há ${p.late}` : null, action: { label: 'Abrir pendência', to: p.link || '/pendencias' } });
   }
   for (const r of risks.filter((x) => x.level === 'critico' && !attention.some((a) => a.client_id === x.id))) {
-    attention.push({ id: `risk:${r.id}`, level: 'critico', client: r.name, client_id: r.id, problem: 'Cliente em risco crítico', context: null, impact: r.reasons.slice(0, 2).join(' · '), who: null, time: null, action: { label: 'Abrir cliente', to: `/clientes/${r.id}` } });
+    attention.push({ id: `risk:${r.id}`, kind: 'risco', level: 'critico', client: r.name, client_id: r.id, problem: 'Cliente em risco crítico', context: null, impact: r.reasons.slice(0, 2).join(' · '), who: null, time: null, action: { label: 'Abrir cliente', to: `/clientes/${r.id}` } });
   }
   // Tarefas da própria CEO vencidas ou que vencem na janela escolhida
   for (const t of all(`SELECT tk.*, c.name client FROM tasks tk LEFT JOIN clients c ON c.id=tk.client_id WHERE tk.assignee_id=? AND tk.status IN ('aberta','em_andamento') AND tk.due_at IS NOT NULL AND tk.due_at <= ? ORDER BY tk.due_at`, user.id, W.end)) {
     // Herdada do Notion (regra 23): aparece marcada pela origem, nunca como crítica nem como atraso
     const inherited = t.data_origin === 'notion';
     const late = t.due_at < nowIso && !inherited;
-    attention.push({ id: `mine:${t.id}`, origin: inherited ? 'notion' : 'plataforma', level: late ? 'critico' : 'atencao', client: t.client || 'The Bold', client_id: t.client_id, problem: t.title, context: STAGES[t.stage]?.label || null,
+    attention.push({ id: `mine:${t.id}`, kind: 'tarefa', origin: inherited ? 'notion' : 'plataforma', level: late ? 'critico' : 'atencao', client: t.client || 'The Bold', client_id: t.client_id, problem: t.title, context: STAGES[t.stage]?.label || null,
       impact: inherited ? 'Tarefa herdada do Notion: fora de atraso, carga e performance. Como tratá-la na operação aguarda decisão.' : late ? 'Tarefa sua vencida: as próximas etapas esperam por ela.' : 'Tarefa sua com prazo dentro do período.', who: 'Você',
       time: late ? `venceu ${new Date(t.due_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'short' })}` : `até ${new Date(t.due_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'short' })}`,
       action: { label: 'Abrir tarefa', to: t.content_id ? `/conteudos/${t.content_id}` : t.client_id ? `/clientes/${t.client_id}` : '/processos' } });
   }
   // Itens herdados da migração com prazo vencido: decisão da CEO (não contam como atraso de ninguém)
   const inh = one("SELECT COUNT(*) n, COUNT(DISTINCT d.client_id) clients FROM delay_reviews d JOIN tasks t ON t.id=d.task_id WHERE d.decided_by IS NULL AND t.status IN ('aberta','em_andamento')");
-  if (inh.n && can(user, 'atrasos')) attention.push({ id: 'herdados', level: 'atencao', client: 'Migração', client_id: null, problem: `${inh.n} itens legados do Notion não validados`,
+  if (inh.n && can(user, 'atrasos')) attention.push({ id: 'herdados', kind: 'legado', level: 'atencao', client: 'Migração', client_id: null, problem: `${inh.n} itens legados do Notion não validados`,
     context: `${inh.clients} clientes · fora da operação`, impact: 'Não são pendência nem atraso. Reprogramar, cancelar ou manter como histórico, um a um.', who: 'Você', time: null, action: { label: 'Ver itens legados', to: '/atrasos' } });
   const issues = all("SELECT kind, COUNT(*) n, COUNT(DISTINCT client_id) clients FROM migration_issues WHERE status='aberto' GROUP BY kind");
   const byKind = Object.fromEntries(issues.map((i) => [i.kind, i]));
@@ -106,10 +106,25 @@ export function executiveOverview(user, qs = {}) {
     const i = byKind[kind];
     if (!i) continue;
     const [problem, impact] = MIGRATION[kind](kind === 'status' ? i.clients : i.n);
-    attention.push({ id: `mig:${kind}`, level: 'atencao', client: 'Base de clientes', client_id: null, problem, context: 'Migração do Notion', impact, who: 'Decisão da direção', time: null, action: { label: 'Decidir', to: `/migracao?kind=${kind}` } });
+    attention.push({ id: `mig:${kind}`, kind: 'migracao', level: 'atencao', client: 'Base de clientes', client_id: null, problem, context: 'Migração do Notion', impact, who: 'Decisão da direção', time: null, action: { label: 'Decidir', to: `/migracao?kind=${kind}` } });
   }
   const order = { critico: 0, atencao: 1 };
   attention.sort((a, b) => order[a.level] - order[b.level]);
+  // Agrupado por cliente: um cartão por cliente com quantas situações pedem atenção e qual é a próxima a resolver
+  const KIND = { pendencia: ['pendência', 'pendências'], risco: ['risco crítico', 'riscos críticos'], tarefa: ['tarefa sua', 'tarefas suas'], legado: ['revisão de legado', 'revisões de legado'], migracao: ['decisão da migração', 'decisões da migração'] };
+  const groupMap = new Map();
+  for (const a of attention) {
+    const key = a.client_id || `x:${a.client || 'The Bold'}`;
+    const g = groupMap.get(key) || { key, client: a.client || 'The Bold', client_id: a.client_id || null, level: 'atencao', n: 0, inherited: 0, kinds: {}, items: [] };
+    g.items.push(a); g.n++;
+    if (a.level === 'critico') g.level = 'critico';
+    if (a.origin === 'notion') g.inherited++;
+    g.kinds[a.kind] = (g.kinds[a.kind] || 0) + 1;
+    groupMap.set(key, g);
+  }
+  const attention_groups = [...groupMap.values()]
+    .map((g) => ({ ...g, next: g.items[0], summary: Object.entries(g.kinds).map(([k, n]) => pl(n, ...KIND[k])).join(' · ') }))
+    .sort((a, b) => order[a.level] - order[b.level] || b.n - a.n);
 
   // ── Próximos compromissos na janela ──
   const msc = scopeSQL(user, 'm.client_id');
@@ -181,25 +196,9 @@ export function executiveOverview(user, qs = {}) {
   const headline = crit ? `${pl(crit, 'situação crítica pede', 'situações críticas pedem')} sua atenção.`
     : attention.length ? `Nenhum ponto crítico. ${attention.length === 1 ? '1 assunto aguarda' : `${attention.length} assuntos aguardam`} sua decisão.` : 'Operação em dia. Nada exige sua intervenção agora.';
 
-  // ── O que os dados ainda NÃO permitem afirmar (sempre visível; não some atrás das 5 situações) ──
-  const csc2 = scopeSQL(user, 'client_id');
-  const cnt = (sql, ...p) => one(sql.replace('{S}', csc2.sql), ...csc2.params, ...p).n;
-  const inheritedOpen = cnt("SELECT COUNT(*) n FROM delay_reviews WHERE decided_by IS NULL AND {S}");
-  const noDate = cnt("SELECT COUNT(*) n FROM contents WHERE planned_at IS NULL AND scheduled_at IS NULL AND stage NOT IN ('publicado','cancelado') AND (legacy_status IS NULL OR legacy_status='reprogramado') AND {S}");
-  const noApproval = cnt("SELECT COUNT(*) n FROM contents WHERE stage IN ('agendamento','agendado','publicado') AND approved_version_id IS NULL AND (legacy_status IS NULL OR legacy_status='reprogramado') AND {S}");
-  const validEvents = one("SELECT COUNT(*) n FROM tasks WHERE status='concluida' AND completed_by IS NOT NULL AND data_origin='plataforma'").n;
-  const data_notes = [
-    inheritedOpen && { text: `${pl(inheritedOpen, 'item legado do Notion não validado', 'itens legados do Notion não validados')}`, note: 'Fora da operação e de qualquer indicador. Decisão individual em Itens legados.', to: can(user, 'atrasos') ? '/atrasos' : null },
-    noApproval && { text: `${pl(noApproval, 'conteúdo', 'conteúdos')} em agendamento sem aprovação registrada`, note: 'Não são tratados como aprovados.', to: '/processos' },
-    noDate && { text: `${pl(noDate, 'conteúdo', 'conteúdos')} sem data de publicação`, note: 'Ficam fora do calendário e da prévia do feed.', to: '/conteudos' },
-    { text: validEvents ? `Performance: ${pl(validEvents, 'evento válido', 'eventos válidos')} em coleta` : 'Performance: DADOS INSUFICIENTES', note: 'Nenhuma tarefa concluída na plataforma ainda. Score individual não é calculado.', to: null },
-    !finCount && { text: 'Financeiro: DADOS INSUFICIENTES', note: 'Nenhum contrato ou fatura cadastrado.', to: can(user, 'financeiro') ? '/financeiro' : null },
-  ].filter(Boolean);
-
   return {
-    data_notes,
     window: W, state, headline, base, kpis, risks,
-    attention: attention.slice(0, 5), attention_total: attention.length,
+    attention: attention.slice(0, 5), attention_total: attention.length, attention_groups,
     agenda: { items: meetings, google: { status: google.status } },
     operation, intel: intel.slice(0, 3), intel_total: intel.length,
     finance, capacity, automations,

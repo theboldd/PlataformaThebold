@@ -3,7 +3,7 @@
 import { one, all } from '../db.js';
 
 export const MODULES = {
-  dashboard: 'Visão geral', torre: 'Torre de Controle', processos: 'Processos', clientes: 'Clientes',
+  dashboard: 'BoldBoard', torre: 'Torre de Controle', processos: 'Processos', clientes: 'Clientes',
   conteudos: 'Conteúdos', revisao: 'Sala de Revisão', calendario: 'Calendário', reunioes: 'Reuniões',
   chat: 'Comunicação', pendencias: 'Centro de Pendências', crm: 'CRM', financeiro: 'Financeiro',
   insights: 'Insights', brain: 'The Bold Brain', automacoes: 'Automações', integracoes: 'Integrações',

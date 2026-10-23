@@ -16,7 +16,7 @@ const QUESTION = {
 };
 
 export default function Dashboard() {
-  useCrumbs('Visão geral');
+  useCrumbs('BoldBoard');
   const auth = useAuth();
   const ceo = auth.role.dashboard === 'ceo';
   const { data: d, error, loading, reload } = useApi(ceo ? null : '/dashboard');
