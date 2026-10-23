@@ -19,7 +19,7 @@ export default function NovoConteudo() {
   const [params] = useSearchParams();
   const { data: clients } = useApi('/clients', [], { live: false });
   const canDirect = auth.can('conteudos', 'approve');
-  const [f, setF] = useState({ client_id: params.get('client_id') || '', format: 'carrossel', title: '', theme: '', objective: '', reference: '', briefing: '', internal_notes: '', planned_at: params.get('data') ? `${params.get('data')}T12:00` : '', priority: 'media', strategy_tags: [], stage: 'cronograma', caption: '' });
+  const [f, setF] = useState({ client_id: params.get('client_id') || '', format: 'carrossel', title: '', theme: '', objective: '', reference: '', briefing: '', internal_notes: '', planned_at: params.get('data') ? `${params.get('data')}T12:00` : '', priority: 'media', strategy_tags: [], stage: 'cronograma', caption: '', direction: '', direction_links: '' });
   const [files, setFiles] = useState([]);
   const [deliver, setDeliver] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -34,12 +34,17 @@ export default function NovoConteudo() {
       const { caption, ...body } = f;
       const c = await api.post('/contents', { ...body, planned_at: f.planned_at ? new Date(f.planned_at).toISOString() : null, stage: f.stage === 'producao' ? 'producao' : undefined });
       if (caption.trim()) await api.put(`/contents/${c.id}/caption`, { caption });
-      if (files.length) {
+      if (files.length && f.stage === 'producao') {
         const fd = new FormData();
         files.forEach((x) => fd.append('files', x));
         if (deliver) fd.append('deliver', '1');
         const r = await uploadWithProgress(`/contents/${c.id}/media`, fd, setProgress);
         if (r?.delivered) toast(`Entrega registrada: ${r.delivered}`);
+      } else if (files.length) {
+        // No cronograma, arquivo é REFERÊNCIA do direcionamento (nunca a peça final)
+        const fd = new FormData();
+        files.forEach((x) => fd.append('files', x));
+        await uploadWithProgress(`/contents/${c.id}/direcionamento`, fd, setProgress);
       }
       toast(`Conteúdo #${c.number} criado — ${c.stage_label}`);
       nav(`/conteudos/${c.id}`);
@@ -86,13 +91,22 @@ export default function NovoConteudo() {
         <Field label="Informações internas" hint="Nunca visíveis ao cliente."><textarea className="textarea" value={f.internal_notes} onChange={set('internal_notes')} /></Field>
 
         <hr className="rule-strong" />
-        <div className="section-head" style={{ marginBottom: 0 }}><h2 className="ed-md">Mídia e legenda <span className="sm muted" style={{ fontFamily: 'var(--font-sans)' }}>— opcional agora</span></h2></div>
-        <Dropzone files={files} onFiles={setFiles} />
+        {f.stage === 'producao' ? (
+          <div className="section-head" style={{ marginBottom: 0 }}><h2 className="ed-md">Mídia e legenda <span className="sm muted" style={{ fontFamily: 'var(--font-sans)' }}>— opcional agora</span></h2></div>
+        ) : (
+          <>
+            <div className="section-head" style={{ marginBottom: 0 }}><h2 className="ed-md">Direcionamento <span className="sm muted" style={{ fontFamily: 'var(--font-sans)' }}>— opcional</span></h2></div>
+            <p className="sm muted" style={{ margin: 0 }}>Se quiser, mostre como você pensou: observação, links e imagens ou vídeos de referência. O design, a edição e o cliente (ao aprovar o tema) veem este bloco. Não é a peça final.</p>
+            <Field label="Observação"><textarea className="textarea" value={f.direction} onChange={set('direction')} placeholder="Ideia visual, tom, cenário, o que não pode faltar…" /></Field>
+            <Field label="Links de referência" hint="Um por linha."><textarea className="textarea" rows={2} value={f.direction_links} onChange={set('direction_links')} placeholder="https://pinterest.com/…" /></Field>
+          </>
+        )}
+        <Dropzone files={files} onFiles={setFiles} label={f.stage === 'producao' ? undefined : 'Imagens ou vídeos de referência (opcional) — arraste ou clique'} />
         {files.length > 0 && (
           <ul className="list">{files.map((x, i) => <li key={i} className="sm"><span className="idx">{i + 1}</span><span className="grow clip">{x.name}</span><span className="muted">{bytes(x.size)}</span><Button type="button" size="sm" variant="ghost" onClick={() => setFiles(files.filter((_, j) => j !== i))}>Remover</Button></li>)}</ul>
         )}
         {files.length > 0 && f.stage === 'producao' && <label className="check"><input type="checkbox" checked={deliver} onChange={(e) => setDeliver(e.target.checked)} /> Este é o arquivo final — registrar a entrega do design/edição</label>}
-        <Field label="Legenda"><textarea className="textarea" style={{ minHeight: 140 }} value={f.caption} onChange={set('caption')} /></Field>
+        {f.stage === 'producao' && <Field label="Legenda"><textarea className="textarea" style={{ minHeight: 140 }} value={f.caption} onChange={set('caption')} /></Field>}
         {progress != null && <div className="progress" aria-label="Progresso do upload"><span style={{ width: `${Math.round(progress * 100)}%` }} /></div>}
         <div className="row end"><Button type="button" variant="ghost" onClick={() => nav(-1)}>Cancelar</Button><Button variant="primary" size="lg" magnetic arrow disabled={busy} type="submit" data-cursor="CRIAR">{busy ? (progress != null ? `Enviando ${Math.round(progress * 100)}%` : 'Criando…') : 'Criar conteúdo'}</Button></div>
       </form>

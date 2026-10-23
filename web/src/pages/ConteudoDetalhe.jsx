@@ -16,6 +16,9 @@ import { Dropzone } from './production/Dropzone.jsx';
 import '../styles/production.css';
 import { useUrlState } from '../lib/nav.jsx';
 import { MoveStageModal } from '../components/MoveStage.jsx';
+import { DirectionView, DirectionEditor } from '../components/Direction.jsx';
+
+const PLANNING = ['cronograma', 'analise_cronograma', 'ajuste_cronograma', 'aprovacao_tema'];
 
 const toLocalInput = (iso) => { if (!iso) return ''; const d = new Date(iso); const off = d.getTimezoneOffset(); return new Date(d.getTime() - off * 60e3).toISOString().slice(0, 16); };
 const REVIEW_STAGES = ['analise_cronograma', 'analise_producao', 'revisao_ajuste'];
@@ -122,17 +125,22 @@ export default function ConteudoDetalhe() {
         <div className="col gap-6">
           <ActionsPanel data={data} myOpen={myOpen} busy={busy} onComplete={completeTask} setModal={setModal} act={act} />
 
+          {/* No cronograma ainda não há peça: legenda e arquivos finais só a partir da produção (a estrategista usa o Direcionamento) */}
+          {!PLANNING.includes(c.stage) && (
           <section>
             <div className="section-head"><h2 className="ed-md">Legenda</h2>{version && <span className="xs faint">V{version.number}</span>}</div>
             <CaptionEditor key={(current?.id || 'none') + (version?.id || '')} content={c} version={version} current={current} canEdit={canEditMedia} onSaved={reload} />
           </section>
+          )}
 
-          {canEditMedia && (
+          {canEditMedia && !PLANNING.includes(c.stage) && (
             <section>
               <div className="section-head"><h2 className="ed-md">Arquivos</h2><span className="xs faint">{current?.locked ? `V${current.number} já enviada — o upload cria V${current.number + 1}` : current ? `editando V${current.number}` : 'cria a V1'}</span></div>
               <Upload content={c} myOpen={myOpen} onDone={reload} />
             </section>
           )}
+
+          <DirectionBlock contentId={c.id} d={data.direction} canEdit={data.permissions.edit || auth.can('conteudos', 'create')} onSaved={reload} />
 
           <section>
             <Tabs value={tab} onChange={setTab} tabs={[
@@ -435,4 +443,17 @@ function AdjustHistory({ adjustments, onComment }) {
       </section>
     );
   });
+}
+
+// Direcionamento da estrategista: aparece para todos; quem cria/edita conteúdo pode completar (opcional)
+function DirectionBlock({ contentId, d, canEdit, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  if (!d && !canEdit) return null;
+  return (
+    <section>
+      <div className="section-head"><h2 className="ed-md">Direcionamento</h2>{canEdit && <button type="button" className="btn btn-sm btn-ghost" onClick={() => setEditing((v) => !v)}>{editing ? 'Fechar' : d ? 'Editar' : 'Adicionar'}</button>}</div>
+      {editing ? <DirectionEditor contentId={contentId} d={d} onSaved={() => { setEditing(false); onSaved(); }} />
+        : d ? <DirectionView d={d} /> : <p className="sm muted">Sem direcionamento. Opcional: observação, links e imagens/vídeos de referência de como o conteúdo foi pensado.</p>}
+    </section>
+  );
 }

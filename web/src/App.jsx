@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { api } from './lib/api.js';
 import { AuthContext, ToastContext } from './lib/hooks.js';
 import { Shell } from './components/Shell.jsx';
@@ -22,6 +22,8 @@ const Calendario = P(() => import('./pages/Calendario.jsx'));
 const Reunioes = P(() => import('./pages/Reunioes.jsx'));
 const Comunicacao = P(() => import('./pages/Comunicacao.jsx'));
 const Pendencias = P(() => import('./pages/Pendencias.jsx'));
+const Ciclos = P(() => import('./pages/Ciclos.jsx'));
+const CicloCliente = P(() => import('./pages/Ciclos.jsx').then((m) => ({ default: function CicloClienteRoute() { const { batch, clientId } = useParams(); return <m.CicloCliente batch={batch} clientId={clientId} />; } })));
 const Migracao = P(() => import('./pages/Migracao.jsx'));
 const Divisao = P(() => import('./pages/Divisao.jsx'));
 const Atrasos = P(() => import('./pages/Atrasos.jsx'));
@@ -86,6 +88,8 @@ export default function App() {
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/torre" element={<Torre />} />
                     <Route path="/processos" element={<Processos />} />
+                    <Route path="/ciclos" element={<Ciclos />} />
+                    <Route path="/ciclos/:batch/:clientId" element={<CicloCliente />} />
                     <Route path="/clientes" element={<Clientes />} />
                     <Route path="/clientes/:id" element={<ClienteDetalhe />} />
                     <Route path="/conteudos" element={<Conteudos />} />

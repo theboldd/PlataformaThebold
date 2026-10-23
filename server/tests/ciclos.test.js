@@ -75,3 +75,19 @@ test('ciclo de dezembro + janeiro produzido em novembro: cronograma → análise
   assert.deepEqual(prod.map((x) => x.function).sort(), ['copy', 'design']);
   assert.ok(prod.find((x) => x.function === 'design').assignee_id === U.des.id, 'design vai para o designer do cliente');
 });
+
+test('direcionamento da estrategista: observação e links chegam ao detalhe e ao cliente; não viram peça', async () => {
+  const est = await login(U.est);
+  const c = one("SELECT * FROM contents WHERE title='Tema de dezembro'"); // já com o cliente (tema aprovado, em produção)
+  const fd = new FormData(); fd.append('note', 'Pensei num reels de bastidores, luz natural.'); fd.append('links', 'https://pinterest.com/pin/1\nnão é link');
+  const cookieLogin = await fetch(`${BASE}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-bold-request': '1' }, body: JSON.stringify({ email: U.est.email, password: PW }) });
+  const r = await fetch(`${BASE}/contents/${c.id}/direcionamento`, { method: 'POST', headers: { cookie: cookieLogin.headers.get('set-cookie').split(';')[0], 'x-bold-request': '1' }, body: fd });
+  assert.equal(r.status, 200);
+  const d = (await est.get(`/contents/${c.id}`)).data.direction;
+  assert.equal(d.note, 'Pensei num reels de bastidores, luz natural.');
+  assert.deepEqual(d.links, ['https://pinterest.com/pin/1']);
+  assert.equal(one('SELECT current_version_id FROM contents WHERE id=?', c.id).current_version_id, null, 'referência não cria versão nem conta como entrega');
+  const cl = await login(cli);
+  const item = (await cl.get(`/portal/contents/${c.id}`)).data;
+  assert.equal(item.direction.note, 'Pensei num reels de bastidores, luz natural.');
+});

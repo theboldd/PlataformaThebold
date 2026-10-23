@@ -1,6 +1,7 @@
 // CONTEÚDOS — a experiência editorial do cliente. Visual primeiro.
 // Três ações separadas, nunca confundidas:  ♡ APROVAR (ação formal, com confirmação)  ·  ✎ PEDIR AJUSTE (estruturado)  ·  💬 COMENTAR / FAZER PERGUNTA.
 // Um comentário sozinho nunca significa aprovação.
+import { DirectionView } from '../components/Direction.jsx';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
@@ -235,6 +236,7 @@ function Post({ it, team, onUpdate }) {
           {adjust && !isVideo && <div className="p-pickhint">{pick ? `Marcado na página ${pick.page}. Toque de novo para mudar.` : 'Toque na imagem para marcar o ponto do ajuste (opcional).'}</div>}
         </div>
       )}
+      {it.direction && <div className="p-dir"><DirectionView d={it.direction} title="Como a The Bold pensou este conteúdo" /></div>}
 
       <div className="p-post-body">
         {/* ♡ APROVAR · ✎ PEDIR AJUSTE · 💬 PERGUNTAR — três ações, nunca confundidas */}

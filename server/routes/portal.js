@@ -16,7 +16,7 @@ import { clientHome, clientActions, clientDeadline, clientHistory, journey, prof
 import { createRequest, requestForClient, clientReply, REQUEST_KINDS } from '../services/requests.js';
 import { decisionDTO, answerDecision, brandForClient, confirmBrand, pulseForClient } from '../services/client-brand.js';
 import { pendingPrompt, answerSatisfaction, dismissSatisfaction, offerSatisfaction } from '../services/satisfaction.js';
-import { addComment, upload, checkOnboardingComplete } from './ops.js';
+import { addComment, upload, checkOnboardingComplete, directionOf } from './ops.js';
 import { createMeeting } from './comms.js';
 
 export const portal = Router();
@@ -79,7 +79,7 @@ function feedItem(c, client) {
   return {
     can_request: canRequest,
     id: c.id, number: c.number, title: c.title, format: c.format, planned_at: c.planned_at, scheduled_at: c.scheduled_at, status: publicStatus(c), stage: c.stage,
-    is_theme: c.stage === 'aprovacao_tema' || c.stage === 'producao', theme: c.theme, objective: c.objective, reference: c.reference,
+    is_theme: c.stage === 'aprovacao_tema' || c.stage === 'producao', theme: c.theme, objective: c.objective, reference: c.reference, direction: directionOf(c),
     brand: { name: client.name, handle: client.handle },
     version: v ? { number: v.number, caption: v.caption, approved: v.id === c.approved_version_id && v.status === 'aprovada', media: versionMedia(v.id).map(fileDTO) } : null,
     versions, liked, can_like: canDecide, can_unlike: !!canUnlike, can_decide: canDecide, adjust_state: adjustState,

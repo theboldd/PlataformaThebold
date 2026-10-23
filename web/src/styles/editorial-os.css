@@ -137,3 +137,16 @@
 :root :is(.page, .jb, .drawer, .modal) :is(section, article, aside, details, header, li, a, div[class*="now"], div[class*="hero"], div[class*="att"], div[class*="alert"], div[class*="strip"], div[class*="focus"], div[class*="wrap"]):not(.avatar):not(.jb-av) { border-radius: 0; }
 /* Regra geral: dentro das telas, nada arredondado — exceto avatares e marcadores (pontos, bolinhas de estado, ícones) */
 :root :is(.page, .jb, .drawer, .modal, .toasts) *:not(i):not(svg):not(svg *):not(img):not(.avatar):not([class*="avatar"]):not(.jb-av):not([class*="dot"]):not([class*="mark"]):not([class*="pip"]):not([class*="av-"]):not(input[type="checkbox"]):not(input[type="radio"]) { border-radius: 0; }
+
+/* Celular: nada estoura a largura (etiquetas longas quebram linha; listas com botões descem os botões) */
+@media (max-width: 680px) {
+  .page .row.wrap > * { max-width: 100%; }
+  .page .row.wrap [class*="tag"], .page .row.wrap [class*="state"] { white-space: normal; height: auto; }
+  .page .list > li { flex-wrap: wrap; }
+}
+
+/* PORTAL DO CLIENTE na mesma linguagem: saudação e títulos na grotesca pesada, cantos retos (avatares e pontos continuam redondos) */
+.portal .p-hello-t { font-family: var(--font-display); font-weight: 800; text-transform: uppercase; letter-spacing: -0.045em; line-height: .92; font-size: clamp(42px, 8vw, 96px); }
+.portal .p-act.big .p-act-t { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.035em; line-height: 1; }
+.portal :is(h1, .ed-xl, .ed-lg):not(.p-hello-t) { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.04em; }
+.portal *:not(i):not(svg):not(svg *):not(img):not(.avatar):not([class*="avatar"]):not([class*="-av"]):not([class*="dot"]):not([class*="pin"]):not([class*="pip"]):not([class*="mark"]):not(input[type="checkbox"]):not(input[type="radio"]) { border-radius: 0; }

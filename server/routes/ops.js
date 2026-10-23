@@ -235,6 +235,7 @@ ops.post('/contents', requirePerm('conteudos', 'create'), (req, res) => {
   // Entrada direta em produção (ex.: conteúdo extra já aprovado em reunião) exige permissão de aprovação
   if (b.stage && b.stage !== 'cronograma' && !(b.stage === 'producao' && can(req.user, 'conteudos', 'approve'))) throw new HttpError(403, 'Somente quem aprova pode criar conteúdo direto em produção.');
   const c = createContent({ ...b, title: b.title.trim() }, req.user);
+  if (b.direction || b.direction_links) update('contents', { id: c.id }, { direction: String(b.direction || '').trim() || null, direction_links: JSON.stringify(cleanLinks(b.direction_links)) });
   res.json(contentCard(c, req.user));
 });
 ops.get('/contents/:id', requirePerm('conteudos', 'view'), (req, res) => {
@@ -243,7 +244,7 @@ ops.get('/contents/:id', requirePerm('conteudos', 'view'), (req, res) => {
   const versions = all('SELECT v.*, u.name author, a.name approver FROM content_versions v LEFT JOIN users u ON u.id=v.created_by LEFT JOIN users a ON a.id=v.approved_by WHERE v.content_id=? ORDER BY v.number DESC', c.id)
     .map((v) => ({ ...v, locked: !!v.locked, media: versionMedia(v.id).map(fileDTO) }));
   res.json({
-    content: { ...c, strategy_tags: parseJSON(c.strategy_tags, []), status: publicStatus(c) },
+    content: { ...c, strategy_tags: parseJSON(c.strategy_tags, []), status: publicStatus(c) }, direction: directionOf(c),
     card: contentCard(c, req.user), stage: { key: c.stage, ...STAGES[c.stage] }, next_action: nextAction(c), risk: contentRisk(c), available_at: stageAvailability(c),
     client: one('SELECT id, name, handle, requires_theme_approval FROM clients WHERE id=?', c.client_id),
     cycle: c.cycle_id ? (({ milestones, ...cy }) => ({ ...cy, milestones: parseJSON(milestones, {}) }))(one('SELECT * FROM cycles WHERE id=?', c.cycle_id)) : null,
@@ -290,6 +291,40 @@ ops.put('/contents/:id/caption', requirePerm('conteudos', 'edit'), (req, res) =>
   res.json({ version: v.number });
 });
 // Upload direto de mídia para a versão editável. deliver=1 → conclui a trilha visual do responsável (detecção automática de entrega)
+// DIRECIONAMENTO da estrategista (opcional): observação, links e imagens/vídeos de referência de como ela pensou o conteúdo.
+// Nunca é a peça final (não entra em versão nem conta como entrega). Visível ao design/edição e ao cliente quando ele aprova.
+export function directionOf(c) {
+  const files = all("SELECT * FROM files WHERE context_type='direcionamento' AND context_id=? ORDER BY created_at", c.id).map(fileDTO);
+  const links = parseJSON(c.direction_links, []);
+  return c.direction || links.length || files.length ? { note: c.direction || null, links, files } : null;
+}
+const cleanLinks = (v) => (Array.isArray(v) ? v : String(v || '').split(/\n|,\s(?=https?:)/)).map((x) => String(x).trim()).filter((x) => /^https?:\/\//i.test(x)).slice(0, 20);
+ops.post('/contents/:id/direcionamento', requirePerm('conteudos', 'view'), upload.array('files', 12), async (req, res) => {
+  const c = getContentOr404(req.params.id);
+  try { assertClient(req.user, c.client_id); } catch (e) { for (const f of req.files || []) await import('node:fs/promises').then((fs) => fs.unlink(f.path).catch(() => {})); throw e; }
+  if (!can(req.user, 'conteudos', 'create') && !can(req.user, 'conteudos', 'edit')) throw new HttpError(403, 'Sem permissão para editar o direcionamento.');
+  const patch = {};
+  if (req.body.note !== undefined) patch.direction = String(req.body.note || '').trim() || null;
+  if (req.body.links !== undefined) patch.direction_links = JSON.stringify(cleanLinks(typeof req.body.links === 'string' && req.body.links.startsWith('[') ? parseJSON(req.body.links, []) : req.body.links));
+  if (Object.keys(patch).length) update('contents', { id: c.id }, { ...patch, updated_at: now() });
+  const added = [];
+  for (const f of req.files || []) {
+    const x = await ingest(f.path, { originalName: Buffer.from(f.originalname, 'latin1').toString('utf8'), mime: f.mimetype, clientId: c.client_id, userId: req.user.id });
+    update('files', { id: x.id }, { category: 'referencia', context_type: 'direcionamento', context_id: c.id, visibility: 'client' });
+    added.push(x.original_name);
+  }
+  log({ actor: req.user.id, action: 'conteudo.direcionamento', entity: 'content', id: c.id, client: c.client_id, content: c.id, summary: `Direcionamento atualizado${added.length ? ` · ${added.length} referência(s) anexada(s)` : ''}` });
+  res.json({ direction: directionOf(one('SELECT * FROM contents WHERE id=?', c.id)) });
+});
+ops.post('/contents/:id/direcionamento/arquivos/:fileId/remover', requirePerm('conteudos', 'view'), (req, res) => {
+  const c = getContentOr404(req.params.id);
+  assertClient(req.user, c.client_id);
+  const f = one("SELECT * FROM files WHERE id=? AND context_type='direcionamento' AND context_id=?", req.params.fileId, c.id);
+  if (!f) throw new HttpError(404, 'Referência não encontrada.');
+  update('files', { id: f.id }, { context_type: null, context_id: null, visibility: 'internal' }); // o arquivo original é preservado; só sai do direcionamento
+  log({ actor: req.user.id, action: 'conteudo.direcionamento', entity: 'content', id: c.id, client: c.client_id, content: c.id, summary: `Referência retirada do direcionamento: ${f.original_name}` });
+  res.json({ direction: directionOf(one('SELECT * FROM contents WHERE id=?', c.id)) });
+});
 ops.post('/contents/:id/media', requirePerm('conteudos', 'edit'), upload.array('files', 20), async (req, res) => {
   const c = getContentOr404(req.params.id);
   try { assertClient(req.user, c.client_id); } catch (e) { for (const f of req.files || []) await import('node:fs/promises').then((fs) => fs.unlink(f.path).catch(() => {})); throw e; }

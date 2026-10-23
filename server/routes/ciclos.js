@@ -43,7 +43,7 @@ ciclos.get('/ciclos', requirePerm('processos', 'view'), (req, res) => {
   const d = new Date(); const ym = (k) => { const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + k, 1)); return `${x.getUTCFullYear()}-${String(x.getUTCMonth() + 1).padStart(2, '0')}`; };
   res.json({
     batches, can_open: can(req.user, 'processos', 'edit'),
-    suggest: { months: [ym(1), ym(2), ym(3)], production: [ym(0), ym(1)] },
+    suggest: { months: [ym(1), ym(2), ym(3), ym(4)], production: [ym(0), ym(1), ym(2), ym(3)] },
     clients: eligible(req.user).map((c) => ({ ...c, strategist: strategistOf(c.id)?.name || null, existing: all('SELECT month FROM cycles WHERE client_id=?', c.id).map((r) => r.month) })),
   });
 });

@@ -1,5 +1,19 @@
 # THE BOLD OS — Checklist oficial de conferência
 
+## Revisão 5.3 · 23/10/2026 — Ciclos, direcionamento, portal e acertos para começar dezembro/janeiro
+
+| O que | Onde | Estado |
+|---|---|---|
+| Ciclos: abrir um ou mais meses produzidos juntos (ex.: dezembro + janeiro em novembro), com calendário de marcos do mês de produção; cada estrategista recebe “Montar cronograma” com prazo e notificação | Ciclos | 🟢 |
+| Cronograma do cliente em planilha (data, formato, título, tema, objetivo, estratégia); “Enviar para análise” leva cada linha para análise → aprovação do tema → produção (design/edição + legenda) | Ciclos · cliente | 🟢 |
+| Direcionamento da estrategista (opcional): observação, links e imagens/vídeos de referência; visível para design/edição e para o cliente; nunca vira peça final | Novo conteúdo · Conteúdo · Portal | 🟢 |
+| No cronograma, legenda e arquivo final ficam escondidos (só a partir da produção) | Conteúdo | 🟢 |
+| Arrastar o cartão do cliente move todas as demandas (prévia de impacto, motivo, aviso aos responsáveis); “Mover etapa” em cada demanda | Processos | 🟢 |
+| Portal do cliente na mesma tipografia e cantos retos da equipe | Portal | 🟢 |
+| Celular: Negócio (recebimentos) e Decisões da migração não estouram mais a largura | Negócio · Migração | 🟢 |
+| Hospedagem persistente: a prévia da Vercel não guarda o que a equipe faz (cada instância usa uma cópia temporária) | Hospedagem | 🔴 decisão da CEO |
+| Acessos: 9 pessoas da equipe com e-mail provisório; 22 de 23 clientes sem acesso ao portal; 7 clientes sem estrategista vinculada | Usuários · Clientes | 🟡 |
+
 ## Revisão 5.2 · 23/10/2026 — Demandas dentro do cartão do cliente
 
 | O que | Onde | Estado |
