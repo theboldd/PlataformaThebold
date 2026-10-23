@@ -16,7 +16,7 @@ const ACTIVE = STAGE_ORDER.filter((s) => !['agendado', 'publicado', 'cancelado']
 const PROD = ['producao', 'analise_producao', 'ajuste_interno', 'ajuste_cliente', 'revisao_ajuste'];
 const REVIEW = ['analise_cronograma', 'analise_producao', 'revisao_ajuste'];
 const WAIT = ['aprovacao_tema', 'aprovacao_cliente'];
-const ESSENTIAL = { estrategia: 'Estratégia', design: 'Design', edicao: 'Edição' };
+const ESSENTIAL = { estrategia: 'Estrategista', design: 'Design', edicao: 'Edição' };
 const AUTO = Object.fromEntries(CATALOG.map((c) => [c[0], { event: c[1], action: c[3] }]));
 const days = (ms) => Math.round((ms / DAY) * 10) / 10;
 

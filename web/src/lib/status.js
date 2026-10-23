@@ -5,7 +5,7 @@ export const STATUS = {
 };
 export const STATUS_GLYPH = { aprovado: '✓', agendado: '→', publicado: '●' };
 export const FORMATS = { reel: 'Reel', video: 'Vídeo', carrossel: 'Carrossel', estatico: 'Estático', foto: 'Foto', stories: 'Stories' };
-export const FUNCTIONS = { estrategia: 'Estratégia', design: 'Design', edicao: 'Edição de vídeo', copy: 'Copy / legenda', revisao: 'Revisão', agendamento: 'Agendamento', atendimento: 'Atendimento', cliente: 'Cliente' };
+export const FUNCTIONS = { estrategia: 'Estrategista', design: 'Design', edicao: 'Edição de vídeo', copy: 'Copy / legenda', revisao: 'Revisão', agendamento: 'Agendamento', atendimento: 'Atendimento', cliente: 'Cliente' };
 export const PRIORITY = { baixa: 'Baixa', media: 'Média', alta: 'Alta', critica: 'Crítica' };
 export const RISK = { nenhum: '—', baixo: 'Baixo', medio: 'Médio', alto: 'Alto', critico: 'Crítico' };
 export const LEVEL = { info: 'Informativa', atencao: 'Atenção', urgente: 'Urgente' };

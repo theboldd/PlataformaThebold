@@ -1,5 +1,17 @@
 # THE BOLD OS — Checklist oficial de conferência
 
+## Revisão 4.9 · 23/10/2026 — Processos: cartões por cliente e fluxo de ajuste
+
+| O que | Onde | Estado |
+|---|---|---|
+| Quadro com um cartão por cliente e as demandas dentro, como no Notion (opção “Por demanda” mantém o card por conteúdo) | Processos | 🟢 |
+| Em cada demanda, quem tem a tarefa conclui ali: no design/edição pede o arquivo antes (“Enviar arquivo”), na legenda pede o texto; concluir manda para a revisão | Processos | 🟢 |
+| Revisão: o cartão do cliente leva à Sala de Revisão com todas as demandas daquele cliente | Processos → Sala de Revisão | 🟢 |
+| Ajuste interno feito segue direto para a aprovação do cliente, sem nova revisão; quem pediu recebe “Fulano fez o ajuste pedido” (configuração revisar_apos_ajuste_interno = não) | Process Engine | 🟢 |
+| Sem ajuste: aprovado na revisão vai para a aprovação do cliente; aprovado pelo cliente fica Liberado para publicação | Process Engine | 🟢 |
+| Vivian dá o check em Liberado para publicação: “Agendado” (data e hora) ou “✓ Publicado” | Processos | 🟢 |
+| A função passa a se chamar Estrategista (quadro, equipe, permissões, performance) | Toda a plataforma | 🟢 |
+
 ## Revisão 4.8 · 23/10/2026 — Pendências na linguagem editorial
 
 | O que | Onde | Estado |

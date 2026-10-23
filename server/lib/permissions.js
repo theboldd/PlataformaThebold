@@ -33,7 +33,7 @@ export const ROLE_DEFS = [
     perms: { ...full(['processos', 'clientes', 'conteudos', 'calendario', 'reunioes', 'chat']), dashboard: ['view'], torre: ['view'], revisao: ['view'], insights: ['view'], brain: ['view'], historico: ['view'] } },
   { key: 'qualidade', label: 'Qualidade e Revisão', dashboard: 'revisao', all_clients: 1,
     perms: { ...full(['revisao', 'conteudos', 'reunioes']), dashboard: ['view'], torre: ['view'], processos: ['view', 'edit'], clientes: ['view', 'edit'], calendario: ['view', 'create'], chat: ['view', 'create'], brain: ['view'], insights: ['view'], historico: ['view'] } },
-  { key: 'estrategia', label: 'Estratégia', dashboard: 'estrategia', all_clients: 0,
+  { key: 'estrategia', label: 'Estrategista', dashboard: 'estrategia', all_clients: 0,
     perms: { dashboard: ['view'], processos: ['view', 'edit'], clientes: ['view', 'edit'], conteudos: ['view', 'create', 'edit'], calendario: ['view', 'create'], reunioes: ['view', 'create', 'edit'], chat: ['view', 'create'], brain: ['view'], historico: ['view'] } },
   { key: 'producao', label: 'Produção', dashboard: 'producao', all_clients: 0, perms: prod },
   { key: 'design', label: 'Design', dashboard: 'producao', all_clients: 0, perms: prod },

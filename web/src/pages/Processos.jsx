@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useApi, useAuth } from '../lib/hooks.js';
+import { useApi, useAuth, useToast } from '../lib/hooks.js';
+import { api } from '../lib/api.js';
 import { MoveStageModal } from '../components/MoveStage.jsx';
 import { useCrumbs } from '../components/Shell.jsx';
 import { Drawer, ErrorBox, Loading } from '../components/ui.jsx';
@@ -19,7 +20,7 @@ const PRIO_ICON = { critica: '⏶⏶', alta: '⏶', media: '=', baixa: '⏷' };
 // e, na produção, a função da trilha (design, edição, legenda). Nada é recategorizado: é leitura do que já existe.
 // Marca + nome sempre visíveis (não depende só de cor).
 const CLASS = {
-  estrategia: { label: 'Estratégia', mark: '◎' }, design: { label: 'Design', mark: '◆' }, edicao: { label: 'Edição', mark: '▶' }, copy: { label: 'Legenda', mark: '¶' },
+  estrategia: { label: 'Estrategista', mark: '◎' }, design: { label: 'Design', mark: '◆' }, edicao: { label: 'Edição', mark: '▶' }, copy: { label: 'Legenda', mark: '¶' },
   producao: { label: 'Produção', mark: '◇' }, revisao: { label: 'Revisão', mark: '✓' }, ajuste: { label: 'Ajuste', mark: '↺' }, cliente: { label: 'Aprovação', mark: '○' },
   bloqueio: { label: 'Bloqueado', mark: '■' }, publicacao: { label: 'Publicação', mark: '↗' },
 };
@@ -44,6 +45,8 @@ export default function Processos() {
   const [group, setGroup] = useState(params.get('group') || 'none');
   // Visão "Equipe" = o quadro do Notion: uma coluna por pessoa e função (Design Felipe, Edição de vídeo Léo, Legenda Juliane…)
   const view = params.get('visao') || 'equipe';
+  // Como no Notion: um cartão por cliente com as demandas dentro (menos cards na fila). "demandas" volta ao card por conteúdo.
+  const byClient = params.get('cards') !== 'demandas';
   const qs = new URLSearchParams();
   FILTER_KEYS.forEach((k) => params.get(k) && qs.set(k, params.get(k)));
   const { data, error, loading, reload } = useApi(`/process/board?${qs}`, []);
@@ -111,6 +114,10 @@ export default function Processos() {
             <button className={view === 'equipe' ? 'on' : ''} aria-pressed={view === 'equipe'} onClick={() => setFilter('visao', '')} title="Uma coluna por pessoa, como no Notion">Equipe</button>
             <button className={view === 'etapas' ? 'on' : ''} aria-pressed={view === 'etapas'} onClick={() => setFilter('visao', 'etapas')} title="Uma coluna por fase do processo">Etapas</button>
           </div>
+          <div className="jb-view" role="group" aria-label="Cartões">
+            <button className={byClient ? 'on' : ''} aria-pressed={byClient} onClick={() => setFilter('cards', '')} title="Um cartão por cliente, com as demandas dentro (como no Notion)">Por cliente</button>
+            <button className={!byClient ? 'on' : ''} aria-pressed={!byClient} onClick={() => setFilter('cards', 'demandas')} title="Um cartão por conteúdo">Por demanda</button>
+          </div>
           <label className="jb-search"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Pesquisar no quadro" aria-label="Pesquisar" /><I.search size={16} /></label>
           <div className="jb-avatars" role="group" aria-label="Filtrar por responsável">
             {people.slice(0, 8).map((p) => (
@@ -164,7 +171,7 @@ export default function Processos() {
             <div key={sw.key} className="jb-swim">
               {sw.label && <div className="jb-swim-head"><span className="jb-label" style={{ background: toneOf(sw.label) }}>{cleanName(sw.label)}</span><span className="jb-swim-count">{sw.lanes.reduce((n, l) => n + l.cards.length, 0)} itens{group === 'client' ? ` · ${byFormat(sw.lanes)}` : ''}</span></div>}
               <div className="jb-board">
-                {sw.lanes.map((lane) => <Column key={lane.key} lane={lane} teamView={view === 'equipe'} moved={moved} showHead={sw === swimlanes[0] || !!sw.label} onDropCard={canMove ? (card) => setMoving({ content: card, targets: lane.targets || (lane.stages || []).map((x) => x.key) }) : null} />)}
+                {sw.lanes.map((lane) => <Column key={lane.key} lane={lane} byClient={byClient} reload={reload} teamView={view === 'equipe'} moved={moved} showHead={sw === swimlanes[0] || !!sw.label} onDropCard={canMove ? (card) => setMoving({ content: card, targets: lane.targets || (lane.stages || []).map((x) => x.key) }) : null} />)}
               </div>
             </div>
           ))}
@@ -214,7 +221,7 @@ function teamLanes(data) {
   ];
 }
 
-function Column({ lane, moved, showHead, onDropCard, teamView }) {
+function Column({ lane, moved, showHead, onDropCard, teamView, byClient, reload }) {
   const cls = laneClass(lane);
   const sub = lane.label && lane.label.toLowerCase() !== (CLASS[cls]?.label || '').toLowerCase() && lane.label !== 'Edição de vídeo' ? lane.label : null;
   const [over, setOver] = useState(false);
@@ -231,13 +238,15 @@ function Column({ lane, moved, showHead, onDropCard, teamView }) {
         <div className={`jb-col-head cls-${cls}`}>
           <div className="jb-col-cls"><ClassTag k={cls} big />{lane.key === 'publicacao' && <I.check size={14} className="jb-done" />}</div>
           {sub && <div className="jb-col-title">{sub}</div>}
-          <div className="jb-col-n"><b>{lane.cards.length}</b> {lane.cards.length === 1 ? 'conteúdo' : 'conteúdos'}</div>
+          <div className="jb-col-n"><b>{lane.cards.length}</b> {lane.cards.length === 1 ? 'conteúdo' : 'conteúdos'}{byClient && lane.cards.length > 0 && <> · {pl(new Set(lane.cards.map((c) => c.client_id)).size, 'cliente', 'clientes')}</>}</div>
           {lane.person && <div className="jb-col-who"><span className="jb-av sm" style={lane.person.id ? { background: toneOf(lane.person.id) } : undefined}>{lane.person.id ? initials(lane.person.name) : '?'}</span>{lane.person.name}</div>}
           {(lane.stages || []).length > 1 && <div className="jb-col-sub">{lane.stages.map((s) => <span key={s.key}>{s.label} · {counts[s.key]}</span>)}</div>}
         </div>
       )}
       <div className="jb-col-body">
-        {lane.cards.map((c) => <Card key={c.id} c={c} classes={teamView ? [cls] : cardClasses(c)} moved={moved.has(c.id)} draggable={!!onDropCard} track={lane.fn ? c.tracks?.find((t) => t.fn === lane.fn && (t.assignee_id || null) === (lane.person?.id || null)) : null} />)}
+        {byClient
+          ? groupByClient(lane.cards).map((g) => <ClientCard key={g.client_id} g={g} lane={lane} moved={moved} reload={reload} />)
+          : lane.cards.map((c) => <Card key={c.id} c={c} classes={teamView ? [cls] : cardClasses(c)} moved={moved.has(c.id)} draggable={!!onDropCard} track={lane.fn ? c.tracks?.find((t) => t.fn === lane.fn && (t.assignee_id || null) === (lane.person?.id || null)) : null} />)}
         {!lane.cards.length && lane.person && <div className="jb-col-empty">Nada com {lane.person.id ? lane.person.name.split(' ')[0] : 'ninguém'} agora</div>}
       </div>
     </section>
@@ -250,6 +259,80 @@ function byFormat(lanes) {
   for (const l of lanes) for (const c of l.cards) m[c.format] = (m[c.format] || 0) + 1;
   const PL = { carrossel: 'carrosséis', reel: 'reels', estatico: 'estáticos', foto: 'fotos', video: 'vídeos', stories: 'stories' };
   return Object.entries(m).map(([f, n]) => `${n} ${n === 1 ? (FORMATS[f] || f).toLowerCase() : PL[f] || f}`).join(' · ');
+}
+
+const pl = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+function groupByClient(cards) {
+  const m = new Map();
+  for (const c of cards) (m.get(c.client_id) || m.set(c.client_id, { client_id: c.client_id, client: c.client, restricted: c.restricted, items: [] }).get(c.client_id)).items.push(c);
+  return [...m.values()].sort((a, b) => (a.client || '').localeCompare(b.client || ''));
+}
+const STAGE_HINT = { analise_producao: 'revisar', analise_cronograma: 'revisar', revisao_ajuste: 'conferir', ajuste_interno: 'ajustar', ajuste_cliente: 'ajustar' };
+
+// CARTÃO DO CLIENTE — as demandas daquele cliente nesta coluna. Quem tem a tarefa conclui ali mesmo;
+// concluir manda para a próxima etapa pelo Process Engine (revisão, aprovação…) e avisa quem precisa saber.
+function ClientCard({ g, lane, moved, reload }) {
+  const auth = useAuth();
+  const toast = useToast();
+  const [busy, setBusy] = useState(null);
+  const [when, setWhen] = useState({});
+  const run = async (key, fn, ok) => { setBusy(key); try { await fn(); toast(ok); reload(); } catch (e) { toast(e.message, 'err'); } finally { setBusy(null); } };
+  const canApprove = auth.can('conteudos', 'approve');
+  const formats = byFormat([{ cards: g.items }]);
+  const late = g.items.filter((c) => c.due_at && new Date(c.due_at) < new Date()).length;
+  const reviewCol = ['analise_producao', 'analise_cronograma'].some((s) => (lane.targets || lane.stages?.map((x) => x.key) || []).includes(s));
+  return (
+    <article className={`jb-cc ${g.items.some((c) => moved.has(c.id)) ? 'moved' : ''}`} style={{ '--tone': toneOf(g.client_id) }}>
+      <header className="jb-cc-h">
+        {g.restricted ? <span className="jb-cc-name">{cleanName(g.client || '')}</span> : <Link to={`/clientes/${g.client_id}`} className="jb-cc-name" title="Abrir a ficha do cliente">{cleanName(g.client || '')} ↗</Link>}
+        <span className="jb-cc-n" title={pl(g.items.length, 'demanda', 'demandas')}>{g.items.length}</span>
+      </header>
+      <div className="jb-cc-sub">{formats}{late ? <b className="late"> · {pl(late, 'atrasada', 'atrasadas')}</b> : null}</div>
+      <ul className="jb-cc-list">
+        {g.items.map((c) => {
+          // a trilha desta coluna (coluna de pessoa) ou a primeira tarefa aberta do conteúdo
+          const tr = lane.fn ? c.tracks?.find((t) => t.fn === lane.fn && (t.assignee_id || null) === (lane.person?.id || null)) : c.tracks?.find((t) => ['etapa', 'ajuste'].includes(t.kind) && !['revisao'].includes(t.fn)) || null;
+          const mine = tr && (tr.assignee_id === auth.user.id || canApprove);
+          const needsFile = tr?.track === 'visual' && !c.has_media && c.stage === 'producao';
+          const needsCaption = tr?.track === 'legenda' && !c.has_caption && c.stage === 'producao';
+          const due = tr?.due_at || c.due_at;
+          const overdue = due && new Date(due) < new Date();
+          const doable = !c.restricted && !c.blocked && tr && mine && ['producao', 'ajuste_interno', 'ajuste_cliente', 'cronograma', 'ajuste_cronograma'].includes(c.stage);
+          return (
+            <li key={c.id} className={c.blocked ? 'blocked' : ''}>
+              <span className={`jb-type t-${c.format}`} title={FORMATS[c.format]}>{FORMATS[c.format]?.[0]}</span>
+              <span className="jb-cc-t">
+                {c.restricted ? <span>{c.title}</span> : <Link to={`/conteudos/${c.id}`}>{c.title}</Link>}
+                <small>
+                  {c.blocked ? <b className="late">■ {c.block_reason || 'Bloqueado'}</b> : lane.person ? <>{FORMATS[c.format]}</> : <>{tr?.name ? tr.name.split(' ')[0] : c.owner && c.owner !== 'SEM RESPONSÁVEL' ? c.owner.split(' ')[0] : c.owner === 'SEM RESPONSÁVEL' ? 'Sem responsável' : c.stage_label}</>}
+                  {due && !c.blocked && <span className={overdue ? 'late' : ''}> · {new Date(due).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', timeZone: 'America/Sao_Paulo' }).replace('.', '')}</span>}
+                  {STAGE_HINT[c.stage] && !lane.fn && <span> · {STAGE_HINT[c.stage]}</span>}
+                </small>
+              </span>
+              {doable && (needsFile || needsCaption
+                ? <Link className="jb-cc-btn ghost" to={`/conteudos/${c.id}`} title={needsFile ? 'Envie a capa/arte/vídeo antes de concluir' : 'Escreva a legenda antes de concluir'}>{needsFile ? 'Enviar arquivo' : 'Escrever legenda'}</Link>
+                : <button className="jb-cc-btn" disabled={busy === c.id} onClick={() => run(c.id, () => api.post(`/tasks/${tr.task_id}/complete`), c.stage.startsWith('ajuste') ? 'Ajuste concluído.' : 'Concluído. Seguiu para a próxima etapa.')}>Concluir</button>)}
+              {!c.restricted && c.stage === 'agendamento' && (
+                when[c.id] != null ? (
+                  <span className="jb-cc-when">
+                    <input type="datetime-local" className="input" value={when[c.id]} onChange={(e) => setWhen((w) => ({ ...w, [c.id]: e.target.value }))} aria-label="Data e hora do agendamento" />
+                    <button className="jb-cc-btn" disabled={!when[c.id] || busy === c.id} onClick={() => run(c.id, () => api.post(`/contents/${c.id}/schedule`, { at: new Date(when[c.id]).toISOString(), mode: 'externo' }), 'Marcado como agendado.')}>OK</button>
+                  </span>
+                ) : (
+                  <span className="jb-cc-acts">
+                    <button className="jb-cc-btn ghost" onClick={() => setWhen((w) => ({ ...w, [c.id]: '' }))} title="Agendado no Meta: informe data e hora">Agendado</button>
+                    <button className="jb-cc-btn" disabled={busy === c.id} title="Já foi ao ar" onClick={() => run(c.id, async () => { await api.post(`/contents/${c.id}/schedule`, { at: new Date().toISOString(), mode: 'externo' }); await api.post(`/contents/${c.id}/published`, {}); }, 'Publicação registrada.')}>✓ Publicado</button>
+                  </span>
+                )
+              )}
+              {!c.restricted && c.stage === 'agendado' && <button className="jb-cc-btn" disabled={busy === c.id} onClick={() => run(c.id, () => api.post(`/contents/${c.id}/published`, {}), 'Publicação registrada.')}>✓ Publicado</button>}
+            </li>
+          );
+        })}
+      </ul>
+      {reviewCol && !g.restricted && <Link className="jb-cc-go" to={`/revisao/${g.client_id}`}>Revisar {g.items.length > 1 ? `as ${g.items.length} demandas` : 'a demanda'} na Sala de Revisão →</Link>}
+    </article>
+  );
 }
 
 function Card({ c, moved, track, draggable, classes = [] }) {

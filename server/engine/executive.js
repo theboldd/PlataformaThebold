@@ -12,7 +12,7 @@ const H = 3600e3, DAY = 864e5;
 const pl = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const PROD_STAGES = ['producao', 'analise_producao', 'ajuste_interno', 'ajuste_cliente', 'revisao_ajuste'];
 const WAIT_STAGES = ['aprovacao_tema', 'aprovacao_cliente'];
-const ESSENTIAL = { estrategia: 'Estratégia', design: 'Design', edicao: 'Edição' };
+const ESSENTIAL = { estrategia: 'Estrategista', design: 'Design', edicao: 'Edição' };
 const inList = (a) => a.map(() => '?').join(',');
 
 // Janela à frente: hoje (até 23:59 de SP), 7 ou 30 dias, ou datas escolhidas

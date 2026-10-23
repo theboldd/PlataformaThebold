@@ -30,7 +30,7 @@ export const STAGES = {
   cancelado:          { label: 'Cancelado',             lane: null,          fn: null, sla: null, final: true },
 };
 export const LANES = [
-  { key: 'estrategia', label: 'Estratégia' }, { key: 'revisao', label: 'Revisão' }, { key: 'ajuste', label: 'Ajuste' },
+  { key: 'estrategia', label: 'Estrategista' }, { key: 'revisao', label: 'Revisão' }, { key: 'ajuste', label: 'Ajuste' },
   { key: 'cliente', label: 'Cliente' }, { key: 'producao', label: 'Produção' }, { key: 'agendamento', label: 'Liberado para publicação' }, { key: 'publicacao', label: 'Publicação manual' },
 ];
 export const STAGE_ORDER = Object.keys(STAGES);
@@ -62,7 +62,8 @@ export const DEFAULT_SETTINGS = {
     tudo_pronto: [27, 27], cliente_aprova_final: [27, 28], ajustes_cliente: [29, 30], agendamento: [29, 30],
   },
   analise_cronograma_ativa: true,      // PDF: "em breve não teremos essa fase" → desligável
-  reenviar_cliente_apos_ajuste: true,  // decisão The Bold (21/10): a versão que resolve o ajuste do cliente VOLTA para o cliente aprovar — aprovação nunca é inferida pela etapa
+  reenviar_cliente_apos_ajuste: true,
+  revisar_apos_ajuste_interno: false, // decisão da CEO (23/10): ajuste interno feito segue direto para a aprovação do cliente, sem nova revisão; quem pediu é avisado  // decisão The Bold (21/10): a versão que resolve o ajuste do cliente VOLTA para o cliente aprovar — aprovação nunca é inferida pela etapa
   revisores_padrao_roles: ['qualidade', 'ceo'], // Rebeca + Raísa
   cc_roles: ['operacoes'],             // Vitória recebe cópia das etapas-chave
   agendamento_roles: ['gestao'],       // Vivian agenda
@@ -382,7 +383,18 @@ function advance(c, actor, meta) {
     case 'cronograma': return enterStage(c, setting('analise_cronograma_ativa') ? 'analise_cronograma' : toTheme, actor, { reason: 'cronograma concluído' });
     case 'ajuste_cronograma': return enterStage(c, c.client_adjust_rounds > 0 ? 'producao' : toTheme, actor, { reason: 'cronograma pronto' });
     case 'producao': automation('producao.concluida', { entity: 'content', id: c.id, client: c.client_id }); return enterStage(c, 'analise_producao', actor, { reason: 'produção entregue' });
-    case 'ajuste_interno': automation('ajuste.concluido', { entity: 'content', id: c.id, client: c.client_id }); return enterStage(c, 'analise_producao', actor, { reason: 'ajuste interno concluído' });
+    case 'ajuste_interno': {
+      automation('ajuste.concluido', { entity: 'content', id: c.id, client: c.client_id });
+      if (setting('revisar_apos_ajuste_interno')) return enterStage(c, 'analise_producao', actor, { reason: 'ajuste interno concluído' });
+      // Sem nova revisão: quem pediu o ajuste é avisado de quem fez e de que o conteúdo seguiu para a aprovação do cliente
+      const round = all("SELECT DISTINCT a.requested_by, t.completed_by FROM adjustments a JOIN tasks t ON t.id=a.task_id WHERE a.content_id=? AND a.origin='interno' AND a.version_id IS ?", c.id,
+        one("SELECT version_id FROM adjustments WHERE content_id=? AND origin='interno' ORDER BY created_at DESC LIMIT 1", c.id)?.version_id ?? null);
+      const doers = [...new Set(round.map((r) => r.completed_by).filter(Boolean))].map((id) => userName(id)).filter(Boolean);
+      const who = doers.length ? doers.join(' e ') : userName(actor?.id) || 'A equipe';
+      const requesters = [...new Set(round.map((r) => r.requested_by).filter(Boolean))].filter((id) => id !== actor?.id);
+      notify(requesters, { level: 'info', type: 'ajuste_feito', title: `${who} fez o ajuste pedido`, body: `#${c.number} ${c.title}: ajuste concluído e enviado para a aprovação do cliente.`, link: `/conteudos/${c.id}`, client: c.client_id, content: c.id });
+      return enterStage(c, 'aprovacao_cliente', actor, { reason: `ajuste interno feito por ${who} — segue para o cliente sem nova revisão` });
+    }
     case 'ajuste_cliente': {
       automation('ajuste.concluido', { entity: 'content', id: c.id, client: c.client_id });
       const sizes = all("SELECT size FROM adjustments WHERE content_id=? AND origin='cliente' AND status='concluido' AND version_id=(SELECT version_id FROM adjustments WHERE content_id=? AND origin='cliente' ORDER BY created_at DESC LIMIT 1)", c.id, c.id).map((r) => r.size);

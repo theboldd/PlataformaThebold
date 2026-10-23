@@ -216,7 +216,7 @@ export function contentCard(c, user = null) {
   const opens = !owner ? one("SELECT available_at FROM tasks WHERE content_id=? AND status='agendada' ORDER BY available_at LIMIT 1", c.id)?.available_at || null : null;
   return { opens_at: opens, id: c.id, number: c.number, title: c.title, format: c.format, client_id: c.client_id, client: cl?.name, client_color: cl?.color, stage: c.stage, stage_label: STAGES[c.stage].label, lane: STAGES[c.stage].lane,
     priority: c.priority, planned_at: c.planned_at, blocked: !!c.blocked, block_reason: c.block_reason, waiting_on: c.waiting_on, owner: owner?.name || (owner ? 'SEM RESPONSÁVEL' : null), owner_id: owner?.assignee_id,
-    due_at: owner?.due_at, hours_in_stage: hoursSince(c.stage_entered_at), risk: risk.level, risk_reasons: risk.reasons, version: v?.number || null, thumb: thumb ? fileDTO(thumb).urls.thumb : null,
+    due_at: owner?.due_at, hours_in_stage: hoursSince(c.stage_entered_at), risk: risk.level, risk_reasons: risk.reasons, version: v?.number || null, thumb: thumb ? fileDTO(thumb).urls.thumb : null, has_media: !!thumb, has_caption: !!v?.caption?.trim(),
     restricted: user ? !canAccessClient(user, c.client_id) : false, rounds: c.revision_rounds + c.client_adjust_rounds, month: c.cycle_month || c.planned_at?.slice(0, 7) || null,
     material_url: user && !canAccessClient(user, c.client_id) ? null : c.material_url || null,
     needs_material: c.material_status === 'aguardando' || (!!c.blocked && c.waiting_on === 'cliente') };
@@ -438,10 +438,10 @@ ops.get('/process/board', requirePerm('processos', 'view'), (req, res) => {
   cards = cards.map((c) => (c.restricted ? { ...c, thumb: null } : c));
   // Trilhas abertas de cada card (quem está com ele agora, por função) — base da visão "Equipe", igual às colunas por pessoa do Notion
   const ids = cards.map((c) => c.id);
-  const open = ids.length ? all(`SELECT t.content_id, t.function fn, t.assignee_id, u.name, t.due_at FROM tasks t LEFT JOIN users u ON u.id=t.assignee_id
+  const open = ids.length ? all(`SELECT t.id task_id, t.kind, t.description, t.content_id, t.function fn, t.assignee_id, u.name, t.due_at FROM tasks t LEFT JOIN users u ON u.id=t.assignee_id
     WHERE t.status IN ('aberta','em_andamento') AND t.function<>'cliente' AND t.content_id IN (${ids.map(() => '?').join(',')}) ORDER BY t.due_at`, ...ids) : [];
   const byContent = new Map();
-  for (const t of open) (byContent.get(t.content_id) || byContent.set(t.content_id, []).get(t.content_id)).push({ fn: t.fn, assignee_id: t.assignee_id, name: t.name, due_at: t.due_at });
+  for (const t of open) (byContent.get(t.content_id) || byContent.set(t.content_id, []).get(t.content_id)).push({ task_id: t.task_id, kind: t.kind, track: t.description?.startsWith('trilha:') ? t.description.slice(7) : null, fn: t.fn, assignee_id: t.assignee_id, name: t.name, due_at: t.due_at });
   cards = cards.map((c) => ({ ...c, tracks: byContent.get(c.id) || [] }));
   // filtro por pessoa vale para qualquer trilha aberta do card (design, edição, legenda…), não só a primeira
   if (assignee_id) cards = cards.filter((c) => c.tracks.some((t) => (assignee_id === 'none' ? !t.assignee_id : t.assignee_id === assignee_id)));

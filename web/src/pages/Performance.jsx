@@ -12,7 +12,7 @@ import '../styles/state.css';
 import '../styles/performance.css';
 
 const PERIODS = [{ value: '7', label: '7 dias' }, { value: '30', label: '30 dias' }, { value: '90', label: '90 dias' }];
-const FN = { estrategia: 'Estratégia', design: 'Design', edicao: 'Edição', copy: 'Copy', revisao: 'Revisão', agendamento: 'Agendamento', atendimento: 'Atendimento' };
+const FN = { estrategia: 'Estrategista', design: 'Design', edicao: 'Edição', copy: 'Copy', revisao: 'Revisão', agendamento: 'Agendamento', atendimento: 'Atendimento' };
 const TREND = { subiu: 'Mais entregas que no período anterior', caiu: 'Menos entregas que no período anterior', estavel: 'Mesmo volume do período anterior' };
 const TREND_GLYPH = { subiu: '↑', caiu: '↓', estavel: '→' };
 const pl = (n, one, many) => `${n} ${n === 1 ? one : many}`;

@@ -51,6 +51,8 @@ export function bootstrap() {
     run('INSERT OR IGNORE INTO roles (key,label,internal,dashboard,all_clients) VALUES (?,?,?,?,?)', r.key, r.label, r.internal ?? 1, r.dashboard, r.all_clients);
     if (fresh) for (const [m, acts] of Object.entries(r.perms)) for (const a of acts) run('INSERT OR IGNORE INTO role_permissions (role_key,module,action) VALUES (?,?,?)', r.key, m, a);
   }
+  // Decisão da CEO (23/10/2026): a função é "Estrategista" (a pessoa que elabora os conteúdos), não "Estratégia"
+  run("UPDATE roles SET label='Estrategista' WHERE key='estrategia' AND label='Estratégia'");
   // Módulos criados depois da primeira instalação: semeia uma vez as permissões padrão dos roles existentes
   for (const mod of ['divisao', 'carteira', 'atrasos', 'performance', 'repasses', 'agenda']) {
     const flag = `perm_seed:${mod}`;

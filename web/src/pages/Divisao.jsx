@@ -12,7 +12,7 @@ import '../styles/divisao.css';
 
 const STATUS = { onboarding: 'Onboarding', a_confirmar: 'Status a confirmar', pausado: 'Pausado' };
 const norm = (s = '') => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const FN_SHORT = { estrategia: 'Estratégia', copy: 'Copy / Legenda', design: 'Design', edicao: 'Edição de vídeo', revisao: 'Revisão', agendamento: 'Agendamento', atendimento: 'Atendimento' };
+const FN_SHORT = { estrategia: 'Estrategista', copy: 'Copy / Legenda', design: 'Design', edicao: 'Edição de vídeo', revisao: 'Revisão', agendamento: 'Agendamento', atendimento: 'Atendimento' };
 const Fn = ({ f, n }) => <span className={`dv-fn f-${f}`}>{FN_SHORT[f] || FUNCTIONS[f] || f}{n != null && <b>{n}</b>}</span>;
 
 export default function Divisao() {

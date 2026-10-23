@@ -88,9 +88,11 @@ test('ciclo completo do conteúdo: o engine move tudo sozinho e preserva versõe
   assert.throws(() => P.completeTask(adj.id, user(U.des)), /nova versão/);
   await addImage(c, user(U.des), '#222222');
   P.completeTask(adj.id, user(U.des));
-  assert.equal(fresh(c).stage, 'analise_producao', 'ajuste concluído volta para revisão');
-  review(c.id, user(U.rev), { decision: 'aprovar' }, req);
-  assert.equal(fresh(c).stage, 'aprovacao_cliente');
+  // Regra da CEO (23/10): ajuste interno feito segue direto para o cliente, sem nova revisão; quem pediu é avisado
+  assert.equal(fresh(c).stage, 'aprovacao_cliente', 'ajuste interno concluído segue para a aprovação do cliente');
+  const aviso = one("SELECT * FROM notifications WHERE user_id=? AND type='ajuste_feito' ORDER BY created_at DESC LIMIT 1", U.ceo.id);
+  assert.ok(aviso, 'quem pediu o ajuste recebe o aviso');
+  assert.match(aviso.title, /fez o ajuste pedido/);
   // Cliente pede ajuste → nova versão → conferência → cliente aprova V3
   P.clientDecision(c.id, user(cu), { decision: 'ajuste', note: 'Trocar frase da página 2', carousel_page: 2 }, req);
   assert.equal(fresh(c).stage, 'ajuste_cliente');
