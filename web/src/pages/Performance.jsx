@@ -7,6 +7,7 @@ import { useUrlState } from '../lib/nav.jsx';
 import { PageHead, Section, Seg, Loading, ErrorBox, Empty, Avatar } from '../components/ui.jsx';
 import { StateBadge, StateNotice } from '../components/State.jsx';
 import { fmtDate } from '../lib/format.js';
+import { Capacity, PeriodPerformance } from './tower/TeamBlocks.jsx';
 import '../styles/state.css';
 import '../styles/performance.css';
 
@@ -146,6 +147,21 @@ export default function Performance() {
         </>
       )}
       <Forecast />
+      <TeamFromTower days={days} />
     </div>
+  );
+}
+
+// Capacidade da equipe e desempenho do período — vieram da Torre de Controle (23/10)
+function TeamFromTower({ days }) {
+  const period = days === '7' ? '7d' : days === '30' ? '30d' : 'custom';
+  const qs = period === 'custom' ? `period=custom&from=${new Date(Date.now() - Number(days) * 864e5).toISOString().slice(0, 10)}&to=${new Date().toISOString().slice(0, 10)}` : `period=${period}`;
+  const { data } = useApi(`/performance/equipe?${qs}`, [qs]);
+  if (!data) return null;
+  return (
+    <>
+      <Section title="Capacidade da equipe" kicker="Carga × capacidade configurada"><div id="capacidade"><Capacity d={data} /></div></Section>
+      <Section title="Desempenho do período" kicker={data.period.label}><PeriodPerformance p={data.performance} /></Section>
+    </>
   );
 }

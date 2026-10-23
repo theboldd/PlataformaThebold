@@ -1,5 +1,20 @@
 # THE BOLD OS — Checklist oficial de conferência
 
+## Revisão 4.6 · 23/10/2026 — Torre de Controle reorganizada
+
+| O que | Onde | Estado |
+|---|---|---|
+| Estado da operação em 6 cartões coloridos, menores, número em sans legível; “Pessoas” leva para Equipe & Performance | Torre | 🟢 |
+| Principal ponto de atenção vira post-it com o nome da seção que mais precisa de olhar (ex.: Riscos & gargalos); clique leva até ela | Torre · topo | 🟢 |
+| Resumo em uma linha com destaque leve; filtros delicados em uma linha (rolam se não couberem) | Torre · topo | 🟢 |
+| Riscos & gargalos agrupados por cliente: o cartão abre o detalhe na própria Torre; o nome do cliente (↗) e “Ir para onde está” levam à origem. Gargalos por etapa à parte | Torre | 🟢 |
+| Mapa da operação: barra proporcional das 4 fases + cartões com total, %, atrasos/bloqueios e etapas em chips clicáveis | Torre | 🟢 |
+| Clientes & saúde: gráfico redondo por situação (clique filtra) + clientes em pílulas coloridas | Torre | 🟢 |
+| Responsabilidades no visual do app Notas | Torre | 🟢 |
+| Capacidade da equipe e Desempenho do período foram para Equipe & Performance; Inteligência fica em Insights; Dependências (repetia os bloqueios) e Detalhamento saíram da Torre. Links antigos (?tab=pessoas, ?tab=ia…) redirecionam | Torre → Equipe & Performance / Insights | 🟢 |
+
+---
+
 ## Revisão 4.5 · 23/10/2026 — linguagem visual editorial em toda a plataforma
 
 | O que | Onde | Estado |

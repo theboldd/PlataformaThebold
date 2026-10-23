@@ -1,8 +1,9 @@
 // TORRE DE CONTROLE — "o que está acontecendo na operação e por quê?"
-// Camadas: estado → riscos & gargalos → mapa do processo → clientes → responsabilidades → pessoas → inteligência → período → detalhamento.
+// Camadas (23/10): estado → riscos & gargalos (por cliente) → mapa da operação → clientes (gráfico) → responsabilidades (notas).
+// Capacidade e desempenho foram para Equipe & Performance; inteligência fica em Insights; detalhamento e dependências saíram.
 // Período e filtros vivem na URL (compartilháveis) e mudam os dados no servidor. Todo número abre o detalhe.
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useApi, useToast } from '../lib/hooks.js';
 import { api } from '../lib/api.js';
 import { useCrumbs } from '../components/Shell.jsx';
@@ -12,22 +13,23 @@ import { money, fmtDateTime, fmtDate, cleanName, ago } from '../lib/format.js';
 import { FUNCTIONS, FORMATS } from '../lib/status.js';
 import { ContentRows, MeetingRows, n2 } from './intel/parts.jsx';
 import '../styles/tower.css';
-import { StateBadge } from '../components/State.jsx';
+import '../styles/tower2.css';
 import { restoredOverlay } from '../lib/nav.jsx';
 
 const PERIODS = [{ value: 'hoje', label: 'Hoje' }, { value: '7d', label: '7 dias' }, { value: '30d', label: '30 dias' }, { value: 'custom', label: 'Personalizado' }];
 const FILTERS = ['client_id', 'assignee_id', 'stage', 'format', 'priority', 'status', 'kind', 'origin'];
 const PRIO = { baixa: 'Baixa', media: 'Média', alta: 'Alta', critica: 'Crítica' };
-const SITUATION = { sobrecarga: 'Sobrecarga', alta: 'Alta', normal: 'Normal', sem_carga: 'Sem carga', so_herdada: 'Dados insuficientes' };
 const RISK = { critico: 'Crítico', alto: 'Alto', medio: 'Médio', baixo: 'Baixo' };
-const STATUS = { ativo: 'Ativo', onboarding: 'Onboarding', a_confirmar: 'A confirmar' };
-const LEGACY = { pessoas: 'pessoas', riscos: 'riscos', clientes: 'clientes', operacao: 'operacao', producao: 'operacao', ia: 'inteligencia' };
+const LEGACY = { riscos: 'riscos', clientes: 'clientes', operacao: 'operacao', producao: 'operacao' };
+// saíram da Torre (23/10): capacidade e desempenho → Equipe & Performance · inteligência → Insights · detalhamento removido
+const MOVED = { pessoas: '/performance#capacidade', periodo: '/performance', ia: '/insights', inteligencia: '/insights', financeiro: '/negocio?aba=recebimentos', comercial: '/negocio?aba=pipeline' };
 const pl = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const go = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
 export default function Torre() {
   useCrumbs('Torre de Controle');
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const qs = useMemo(() => {
     const p = new URLSearchParams();
     for (const k of ['period', 'from', 'to', ...FILTERS]) if (params.get(k)) p.set(k, params.get(k));
@@ -41,9 +43,9 @@ export default function Torre() {
   const tab = params.get('tab');
   useEffect(() => {
     if (!d || !tab) return;
-    if (LEGACY[tab]) setTimeout(() => go(LEGACY[tab]), 80);
+    if (MOVED[tab]) navigate(MOVED[tab], { replace: true });
+    else if (LEGACY[tab]) setTimeout(() => go(LEGACY[tab]), 80);
     else if (['prazos', 'automacoes', 'reunioes'].includes(tab)) setDrawer({ kind: tab });
-    else if (tab === 'financeiro' || tab === 'comercial') setTimeout(() => go('detalhe'), 80);
   }, [d, tab]);
 
   if (error) return <div className="page"><ErrorBox error={error} /></div>;
@@ -52,18 +54,37 @@ export default function Torre() {
   const period = params.get('period') || '7d';
   const activeFilters = FILTERS.filter((k) => params.get(k));
 
+  // Ponto de atenção = a seção da página que mais precisa de olhar agora (ordem: riscos → bloqueios/gargalos → prazos → clientes → responsabilidades)
+  const flaggedClients = d.health.filter((c) => c.score > 0).length;
+  const focus = d.risks.length ? { id: 'riscos', title: 'Riscos & gargalos', text: `${pl(d.risks.length, 'risco aberto', 'riscos abertos')} na operação.` }
+    : d.blocks.length || d.bottlenecks.length ? { id: 'riscos', title: 'Riscos & gargalos', text: d.summary.focus || `${pl(d.blocks.length, 'bloqueio', 'bloqueios')} esperando alguém agir.` }
+    : s.prazos.n ? { id: 'estado', title: 'Prazos', text: `${pl(s.prazos.n, 'tarefa atrasada', 'tarefas atrasadas')}.` }
+    : flaggedClients ? { id: 'clientes', title: 'Clientes & saúde', text: `${pl(flaggedClients, 'cliente pede', 'clientes pedem')} atenção.` }
+    : d.responsibilities.no_owner.length ? { id: 'responsabilidades', title: 'Responsabilidades', text: `${pl(d.responsibilities.no_owner.length, 'cliente sem', 'clientes sem')} pessoa em função essencial.` }
+    : null;
+
   return (
-    <div className={`page tw ${loading ? 'is-loading' : ''}`}>
-      {/* HEADER + RESUMO */}
-      <header className="tw-head">
-        <div className="tw-kicker">Torre de Controle The Bold</div>
-        <h1 className="tw-h1">O que está acontecendo agora.</h1>
-        <p className="tw-sum">{d.summary.lines.map((l, i) => <span key={i}>{l}.</span>)}</p>
-        {d.summary.focus && <p className="tw-focus"><span className="tw-label">Principal ponto de atenção</span>{d.summary.focus}</p>}
+    <div className={`page tw tw2 ${loading ? 'is-loading' : ''}`}>
+      {/* HEADER + RESUMO EM UMA LINHA + POST-IT */}
+      <header className="tw-head tw2-head">
+        <div className="tw2-head-main">
+          <div className="tw-kicker">Torre de Controle The Bold</div>
+          <h1 className="tw-h1">O que está acontecendo agora.</h1>
+        </div>
+        {focus && (
+          <button className="tw2-postit" onClick={() => go(focus.id)} data-cursor="IR">
+            <span className="tw2-postit-k">Principal ponto de atenção</span>
+            <span className="tw2-postit-t">{focus.title}</span>
+            <span className="tw2-postit-x">{focus.text}</span>
+            <span className="tw2-postit-go">Ver seção →</span>
+          </button>
+        )}
       </header>
 
-      {/* PERÍODO E FILTROS */}
-      <div className="tw-controls" role="region" aria-label="Período e filtros">
+      <SummaryLine lines={d.summary.lines} />
+
+      {/* PERÍODO E FILTROS — uma linha, controles delicados */}
+      <div className="tw-controls tw2-controls" role="region" aria-label="Período e filtros">
         <Seg options={PERIODS} value={period} onChange={(v) => set({ period: v === '7d' ? '' : v, ...(v !== 'custom' ? { from: '', to: '' } : {}) })} label="Período" />
         {period === 'custom' && (
           <span className="tw-dates">
@@ -72,7 +93,6 @@ export default function Torre() {
             <input type="date" className="input" aria-label="Até" value={params.get('to') || ''} onChange={(e) => set({ period: 'custom', to: e.target.value })} />
           </span>
         )}
-        <span className="tw-period-l">{d.period.label}</span>
         <div className="tw-filters">
           <Select label="Cliente" value={params.get('client_id')} onChange={(v) => set({ client_id: v })} options={d.filters.clients.map((c) => [c.id, cleanName(c.name)])} />
           <Select label="Responsável" value={params.get('assignee_id')} onChange={(v) => set({ assignee_id: v })} options={d.filters.people.map((p) => [p.id, p.name])} />
@@ -80,251 +100,59 @@ export default function Torre() {
           {d.filters.formats.length > 0 && <Select label="Formato" value={params.get('format')} onChange={(v) => set({ format: v })} options={d.filters.formats.map((f) => [f, FORMATS[f] || f])} />}
           {d.filters.priorities.length > 1 && <Select label="Prioridade" value={params.get('priority')} onChange={(v) => set({ priority: v })} options={d.filters.priorities.map((p) => [p, PRIO[p] || p])} />}
           {d.filters.statuses.length > 0 && <Select label="Status" value={params.get('status')} onChange={(v) => set({ status: v })} options={d.filters.statuses.map((x) => [x.key, x.label])} />}
-          {d.filters.kinds.length > 0 && <Select label="Tipo de tarefa" value={params.get('kind')} onChange={(v) => set({ kind: v })} options={d.filters.kinds.map((x) => [x.key, x.label])} />}
+          {d.filters.kinds.length > 0 && <Select label="Tarefa" value={params.get('kind')} onChange={(v) => set({ kind: v })} options={d.filters.kinds.map((x) => [x.key, x.label])} />}
           <Select label="Origem" value={params.get('origin')} onChange={(v) => set({ origin: v })} options={d.filters.origins.map((x) => [x.key, x.label])} />
-          {activeFilters.length > 0 && <button className="tw-clear" onClick={() => set(Object.fromEntries(FILTERS.map((k) => [k, ''])))}>Limpar filtros</button>}
+          {activeFilters.length > 0 && <button className="tw-clear" onClick={() => set(Object.fromEntries(FILTERS.map((k) => [k, ''])))}>Limpar</button>}
         </div>
       </div>
 
-      {/* ESTADO DA OPERAÇÃO */}
+      {/* ESTADO DA OPERAÇÃO — cartões com cor */}
       <section id="estado" className="tw-sec">
         <h2 className="tw-h2">Estado da operação</h2>
-        <div className="tw-state">
-          <State n={s.operacao.n} label="Itens em operação" onClick={() => go('operacao')} lines={[`${s.operacao.producao} em produção`, `${s.operacao.revisao} em revisão`, `${s.operacao.clientes} com clientes`]} />
-          <State n={s.clientes.n} label="Clientes na base" onClick={() => go('clientes')} lines={[`${s.clientes.ativos} ativos · ${s.clientes.a_confirmar} a confirmar`, `${s.clientes.com_operacao} com conteúdo no processo`]} />
-          <State n={s.producao.n} label="Em produção" onClick={() => setDrawer({ kind: 'stage', stage: 'producao,analise_producao,ajuste_interno,ajuste_cliente,revisao_ajuste', label: 'Em produção' })} lines={[`${s.producao.bloqueados} bloqueados · ${s.producao.agendados} agendados`, `${s.producao.publicados} publicados no período`]} />
-          <State n={s.prazos.n} label="Tarefas atrasadas" alert={s.prazos.n > 0} onClick={() => setDrawer({ kind: 'prazos' })} lines={[`${s.prazos.hoje} vencem hoje${s.prazos.hoje_herdados ? ` (+ ${s.prazos.hoje_herdados} herdadas)` : ''}`, `${s.prazos.sem_responsavel} sem responsável`].concat(s.prazos.herdados ? [`+ ${s.prazos.herdados} herdadas da migração (fora da conta de desempenho)`] : [])} />
-          <State n={s.riscos.n} label="Riscos" alert={s.riscos.n > 0} onClick={() => go('riscos')} lines={[`${pl(s.riscos.clientes, 'cliente envolvido', 'clientes envolvidos')}`, s.riscos.criticas != null ? `${pl(s.riscos.criticas, 'pendência crítica', 'pendências críticas')}` : 'pendências: acesso restrito']} />
-          <State n={s.pessoas.n} label="Pessoas" onClick={() => go('pessoas')} lines={[`${s.pessoas.abertas} tarefas abertas`, `${s.pessoas.sobrecarga} em sobrecarga · ${s.pessoas.sem_carga} sem carga`]} />
+        <div className="tw2-state">
+          <State tone="azul" n={s.operacao.n} label="Itens em operação" onClick={() => go('operacao')} lines={[`${s.operacao.producao} em produção · ${s.operacao.revisao} em revisão`, `${s.operacao.clientes} com clientes`]} />
+          <State tone="verde" n={s.clientes.n} label="Clientes na base" onClick={() => go('clientes')} lines={[`${s.clientes.ativos} ativos · ${s.clientes.a_confirmar} a confirmar`, `${s.clientes.com_operacao} com conteúdo no processo`]} />
+          <State tone="lavanda" n={s.producao.n} label="Em produção" onClick={() => setDrawer({ kind: 'stage', stage: 'producao,analise_producao,ajuste_interno,ajuste_cliente,revisao_ajuste', label: 'Em produção' })} lines={[`${s.producao.bloqueados} bloqueados`]} />
+          <State tone={s.prazos.n ? 'rosa' : 'neutro'} n={s.prazos.n} label="Tarefas atrasadas" alert={s.prazos.n > 0} onClick={() => setDrawer({ kind: 'prazos' })} lines={[`${s.prazos.hoje} vencem hoje · ${s.prazos.sem_responsavel} sem responsável`].concat(s.prazos.herdados ? [`+ ${s.prazos.herdados} herdadas (fora da conta)`] : [])} />
+          <State tone={s.riscos.n ? 'pessego' : 'neutro'} n={s.riscos.n} label="Riscos" alert={s.riscos.n > 0} onClick={() => go('riscos')} lines={[pl(s.riscos.clientes, 'cliente envolvido', 'clientes envolvidos'), s.riscos.criticas != null ? pl(s.riscos.criticas, 'pendência crítica', 'pendências críticas') : 'pendências: acesso restrito']} />
+          <State tone="manteiga" n={s.pessoas.n} label="Pessoas" to="/performance#capacidade" lines={[`${s.pessoas.abertas} tarefas abertas`, `${s.pessoas.sobrecarga} em sobrecarga · ${s.pessoas.sem_carga} sem carga`]} />
         </div>
       </section>
 
-      {/* RISCOS & GARGALOS */}
+      {/* RISCOS & GARGALOS — por cliente; o cartão abre o detalhe aqui; “ir para” leva à origem */}
       <section id="riscos" className="tw-sec">
         <h2 className="tw-h2">Riscos &amp; gargalos</h2>
-        <div className="tw-rgb">
-          <div>
-            <h3 className="tw-h3">Riscos <span>{n2(d.risks.length)}</span></h3>
-            {!d.risks.length ? <p className="tw-empty">Nenhum risco aberto na operação.</p> : d.risks.slice(0, 3).map((r) => (
-              <Link key={r.id} to={r.link} className="tw-item">
-                <span className={`tw-sev s-${r.level}`}><i aria-hidden /> Risco {RISK[r.level] || r.level}</span>
-                {r.client && <span className="tw-item-client">{cleanName(r.client)}</span>}
-                <span className="tw-item-t">{r.problem}</span>
-                {r.impact && <span className="tw-item-m"><b>Impacto</b> {r.impact}</span>}
-                {(r.who || r.due || r.late) && <span className="tw-item-m">{r.who && <><b>Responsável</b> {r.who}</>}{r.who && (r.due || r.late) ? ' · ' : ''}{r.late ? <><b>Atraso</b> {r.late}</> : r.due ? <><b>Prazo</b> {fmtDate(r.due)}</> : null}</span>}
-                <span className="tw-go">Ver contexto <I.arrow size={13} /></span>
-              </Link>
-            ))}
-            {d.risks.length > 3 && <Link className="tw-more" to="/pendencias?escopo=equipe">Ver todos · {d.risks.length} <I.arrow size={13} /></Link>}
-          </div>
-          <div>
-            <h3 className="tw-h3">Gargalos <span>{n2(d.bottlenecks.length)}</span></h3>
-            {!d.bottlenecks.length ? <p className="tw-empty">Nenhuma etapa acumulando além do prazo.</p> : d.bottlenecks.slice(0, 3).map((b) => (
-              <button key={b.stage} className="tw-item" onClick={() => setDrawer({ kind: 'stage', stage: b.stage, label: b.label })}>
-                <span className="tw-sev s-alto"><i aria-hidden /> Gargalo</span>
-                <span className="tw-item-client">{b.label}</span>
-                <span className="tw-item-t">{pl(b.n, 'item parado', 'itens parados')} nesta etapa{b.late ? ` · ${pl(b.late, 'atrasado', 'atrasados')}` : ''}.</span>
-                {b.avg_days != null && <span className="tw-item-m"><b>Tempo médio</b> {String(b.avg_days).replace('.', ',')} dias{b.sla_days ? ` (prazo da etapa: ${b.sla_days} dias úteis)` : ''}</span>}
-                {b.evidence && <span className="tw-item-m"><b>Evidência</b> {b.evidence}</span>}
-                <span className="tw-go">Ver itens <I.arrow size={13} /></span>
-              </button>
-            ))}
-          </div>
-          <div>
-            <h3 className="tw-h3">Bloqueios <span>{n2(d.blocks.length)}</span></h3>
-            {!d.blocks.length ? <p className="tw-empty">Nenhum conteúdo bloqueado.</p> : d.blocks.slice(0, 3).map((b) => (
-              <Link key={b.id} to={b.link} className="tw-item">
-                <span className="tw-sev s-medio"><i aria-hidden /> Bloqueio</span>
-                <span className="tw-item-client">{cleanName(b.client)}</span>
-                <span className="tw-item-t">{b.reason || 'Bloqueado'}</span>
-                <span className="tw-item-m"><b>Bloqueado por</b> {b.by} · {b.stage} · {b.title}</span>
-                <span className="tw-go">Resolver <I.arrow size={13} /></span>
-              </Link>
-            ))}
-            {d.blocks.length > 3 && <Link className="tw-more" to="/pendencias?escopo=equipe">Ver todos · {d.blocks.length} <I.arrow size={13} /></Link>}
-          </div>
-        </div>
+        <ClientRisks risks={d.risks} blocks={d.blocks} open={(g) => setDrawer({ kind: 'client', group: g, label: cleanName(g.client) })} />
+        <h3 className="tw-h3 mt-6">Gargalos por etapa <span>{n2(d.bottlenecks.length)}</span></h3>
+        {!d.bottlenecks.length ? <p className="tw-empty">Nenhuma etapa acumulando além do prazo.</p> : (
+          <div className="tw2-gargalos">{d.bottlenecks.map((b) => (
+            <button key={b.stage} className="tw2-garg" onClick={() => setDrawer({ kind: 'stage', stage: b.stage, label: b.label })}>
+              <span className="tw2-garg-n">{b.n}</span>
+              <span className="tw2-garg-t"><b>{b.label}</b>{b.late ? `${pl(b.late, 'atrasado', 'atrasados')} · ` : ''}{b.avg_days != null ? `${String(b.avg_days).replace('.', ',')} dias em média` : 'itens parados'}{b.sla_days ? ` (prazo ${b.sla_days})` : ''}</span>
+              <span className="tw2-garg-go">Ver itens →</span>
+            </button>
+          ))}</div>
+        )}
       </section>
 
-      {/* MAPA DA OPERAÇÃO */}
+      {/* MAPA DA OPERAÇÃO — leitura rápida */}
       <section id="operacao" className="tw-sec">
         <div className="tw-sec-head"><h2 className="tw-h2">Mapa da operação</h2><Link className="tw-more" to="/processos">Abrir processos <I.arrow size={13} /></Link></div>
-        <p className="tw-lead">As etapas reais do Process Engine, na ordem do fluxo: quantidade, atrasos, bloqueios e tempo médio na etapa. Clique para ver os itens.</p>
-        <ol className="tw-flow">
-          {d.lanes.map((l) => (
-            <li key={l.key} className="tw-lane">
-              <div className="tw-lane-h"><span>{l.label}</span><b className="num">{n2(l.n)}</b></div>
-              {l.stages.map((k) => d.stages.find((x) => x.stage === k)).filter(Boolean).map((x) => (
-                <button key={x.stage} className={`tw-station ${x.n ? '' : 'zero'} ${x.late ? 'late' : ''}`} onClick={() => setDrawer({ kind: 'stage', stage: x.stage, label: x.label })} disabled={!x.n} aria-label={`${x.label}: ${pl(x.n, 'item', 'itens')}`}>
-                  <span className="tw-st-l">{x.label}</span>
-                  <span className="tw-st-n">{x.n}</span>
-                  <span className="tw-st-m">
-                    {x.late ? <em>{pl(x.late, 'atrasado', 'atrasados')}</em> : null}
-                    {x.blocked ? <em>{pl(x.blocked, 'bloqueado', 'bloqueados')}</em> : null}
-                    {x.avg_days != null && x.n ? <span>{String(x.avg_days).replace('.', ',')}d na etapa</span> : null}
-                    {x.entered ? <span>+{x.entered} no período</span> : null}
-                  </span>
-                </button>
-              ))}
-            </li>
-          ))}
-        </ol>
+        <OpMap lanes={d.lanes} stages={d.stages} open={(x) => setDrawer({ kind: 'stage', stage: x.stage, label: x.label })} />
         <Accumulation stages={d.stages} open={(x) => setDrawer({ kind: 'stage', stage: x.stage, label: x.label })} />
-      </section>
-
-      {/* PESSOAS */}
-      <section id="pessoas" className="tw-sec">
-        <h2 className="tw-h2">Capacidade da equipe</h2>
-        {d.people_insights.length > 0 && (
-          <ul className="tw-pins">{d.people_insights.map((p, i) => <li key={i}><span className="tw-label">{p.kind}</span><span>{p.text}</span><Link className="tw-more" to={p.link}>Ver <I.arrow size={13} /></Link></li>)}</ul>
-        )}
-        <p className="tw-lead">Carga, alertas e situação usam só tarefas nascidas na plataforma. Tarefas herdadas da migração aparecem à parte e não pesam contra ninguém. Capacidade = valor configurado no cadastro, não medido.</p>
-        <div className="tw-table tw-cap-table" role="table" aria-label="Capacidade por pessoa">
-          <div className="tw-tr tw-th" role="row"><span role="columnheader">Pessoa</span><span role="columnheader">Abertas</span><span role="columnheader">Herdadas</span><span role="columnheader">Atrasadas</span><span role="columnheader">Próx. 7 dias</span><span role="columnheader">Carga × capacidade</span><span role="columnheader">Situação</span></div>
-          {d.people.map((p) => {
-            const max = Math.max(p.capacity, p.open_real, 1);
-            return (
-              <button key={p.id} className="tw-tr" role="row" onClick={() => setDrawer({ kind: 'person', id: p.id, label: p.name })} aria-label={`${p.name}: ${p.open_real} abertas da plataforma, ${p.open_inherited} herdadas, ${p.late} atrasadas`}>
-                <span className="tw-person" role="cell"><b>{p.name}</b><small>{p.functions.map((f) => FUNCTIONS[f] || f).join(' · ') || 'Sem função operacional'}</small></span>
-                <span className="n" role="cell" data-l="Abertas">{p.open_real}</span>
-                <span className="n muted" role="cell" data-l="Herdadas" title="Herdadas da migração: fora de alertas e indicadores">{p.open_inherited}{p.inherited ? <small> · {p.inherited} c/ prazo de migração vencido</small> : null}</span>
-                <span className={`n ${p.late ? 'alert' : ''}`} role="cell" data-l="Atrasadas">{p.late}</span>
-                <span className="n" role="cell" data-l="Próx. 7 dias">{p.next7}{p.next7_inherited ? <small>+ {p.next7_inherited} herdadas</small> : null}</span>
-                <span className="tw-cap" role="cell" title={`${p.open_real} de ${p.capacity}/semana (${p.capacity_source})`}><i style={{ width: `${(p.open_real / max) * 100}%` }} /><s style={{ left: `${(p.capacity / max) * 100}%` }} /></span>
-                <span className={`tw-sit s-${p.situation}`} role="cell">{SITUATION[p.situation]}</span>
-              </button>
-            );
-          })}
-        </div>
-        {d.performance_base && <p className="tw-lead mt-4"><b>Base de performance:</b> {d.performance_base.valid_events ? `${d.performance_base.valid_events} evento(s) operacional(is) válido(s) registrado(s)` : 'DADOS INSUFICIENTES — nenhuma tarefa concluída nascida na plataforma ainda'}{d.performance_base.pending_classification ? ` · ${d.performance_base.pending_classification} item(ns) herdado(s) aguardando classificação, fora da base` : ''}. Score individual não é calculado.</p>}
-        {d.fn_load.length > 0 && <p className="tw-lead mt-4">Por função: {d.fn_load.map((f) => `${FUNCTIONS[f.fn] || f.fn} — ${pl(f.open, 'aberta', 'abertas')} para ${pl(f.people, 'pessoa', 'pessoas')}`).join(' · ')}</p>}
       </section>
 
       {/* CLIENTES + RESPONSABILIDADES */}
       <div className="tw-two">
         <section id="clientes" className="tw-sec">
           <h2 className="tw-h2">Clientes &amp; saúde da operação</h2>
-          <Health rows={d.health} />
+          <HealthDonut rows={d.health} />
         </section>
         <section id="responsabilidades" className="tw-sec">
           <h2 className="tw-h2">Responsabilidades</h2>
-          <Responsibilities r={d.responsibilities} />
+          <Notes r={d.responsibilities} />
         </section>
       </div>
-
-      {/* DEPENDÊNCIAS */}
-      <section id="dependencias" className="tw-sec">
-        <div className="tw-sec-head"><h2 className="tw-h2">Dependências</h2>{d.dependencies && (d.dependencies.blocked.length || d.dependencies.waiting_client_decision) ? <StateBadge s="ativo" /> : <StateBadge s="dados_insuficientes" label="Nada esperando outra parte" />}</div>
-        <p className="tw-lead">O que está parado esperando outra parte — cliente, informação ou equipe — e o que aguarda decisão do cliente. Dependência entre tarefas ainda não é registrada pelo processo.</p>
-        {d.dependencies && (
-          <div className="tw-two">
-            <div>
-              <div className="caps mb-2">Bloqueios por quem precisa agir</div>
-              {!d.dependencies.by.length ? <p className="tw-empty">Nenhum conteúdo bloqueado.</p> : (
-                <ul className="tw-deps">{d.dependencies.by.map((x) => <li key={x.by}><span>{x.by}</span><b>{x.n}</b></li>)}</ul>
-              )}
-              {d.dependencies.blocked.length > 0 && <ul className="tw-deps-items">{d.dependencies.blocked.map((b) => <li key={b.id}><Link to={b.link}>{b.title}</Link><small>{b.client} · espera: {b.by}{b.reason ? ` · ${b.reason}` : ''}</small></li>)}</ul>}
-            </div>
-            <div>
-              <div className="caps mb-2">Aguardando decisão do cliente · {d.dependencies.waiting_client_decision}</div>
-              {!d.dependencies.waiting_client_items.length ? <p className="tw-empty">Nenhum conteúdo aguardando aprovação do cliente.</p> : (
-                <ul className="tw-deps-items">{d.dependencies.waiting_client_items.map((b) => <li key={b.id}><Link to={b.link}>{b.title}</Link><small>{b.client}</small></li>)}</ul>
-              )}
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* PERÍODO */}
-      <section id="periodo" className="tw-sec">
-        <div className="tw-sec-head"><h2 className="tw-h2">Desempenho do período</h2><span className="tw-period-l">{d.period.label}</span></div>
-        <Performance p={d.performance} />
-      </section>
-
-      {/* INTELIGÊNCIA */}
-      <section id="inteligencia" className="tw-sec">
-        <div className="tw-sec-head"><h2 className="tw-h2">Inteligência The Bold</h2><Link className="tw-more" to="/insights">Todos os insights <I.arrow size={13} /></Link></div>
-        <p className="tw-lead">Leituras automáticas sobre os dados da plataforma, separadas em fato, padrão observado, hipótese e recomendação. Correlação não é causa: a hipótese nunca aponta uma pessoa ou um cliente como culpado.</p>
-        {!d.intel.length ? <p className="tw-empty">Nenhum padrão relevante nos dados atuais.</p> : (
-          <div className="tw-intel">{d.intel.map((x) => (
-            <article key={x.id} className="tw-in">
-              <div className="tw-label">{x.kind}</div>
-              <h3 className="tw-in-t">{x.fact || x.what}</h3>
-              <dl className="tw-rc">
-                <div><dt>Fato</dt><dd>{x.evidence?.length > 0 ? <ul>{x.evidence.map((e, i) => <li key={i}>{e}</li>)}</ul> : 'Medido na base agora.'}</dd></div>
-                <div><dt>Padrão observado</dt><dd>{x.pattern || <span className="muted">Nenhum padrão além do fato com os dados atuais.</span>}</dd></div>
-                <div><dt>Hipótese <small>não verificada</small></dt><dd>{x.hypothesis?.text || <span className="muted">Sem hipótese registrada.</span>}</dd></div>
-                <div><dt>Recomendação</dt><dd>{x.recommendation || x.suggestion || '—'}</dd></div>
-                {x.why && <div><dt>Impacto esperado</dt><dd>{x.why}</dd></div>}
-              </dl>
-              {x.action.to.startsWith('#') ? <button className="tw-more" onClick={() => go(x.action.to.slice(1))}>{x.action.label} <I.arrow size={13} /></button> : <Link className="tw-more" to={x.action.to}>{x.action.label} <I.arrow size={13} /></Link>}
-            </article>
-          ))}</div>
-        )}
-      </section>
-
-      {/* DETALHAMENTO */}
-      <section id="detalhe" className="tw-sec">
-        <h2 className="tw-h2">Detalhamento</h2>
-        <div className="tw-detail">
-          {d.finance && (
-            <div className="tw-mini">
-              <div className="tw-label">Financeiro</div>
-              {d.finance.has_data ? (
-                <dl>
-                  <div><dt>Recebido no período</dt><dd>{money(d.finance.recebido)}</dd></div>
-                  <div><dt>Em aberto</dt><dd>{money(d.finance.em_aberto)}</dd></div>
-                  <div><dt>Em atraso</dt><dd className={`${d.finance.atrasado ? 'alert' : ''}`}>{money(d.finance.atrasado)}</dd></div>
-                  <div><dt>A receber em 30 dias</dt><dd>{money(d.finance.a_receber_30d)}</dd></div>
-                </dl>
-              ) : <p className="tw-empty">Nenhum contrato ou fatura cadastrado ainda.</p>}
-              <Link className="tw-more" to="/negocio?aba=recebimentos">Ver financeiro <I.arrow size={13} /></Link>
-            </div>
-          )}
-          {d.crm && (
-            <div className="tw-mini">
-              <div className="tw-label">Comercial</div>
-              {d.crm.has_data ? (
-                <dl>
-                  <div><dt>Leads</dt><dd>{d.crm.leads}</dd></div>
-                  <div><dt>Oportunidades</dt><dd>{d.crm.oportunidades}</dd></div>
-                  <div><dt>Em negociação</dt><dd>{d.crm.negociacao}</dd></div>
-                  <div><dt>Ganhos no período</dt><dd>{d.crm.ganhos}</dd></div>
-                  <div><dt>Follow-ups vencidos</dt><dd className={`${d.crm.followups_vencidos ? 'alert' : ''}`}>{d.crm.followups_vencidos}</dd></div>
-                  <div><dt>Valor do pipeline</dt><dd>{money(d.crm.pipeline)}</dd></div>
-                </dl>
-              ) : <p className="tw-empty">Nenhum negócio cadastrado no CRM ainda.</p>}
-              <Link className="tw-more" to="/negocio?aba=pipeline">Ver CRM <I.arrow size={13} /></Link>
-            </div>
-          )}
-          <div className="tw-mini">
-            <div className="tw-label">Automações</div>
-            <dl>
-              <div><dt>Execuções no período</dt><dd>{d.automations.runs}</dd></div>
-              <div><dt>Regras ativas</dt><dd>{d.automations.active}<small> de {d.automations.catalog} no catálogo</small></dd></div>
-              <div><dt>Falhas</dt><dd className={`${d.automations.errors ? 'alert' : ''}`}>{d.automations.errors}</dd></div>
-              <div><dt>Ignoradas (condição não atendida)</dt><dd>{d.automations.ignored}</dd></div>
-            </dl>
-            <button className="tw-more" onClick={() => setDrawer({ kind: 'automacoes' })}>Investigar execuções <I.arrow size={13} /></button>
-          </div>
-          <div className="tw-mini">
-            <div className="tw-label">Relatórios</div>
-            {d.report ? (
-              <dl>
-                <div><dt>Último relatório</dt><dd className="cap">{d.report.kind}</dd></div>
-                <div><dt>Período</dt><dd>{fmtDate(d.report.period_start)} → {fmtDate(d.report.period_end)}</dd></div>
-                <div><dt>Gerado em</dt><dd>{fmtDateTime(d.report.created_at)} · {d.report.generated_by}</dd></div>
-              </dl>
-            ) : <p className="tw-empty">Nenhum relatório gerado ainda.</p>}
-            <button className="tw-more" onClick={() => setDrawer({ kind: 'reports' })}>{d.report ? 'Abrir · gerar novo' : 'Gerar relatório'} <I.arrow size={13} /></button>
-          </div>
-          <div className="tw-mini">
-            <div className="tw-label">Agenda · 7 dias</div>
-            {d.meetings.length ? <p className="tw-mini-p">{pl(d.meetings.length, 'reunião marcada', 'reuniões marcadas')}. Próxima: {fmtDateTime(d.meetings[0].starts_at)}{d.meetings[0].client_name ? ` · ${cleanName(d.meetings[0].client_name)}` : ''}.</p> : <p className="tw-empty">Nenhuma reunião marcada na plataforma.</p>}
-            <button className="tw-more" onClick={() => setDrawer({ kind: 'reunioes' })}>Ver reuniões <I.arrow size={13} /></button>
-          </div>
-        </div>
-      </section>
 
       <TowerDrawer drawer={drawer} d={d} params={params} onClose={() => { setDrawer(null); if (tab) set({}); }} />
     </div>
@@ -334,19 +162,174 @@ export default function Torre() {
 function Select({ label, value, onChange, options }) {
   return (
     <select className="tw-select" value={value || ''} onChange={(e) => onChange(e.target.value)} aria-label={label}>
-      <option value="">{label}: todos</option>
+      <option value="">{label}</option>
       {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
     </select>
   );
 }
 
-function State({ n, label, lines, alert, onClick }) {
+function State({ n, label, lines, alert, onClick, to, tone = 'neutro' }) {
+  const body = (
+    <>
+      <span className="tw2-st-top"><span className="tw2-st-l">{label}</span><span className="tw2-st-go" aria-hidden>→</span></span>
+      <span className={`tw2-st-n ${alert ? 'alert' : ''}`}>{n}</span>
+      {lines.map((l, i) => <span key={i} className="tw2-st-line">{l}</span>)}
+    </>
+  );
+  return to ? <Link className={`tw2-st t-${tone}`} to={to} data-cursor="ABRIR">{body}</Link> : <button className={`tw2-st t-${tone}`} onClick={onClick} data-cursor="EXPLORAR">{body}</button>;
+}
+
+// Resumo em uma linha: número em destaque + texto; o que é herdado fica menor
+function SummaryLine({ lines }) {
   return (
-    <button className="tw-st" onClick={onClick} data-cursor="EXPLORAR">
-      <span className={`tw-st-big num ${alert ? 'alert' : ''}`}>{n2(n)}</span>
-      <span className="tw-label">{label}</span>
-      {lines.map((l, i) => <span key={i} className="tw-st-line">{l}</span>)}
-    </button>
+    <p className="tw2-sum">{lines.map((l, i) => {
+      const m = l.match(/^(\d[\d.]*)\s(.*)$/);
+      const [main, extra] = (m ? m[2] : l).split(/\s(?=\()/);
+      return <span key={i} className="tw2-sum-i">{m && <b>{m[1]}</b>}{main}{extra && <small>{extra}</small>}</span>;
+    })}</p>
+  );
+}
+
+// Riscos e bloqueios agrupados por cliente. O cartão abre o detalhe na própria Torre; o nome do cliente leva direto à ficha.
+const LEVEL_ORDER = { critico: 0, alto: 1, medio: 2, baixo: 3 };
+// motivo do bloqueio em poucas palavras (o texto completo fica no detalhe)
+const shortReason = (r) => { const t = String(r || 'Bloqueio').split(' (')[0].replace(/^Pendente por /i, ''); return t.length > 26 ? `${t.slice(0, 25)}…` : t; };
+function ClientRisks({ risks, blocks, open }) {
+  const by = new Map();
+  const get = (id, name) => { if (!by.has(id)) by.set(id, { client_id: id, client: name, risks: [], blocks: [] }); return by.get(id); };
+  for (const r of risks) get(r.client_id || 'sem', r.client || 'Sem cliente').risks.push(r);
+  for (const b of blocks) get(b.client_id || 'sem', b.client || 'Sem cliente').blocks.push(b);
+  const groups = [...by.values()].sort((a, b) => (Math.min(...a.risks.map((r) => LEVEL_ORDER[r.level] ?? 9), 9) - Math.min(...b.risks.map((r) => LEVEL_ORDER[r.level] ?? 9), 9)) || (b.risks.length + b.blocks.length) - (a.risks.length + a.blocks.length));
+  if (!groups.length) return <p className="tw-empty">Nenhum risco ou bloqueio aberto na operação.</p>;
+  return (
+    <div className="tw2-clients">{groups.map((g) => {
+      const worst = g.risks.map((r) => r.level).sort((a, b) => (LEVEL_ORDER[a] ?? 9) - (LEVEL_ORDER[b] ?? 9))[0];
+      const tone = worst === 'critico' ? 'rosa' : worst === 'alto' ? 'pessego' : g.risks.length ? 'manteiga' : 'azul';
+      const items = [...g.risks.map((r) => ({ k: `r${r.id}`, tag: `Risco ${RISK[r.level] || r.level}`, text: r.problem })), ...g.blocks.map((b) => ({ k: `b${b.id}`, tag: shortReason(b.reason), text: `${b.title} · espera ${String(b.by).toLowerCase()}` }))];
+      return (
+        <div key={g.client_id} className={`tw2-cc t-${tone}`} role="button" tabIndex={0} onClick={() => open(g)} onKeyDown={(e) => e.key === 'Enter' && open(g)} data-cursor="ABRIR">
+          <div className="tw2-cc-h">
+            {g.client_id !== 'sem' ? <Link to={`/clientes/${g.client_id}`} className="tw2-cc-name" onClick={(e) => e.stopPropagation()} title="Ir para a ficha do cliente">{cleanName(g.client)} ↗</Link> : <span className="tw2-cc-name">{g.client}</span>}
+            <span className="tw2-cc-n">{g.risks.length ? `${g.risks.length} risco${g.risks.length > 1 ? 's' : ''}` : ''}{g.risks.length && g.blocks.length ? ' · ' : ''}{g.blocks.length ? `${g.blocks.length} bloqueio${g.blocks.length > 1 ? 's' : ''}` : ''}</span>
+          </div>
+          <ul className="tw2-cc-list">{items.slice(0, 3).map((x) => <li key={x.k}><em>{x.tag}</em>{x.text}</li>)}</ul>
+          <span className="tw2-cc-more">{items.length > 3 ? `+${items.length - 3} · ` : ''}Ver detalhes</span>
+        </div>
+      );
+    })}</div>
+  );
+}
+
+// Mapa da operação: barra proporcional das 4 fases + etapas como chips (só número e nome; clique abre os itens)
+const PHASE_TONE = { planejamento: 'azul', producao: 'lavanda', cliente: 'pessego', publicacao: 'verde' };
+function OpMap({ lanes, stages, open }) {
+  const total = lanes.reduce((a, l) => a + l.n, 0);
+  const st = (k) => stages.find((x) => x.stage === k);
+  return (
+    <div className="tw2-map">
+      <div className="tw2-map-bar" aria-hidden>{lanes.map((l) => <span key={l.key} className={`t-${PHASE_TONE[l.key] || 'neutro'}`} style={{ flexGrow: Math.max(l.n, total * 0.04 || 1) }} />)}</div>
+      <div className="tw2-map-cols">{lanes.map((l, i) => {
+        const list = l.stages.map(st).filter(Boolean);
+        const late = list.reduce((a, x) => a + (x.late || 0), 0), blocked = list.reduce((a, x) => a + (x.blocked || 0), 0);
+        return (
+          <div key={l.key} className={`tw2-phase t-${PHASE_TONE[l.key] || 'neutro'}`}>
+            <div className="tw2-phase-h"><span className="tw2-phase-i">{String(i + 1).padStart(2, '0')}</span><span className="tw2-phase-l">{l.label}</span></div>
+            <div className="tw2-phase-n">{l.n}<small>{total ? `${Math.round((l.n / total) * 100)}%` : '—'}</small></div>
+            {(late || blocked) ? <div className="tw2-phase-flags">{late ? <span className="late">{late} atrasado{late > 1 ? 's' : ''}</span> : null}{blocked ? <span className="blk">{blocked} bloqueado{blocked > 1 ? 's' : ''}</span> : null}</div> : <div className="tw2-phase-flags"><span className="ok">sem atraso</span></div>}
+            <div className="tw2-chips">{list.map((x) => (
+              <button key={x.stage} className={`tw2-chip ${x.n ? '' : 'zero'} ${x.late ? 'late' : ''}`} disabled={!x.n} onClick={() => open(x)} title={x.avg_days != null && x.n ? `${String(x.avg_days).replace('.', ',')} dias em média na etapa` : undefined}><b>{x.n}</b>{x.label}</button>
+            ))}</div>
+          </div>
+        );
+      })}</div>
+    </div>
+  );
+}
+
+// Clientes & saúde: gráfico redondo por situação + clientes como pílulas coloridas; clique numa fatia filtra
+const HEALTH = [
+  ['risco', 'Em risco', 'var(--err)'], ['atencao', 'Pedem atenção', 'var(--warn)'], ['acompanhar', 'Acompanhar', '#C9B458'],
+  ['em_dia', 'Em dia', 'var(--ok)'], ['sem_op', 'Sem conteúdo no processo', 'var(--faint)'],
+];
+const healthOf = (c) => (['alto', 'critico'].includes(c.risk) ? 'risco' : c.pendencias || c.atrasos || c.bloqueados ? 'atencao' : c.aguardando || c.sem_funcao.length || c.decisoes ? 'acompanhar' : c.ativos ? 'em_dia' : 'sem_op');
+function HealthDonut({ rows }) {
+  const [sel, setSel] = useState('');
+  if (!rows.length) return <p className="tw-empty">Nenhum cliente no filtro atual.</p>;
+  const groups = HEALTH.map(([k, l, c]) => ({ k, l, c, list: rows.filter((r) => healthOf(r) === k) })).filter((g) => g.list.length);
+  const R = 52, C = 2 * Math.PI * R;
+  let acc = 0;
+  const shown = sel ? groups.filter((g) => g.k === sel) : groups;
+  return (
+    <div className="tw2-health">
+      <div className="tw2-donut-wrap">
+        <svg viewBox="0 0 140 140" className="tw2-donut" role="img" aria-label={groups.map((g) => `${g.l}: ${g.list.length}`).join(', ')}>
+          <circle cx="70" cy="70" r={R} fill="none" stroke="var(--line)" strokeWidth="16" />
+          {groups.map((g) => { const len = (g.list.length / rows.length) * C; const el = (
+            <circle key={g.k} cx="70" cy="70" r={R} fill="none" stroke={g.c} strokeWidth={sel === g.k ? 20 : 16} strokeDasharray={`${Math.max(len - 2, 1)} ${C}`} strokeDashoffset={-acc} transform="rotate(-90 70 70)" style={{ cursor: 'pointer', opacity: sel && sel !== g.k ? 0.35 : 1 }} onClick={() => setSel(sel === g.k ? '' : g.k)} />
+          ); acc += len; return el; })}
+          <text x="70" y="66" textAnchor="middle" className="tw2-donut-n">{rows.length}</text>
+          <text x="70" y="86" textAnchor="middle" className="tw2-donut-l">clientes</text>
+        </svg>
+        <ul className="tw2-legend">{groups.map((g) => (
+          <li key={g.k}><button className={sel === g.k ? 'on' : ''} onClick={() => setSel(sel === g.k ? '' : g.k)}><i style={{ background: g.c }} /><span>{g.l}</span><b>{g.list.length}</b></button></li>
+        ))}</ul>
+      </div>
+      {shown.map((g) => (
+        <div key={g.k} className="tw2-pills-g">
+          <span className="tw2-pills-l"><i style={{ background: g.c }} />{g.l}</span>
+          <div className="tw2-pills">{g.list.map((c) => <Link key={c.id} to={`/clientes/${c.id}`} className="tw2-pill" style={{ '--c': g.c }} title={c.next ? `Próxima ação: ${c.next}` : undefined}>{cleanName(c.name)}</Link>)}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Responsabilidades no visual do app Notas: título, uma linha objetiva, ação
+function Notes({ r }) {
+  const [showAll, setShowAll] = useState(false);
+  const list = showAll ? r.no_owner : r.no_owner.slice(0, 6);
+  if (!r.no_owner.length && !r.unassigned.length && !r.team_conflicts) return <div className="tw2-notes"><div className="tw2-notes-h"><span>Notas</span><b>0</b></div><p className="tw2-note-empty">Todas as funções essenciais têm responsável e nenhuma tarefa está sem dono.</p></div>;
+  return (
+    <div className="tw2-notes">
+      <div className="tw2-notes-h"><span>Sem responsável</span><b>{r.no_owner.length + r.unassigned.length}</b></div>
+      <ul>
+        {list.map((x) => (
+          <li key={x.client_id}><Link to={`/clientes/${x.client_id}?tab=equipe`}><b>{cleanName(x.client)}</b><span>Falta: {x.functions.join(' · ')}</span><em>Vincular</em></Link></li>
+        ))}
+        {r.unassigned.slice(0, 4).map((t) => (
+          <li key={t.id}><Link to={t.content_id ? `/conteudos/${t.content_id}` : `/clientes/${t.client_id}?tab=equipe`}><b>{t.title}</b><span>{cleanName(t.client || '')} · tarefa de {(FUNCTIONS[t.function] || t.function || '').toLowerCase()}</span><em>Atribuir</em></Link></li>
+        ))}
+      </ul>
+      {r.no_owner.length > 6 && <button className="tw2-notes-more" onClick={() => setShowAll(!showAll)}>{showAll ? 'Mostrar menos' : `Ver todos · ${r.no_owner.length}`}</button>}
+      {r.team_conflicts > 0 && <Link className="tw2-notes-foot" to="/migracao?kind=equipe">{pl(r.team_conflicts, 'vínculo de equipe aguarda', 'vínculos de equipe aguardam')} decisão →</Link>}
+    </div>
+  );
+}
+
+// Detalhe de um cliente na própria Torre, com o atalho para onde cada item está
+function ClientItems({ g }) {
+  return (
+    <div className="tw2-drawer">
+      <Link className="btn btn-sm" to={`/clientes/${g.client_id}`}>Abrir ficha do cliente</Link>
+      {g.risks.map((r) => (
+        <div key={r.id} className="tw2-di">
+          <span className={`tw-sev s-${r.level}`}><i aria-hidden /> Risco {RISK[r.level] || r.level}</span>
+          <b>{r.problem}</b>
+          {r.impact && <span><em>Impacto</em> {r.impact}</span>}
+          {(r.who || r.late || r.due) && <span>{r.who && <><em>Responsável</em> {r.who}</>}{r.late ? <> · <em>Atraso</em> {r.late}</> : r.due ? <> · <em>Prazo</em> {fmtDate(r.due)}</> : null}</span>}
+          <Link className="tw-more" to={r.link}>Ir para onde está <I.arrow size={13} /></Link>
+        </div>
+      ))}
+      {g.blocks.map((b) => (
+        <div key={b.id} className="tw2-di">
+          <span className="tw-sev s-medio"><i aria-hidden /> Bloqueio</span>
+          <b>{b.reason || 'Bloqueado'}</b>
+          <span><em>Conteúdo</em> {b.title} · {b.stage}</span>
+          <span><em>Espera</em> {b.by}{b.since ? ` · desde ${fmtDate(b.since)}` : ''}</span>
+          <Link className="tw-more" to={b.link}>Ir para o conteúdo <I.arrow size={13} /></Link>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -365,116 +348,12 @@ function Accumulation({ stages, open }) {
   );
 }
 
-function Health({ rows }) {
-  const [showAll, setShowAll] = useState(false);
-  const flagged = rows.filter((r) => r.score > 0);
-  const shown = showAll ? rows : flagged.slice(0, 6);
-  if (!rows.length) return <p className="tw-empty">Nenhum cliente no filtro atual.</p>;
-  return (
-    <>
-      <p className="tw-lead">{flagged.length ? `${pl(flagged.length, 'cliente pede', 'clientes pedem')} atenção, por prioridade.` : 'Nenhum cliente com risco, atraso, bloqueio ou responsabilidade em aberto.'}</p>
-      <ul className="tw-health">
-        {shown.map((c) => {
-          const flags = [
-            ['alto', 'critico'].includes(c.risk) && `Risco ${RISK[c.risk].toLowerCase()}`,
-            c.pendencias ? pl(c.pendencias, 'pendência', 'pendências') : null,
-            c.atrasos ? pl(c.atrasos, 'tarefa atrasada', 'tarefas atrasadas') : null,
-            c.bloqueados ? pl(c.bloqueados, 'bloqueio', 'bloqueios') : null,
-            c.aguardando ? `${c.aguardando} aguardando resposta` : null,
-            c.sem_funcao.length ? `Sem ${c.sem_funcao.join(', ').toLowerCase()}` : null,
-            c.decisoes ? pl(c.decisoes, 'decisão da migração', 'decisões da migração') : null,
-          ].filter(Boolean);
-          return (
-            <li key={c.id}>
-              <Link to={`/clientes/${c.id}`} className="tw-hrow">
-                <span className="tw-h-name">{cleanName(c.name)}<small>{STATUS[c.status] || c.status} · {c.ativos ? pl(c.ativos, 'conteúdo ativo', 'conteúdos ativos') : 'sem conteúdo no processo'}</small></span>
-                <span className="tw-h-flags">{flags.length ? flags.map((f) => <span key={f}>{f}</span>) : <span className="ok">Sem pontos abertos</span>}</span>
-                {c.next && <span className="tw-h-next"><b>Próxima ação</b> {c.next}</span>}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-      {rows.length > flagged.slice(0, 6).length && <button className="tw-more" onClick={() => setShowAll(!showAll)}>{showAll ? 'Mostrar só os que pedem atenção' : `Ver todos os ${rows.length} clientes`} <I.arrow size={13} /></button>}
-    </>
-  );
-}
-
-function Responsibilities({ r }) {
-  const [showAll, setShowAll] = useState(false);
-  const list = showAll ? r.no_owner : r.no_owner.slice(0, 8);
-  return (
-    <>
-      {!r.no_owner.length && !r.unassigned.length ? <p className="tw-empty">Todas as funções essenciais têm responsável e nenhuma tarefa está sem dono.</p> : null}
-      {r.no_owner.length > 0 && (
-        <>
-          <p className="tw-lead">{pl(r.no_owner.length, 'cliente sem', 'clientes sem')} pessoa vinculada em função essencial do processo (estratégia, design, edição).</p>
-          <ul className="tw-resp">
-            {list.map((x) => (
-              <li key={x.client_id}>
-                <span><b>{cleanName(x.client)}</b><small>{x.functions.join(' · ')} — sem responsável</small></span>
-                <Link className="tw-more" to={`/clientes/${x.client_id}?tab=equipe`}>Vincular <I.arrow size={13} /></Link>
-              </li>
-            ))}
-          </ul>
-          {r.no_owner.length > 8 && <button className="tw-more" onClick={() => setShowAll(!showAll)}>{showAll ? 'Mostrar menos' : `Ver todos · ${r.no_owner.length}`} <I.arrow size={13} /></button>}
-        </>
-      )}
-      {r.unassigned.length > 0 && (
-        <>
-          <h3 className="tw-h3 mt-5">Tarefas sem responsável <span>{n2(r.unassigned.length)}</span></h3>
-          <ul className="tw-resp">{r.unassigned.slice(0, 6).map((t) => (
-            <li key={t.id}><span><b>{t.title}</b><small>{cleanName(t.client || '')} · função {FUNCTIONS[t.function] || t.function}</small></span>
-              <Link className="tw-more" to={t.content_id ? `/conteudos/${t.content_id}` : `/clientes/${t.client_id}?tab=equipe`}>Atribuir <I.arrow size={13} /></Link></li>
-          ))}</ul>
-        </>
-      )}
-      {r.team_conflicts > 0 && <p className="tw-lead mt-4">{pl(r.team_conflicts, 'vínculo de equipe aguarda', 'vínculos de equipe aguardam')} decisão (fontes do Notion divergentes). <Link className="tw-inline" to="/migracao?kind=equipe">Decidir</Link></p>}
-    </>
-  );
-}
-
-const PERF = [
-  ['conteudos_criados', 'Conteúdos criados'], ['temas_aprovados', 'Temas aprovados'], ['aprovados_cliente', 'Aprovados pelo cliente'], ['ajustes_internos', 'Ajustes internos', true],
-  ['ajustes_cliente', 'Ajustes de cliente', true], ['publicados', 'Publicados'], ['tarefas_concluidas', 'Tarefas concluídas'], ['concluidas_atraso', 'Concluídas com atraso', true], ['prazos_estourados', 'Prazos estourados', true],
-];
-function Performance({ p }) {
-  const c = p.current, v = p.previous;
-  const total = PERF.reduce((a, [k]) => a + (c[k] || 0), 0);
-  const delta = (k, worse) => {
-    if (!p.comparable) return null;
-    const dd = (c[k] || 0) - (v[k] || 0);
-    if (!dd) return <span className="tw-delta">igual ao período anterior</span>;
-    const bad = worse ? dd > 0 : dd < 0;
-    return <span className={`tw-delta ${bad ? 'bad' : 'good'}`}>{dd > 0 ? '↑' : '↓'} {Math.abs(dd)} vs. período anterior</span>;
-  };
-  return (
-    <>
-      {!p.comparable && <p className="tw-hist">Histórico insuficiente para comparação.</p>}
-      {!total && !p.moves_n ? <p className="tw-empty">Nenhuma movimentação registrada no período.</p> : null}
-      <div className="tw-perf">
-        {PERF.map(([k, l, worse]) => (
-          <div key={k} className="tw-pm"><span className="tw-pm-n">{n2(c[k] || 0)}</span><span className="tw-label">{l}</span>{delta(k, worse)}</div>
-        ))}
-        <div className="tw-pm"><span className="tw-pm-n">{c.tempo_aprovacao != null ? String(c.tempo_aprovacao).replace('.', ',') : '—'}</span><span className="tw-label">Dias até o cliente aprovar</span>
-          <span className="tw-delta">{c.tempo_aprovacao_n ? `média de ${pl(c.tempo_aprovacao_n, 'aprovação', 'aprovações')}` : 'sem aprovações no período'}</span></div>
-        <div className="tw-pm"><span className="tw-pm-n">{p.pendencias_abertas != null ? n2(p.pendencias_abertas) : '—'}</span><span className="tw-label">Pendências abertas agora</span><span className="tw-delta">calculadas em tempo real; o histórico de resolvidas ainda não é guardado</span></div>
-      </div>
-      {p.moves.length > 0 && (
-        <div className="tw-moves">
-          <h3 className="tw-h3">O que mudou · {pl(p.moves_n, 'movimentação', 'movimentações')} de etapa</h3>
-          <ul>{p.moves.map((m, i) => <li key={i}>{m.content_id ? <Link to={`/conteudos/${m.content_id}`}>{m.summary}</Link> : m.summary}<small>{ago(m.created_at)}</small></li>)}</ul>
-        </div>
-      )}
-    </>
-  );
-}
-
 function TowerDrawer({ drawer, d, params, onClose }) {
   if (!drawer) return null;
-  const titles = { stage: drawer.label, person: drawer.label, prazos: 'Prazos', automacoes: 'Execuções de automação', reports: 'Relatórios', reunioes: 'Reuniões · próximos 7 dias' };
+  const titles = { client: drawer.label, stage: drawer.label, person: drawer.label, prazos: 'Prazos', automacoes: 'Execuções de automação', reports: 'Relatórios', reunioes: 'Reuniões · próximos 7 dias' };
   return (
     <Drawer open onClose={onClose} restore={drawer} restoreKey="torre" title={titles[drawer.kind]} kicker="Torre de Controle" wide>
+      {drawer.kind === 'client' && <ClientItems g={drawer.group} />}
       {drawer.kind === 'stage' && <StageItems stage={drawer.stage} params={params} />}
       {drawer.kind === 'person' && <PersonTasks id={drawer.id} />}
       {drawer.kind === 'prazos' && (d.deadlines.length ? d.deadlines.map((t) => (

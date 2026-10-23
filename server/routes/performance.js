@@ -5,6 +5,7 @@
 import { Router } from 'express';
 import { one, all, now, nowMs, parseJSON } from '../db.js';
 import { requireInternal, requirePerm } from '../lib/auth.js';
+import { tower } from '../engine/tower.js';
 import { PERF_SQL, performanceBase } from '../services/delayReview.js';
 import { STAGES, STAGE_ORDER, setting } from '../engine/process.js';
 
@@ -165,4 +166,9 @@ export function performanceReport(_user, query = {}) {
 }
 
 // Dado sobre pessoas: só a CEO ou quem ela liberar (módulo "performance", concedido pela CEO). Aceita ?days= ou ?dias=.
+// Capacidade da equipe e desempenho do período (saíram da Torre em 23/10): mesmos cálculos de engine/tower.js
+performance.get('/performance/equipe', requireInternal, requirePerm('performance', 'view'), (req, res) => {
+  const t = tower(req.user, req.query);
+  res.json({ period: t.period, people: t.people, people_insights: t.people_insights, fn_load: t.fn_load, performance_base: t.performance_base, performance: t.performance });
+});
 performance.get('/performance', requireInternal, requirePerm('performance', 'view'), (req, res) => res.json(performanceReport(req.user, { ...req.query, days: req.query.days ?? req.query.dias })));
