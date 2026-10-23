@@ -177,7 +177,7 @@ export default function Processos() {
           ))}
         </div>
       )}
-      <MoveStageModal open={!!moving} content={moving?.content} targets={moving?.targets?.length ? moving.targets.filter((k) => k !== moving.content.stage) : null}
+      <MoveStageModal open={!!moving} content={moving?.content} contents={moving?.content?.bulk} targets={moving?.targets?.length ? moving.targets.filter((k) => k !== moving.content.stage) : null}
         initialTo={moving?.targets?.filter((k) => k !== moving.content.stage).length === 1 ? moving.targets.filter((k) => k !== moving.content.stage)[0] : ''}
         onClose={() => setMoving(null)} onDone={() => { setMoving(null); reload(); }} />
       <HowItWorks open={howOpen} onClose={() => setHowOpen(false)} />
@@ -245,7 +245,7 @@ function Column({ lane, moved, showHead, onDropCard, teamView, byClient, reload,
       )}
       <div className="jb-col-body">
         {byClient
-          ? groupByClient(lane.cards).map((g) => <ClientCard key={g.client_id} g={g} lane={lane} moved={moved} reload={reload} progress={progress?.[g.client_id]} people={people} />)
+          ? groupByClient(lane.cards).map((g) => <ClientCard key={g.client_id} g={g} lane={lane} moved={moved} reload={reload} progress={progress?.[g.client_id]} people={people} draggable={!!onDropCard} />)
           : lane.cards.map((c) => <Card key={c.id} c={c} classes={teamView ? [cls] : cardClasses(c)} moved={moved.has(c.id)} draggable={!!onDropCard} track={lane.fn ? c.tracks?.find((t) => t.fn === lane.fn && (t.assignee_id || null) === (lane.person?.id || null)) : null} />)}
         {!lane.cards.length && lane.person && <div className="jb-col-empty">Nada com {lane.person.id ? lane.person.name.split(' ')[0] : 'ninguém'} agora</div>}
       </div>
@@ -271,15 +271,17 @@ function groupByClient(cards) {
 // CARTÃO DO CLIENTE — no quadro fica só o resumo (cliente, quantidade, progresso). As demandas ficam DENTRO dele:
 // ao clicar, abre o cartão com a lista para dar o check. Check = concluir: o Process Engine manda para a próxima etapa
 // e avisa o próximo responsável. Cada demanda aceita comentário interno com @menção.
-function ClientCard({ g, lane, moved, reload, progress, people }) {
+function ClientCard({ g, lane, moved, reload, progress, people, draggable }) {
   const [open, setOpen] = useState(false);
+  // arrastar o cartão do cliente para outra coluna = mover todas as demandas dele (abre “Mover etapa”, nada muda sem confirmar)
+  const drag = draggable && !g.restricted ? { draggable: true, onDragStart: (e) => { const f = g.items[0]; e.dataTransfer.setData('application/x-bold-card', JSON.stringify({ id: f.id, number: f.number, title: f.title, stage: f.stage, client: cleanName(g.client || ''), bulk: g.items.map((c) => ({ id: c.id, number: c.number, title: c.title, stage: c.stage })) })); e.dataTransfer.effectAllowed = 'move'; } } : {};
   const formats = byFormat([{ cards: g.items }]);
   const late = g.items.filter((c) => c.due_at && new Date(c.due_at) < new Date()).length;
   const blocked = g.items.filter((c) => c.blocked).length;
   const key = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setOpen(true); } };
   return (
     <>
-      <article className={`jb-cc ${g.items.some((c) => moved.has(c.id)) ? 'moved' : ''}`} style={{ '--tone': toneOf(g.client_id) }} role="button" tabIndex={0} onClick={() => setOpen(true)} onKeyDown={key} aria-label={`${cleanName(g.client || '')}: ${pl(g.items.length, 'demanda', 'demandas')}. Abrir`}>
+      <article className={`jb-cc ${g.items.some((c) => moved.has(c.id)) ? 'moved' : ''}`} style={{ '--tone': toneOf(g.client_id) }} role="button" tabIndex={0} onClick={() => setOpen(true)} onKeyDown={key} aria-label={`${cleanName(g.client || '')}: ${pl(g.items.length, 'demanda', 'demandas')}. Abrir`} {...drag}>
         <header className="jb-cc-h">
           <span className="jb-cc-name">{cleanName(g.client || '')}</span>
           <span className="jb-cc-n" title={pl(g.items.length, 'demanda', 'demandas')}>{g.items.length}</span>
@@ -304,6 +306,7 @@ function ClientCard({ g, lane, moved, reload, progress, people }) {
 
 function ClientDemands({ g, lane, reload, people = [] }) {
   const auth = useAuth();
+  const [moving, setMoving] = useState(null);
   const toast = useToast();
   const [busy, setBusy] = useState(null);
   const [when, setWhen] = useState({});
@@ -366,6 +369,7 @@ function ClientDemands({ g, lane, reload, people = [] }) {
                   ))}
                   {!c.restricted && c.stage === 'agendado' && <button className="jb-cc-btn" disabled={busy === c.id} onClick={() => run(c.id, () => api.post(`/contents/${c.id}/published`, {}), 'Publicação registrada.')}>✓ Publicado</button>}
                   {!c.restricted && note[c.id] == null && <button className="jb-dm-link" onClick={() => setNote((n) => ({ ...n, [c.id]: '' }))}>Comentar / mencionar</button>}
+                  {!c.restricted && auth.can('processos', 'edit') && <button className="jb-dm-link" onClick={() => setMoving(c)}>Mover etapa</button>}
                 </div>
                 {note[c.id] != null && (
                   <div className="jb-dm-note">
@@ -382,6 +386,7 @@ function ClientDemands({ g, lane, reload, people = [] }) {
           );
         })}
       </ul>
+      <MoveStageModal open={!!moving} content={moving} onClose={() => setMoving(null)} onDone={() => { setMoving(null); reload(); }} />
       {reviewCol && !g.restricted && <Link className="btn btn-primary mt-4" to={`/revisao/${g.client_id}`}>Revisar {g.items.length > 1 ? `as ${g.items.length} demandas` : 'a demanda'} na Sala de Revisão</Link>}
     </div>
   );

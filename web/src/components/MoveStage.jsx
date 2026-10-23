@@ -6,7 +6,9 @@ import { api } from '../lib/api.js';
 import { useApi, useToast } from '../lib/hooks.js';
 import { Modal, Button, Field } from './ui.jsx';
 
-export function MoveStageModal({ open, content, initialTo, targets, onClose, onDone }) {
+export function MoveStageModal({ open, content, contents, initialTo, targets, onClose, onDone }) {
+  // Cartão do cliente arrastado: move todas as demandas dele (a prévia e o motivo valem para todas)
+  const many = contents?.length > 1 ? contents : null;
   const toast = useToast();
   const { data: def } = useApi(open ? '/process/definition' : null, [open], { live: false });
   const [to, setTo] = useState(initialTo || '');
@@ -26,6 +28,13 @@ export function MoveStageModal({ open, content, initialTo, targets, onClose, onD
   const go = async () => {
     setBusy(true);
     try {
+      if (many) {
+        let ok = 0; const fails = [];
+        for (const c of many) { try { await api.post(`/contents/${c.id}/move`, { to, reason, kind: kind === 'auto' ? undefined : kind }); ok++; } catch (e) { fails.push(`#${c.number}: ${e.message}`); } }
+        toast(fails.length ? `${ok} movida(s). Não deu em ${fails.length}: ${fails[0]}` : `${ok} demandas movidas para ${def?.stages?.[to]?.label || to}. Os responsáveis foram avisados.`, fails.length ? 'err' : undefined);
+        onDone?.({ ok });
+        return;
+      }
       const r = await api.post(`/contents/${content.id}/move`, { to, reason, kind: kind === 'auto' ? undefined : kind });
       toast(`${r.kind_label}: ${r.from_label} → ${r.to_label}.`);
       onDone?.(r);
@@ -35,7 +44,9 @@ export function MoveStageModal({ open, content, initialTo, targets, onClose, onD
     <Modal open={open} onClose={onClose} title="Mover etapa"
       footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" disabled={busy || !pv || (pv.reason_required && !reason.trim())} onClick={go}>Mover</Button></>}>
       <div className="col gap-4">
-        <p className="sm" style={{ margin: 0 }}><b>#{content.number} {content.title}</b></p>
+        {many ? (
+          <div className="sm"><b>{many.length} demandas{content.client ? ` de ${content.client}` : ''}</b><ul className="xs muted" style={{ margin: '6px 0 0', paddingLeft: 18, maxHeight: 120, overflow: 'auto' }}>{many.map((c) => <li key={c.id}>#{c.number} {c.title}</li>)}</ul></div>
+        ) : <p className="sm" style={{ margin: 0 }}><b>#{content.number} {content.title}</b></p>}
         <Field label="Para qual etapa">
           <select className="select" value={to} onChange={(e) => setTo(e.target.value)}>
             <option value="">Escolha</option>
@@ -52,6 +63,7 @@ export function MoveStageModal({ open, content, initialTo, targets, onClose, onD
                 <option value="excecao">Exceção aprovada</option>
               </select>
             </Field>
+            {many && <p className="xs muted" style={{ margin: 0 }}>A prévia abaixo é da primeira demanda; o mesmo movimento é aplicado a cada uma e o servidor confere uma a uma.</p>}
             {pv.impacts.length ? (
               <ul className="mv-impacts">{pv.impacts.map((i, n) => <li key={n} className={`l-${i.level}`}>{i.text}</li>)}</ul>
             ) : <p className="xs muted" style={{ margin: 0 }}>Sem impacto em prazo, aprovação ou agendamento.</p>}

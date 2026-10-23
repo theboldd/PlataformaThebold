@@ -31,6 +31,7 @@ import { notion } from './routes/notion.js';
 import { notionSync } from './routes/notion-sync.js';
 import { performance } from './routes/performance.js';
 import { status } from './routes/status.js';
+import { ciclos } from './routes/ciclos.js';
 import { reconcileMigratedForms } from './services/onboarding.js';
 
 // Regra oficial 16: a própria The Bold fica na base como CLIENTE INTERNO (decisão da CEO, aplicada uma vez e registrada)
@@ -123,6 +124,7 @@ export function createApp() {
   app.use('/api', notion);
   app.use('/api', performance);
   app.use('/api', status);
+  app.use('/api', ciclos);
   app.use('/api', atrasos);
   app.use('/api', produto);
   app.use('/api', negocio);

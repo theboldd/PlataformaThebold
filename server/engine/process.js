@@ -85,9 +85,11 @@ export function setting(key) {
 
 // ── Ciclos ──────────────────────────────────────────────
 const pad = (n) => String(n).padStart(2, '0');
-export function buildMilestones(month) {
-  const [y, m] = month.split('-').map(Number);
-  const prev = new Date(Date.UTC(y, m - 2, 1));
+// Marcos do ciclo: dias do mês de PRODUÇÃO (por padrão, o mês anterior ao de publicação). Meses produzidos juntos
+// (ex.: dezembro e janeiro entregues em novembro) usam o mesmo mês de produção e, portanto, o mesmo calendário.
+export function buildMilestones(month, productionMonth = null) {
+  const [y, m] = (productionMonth ? null : month.split('-').map(Number)) || [];
+  const prev = productionMonth ? new Date(Date.UTC(Number(productionMonth.slice(0, 4)), Number(productionMonth.slice(5, 7)) - 1, 1)) : new Date(Date.UTC(y, m - 2, 1));
   const py = prev.getUTCFullYear(), pm = prev.getUTCMonth() + 1;
   const last = new Date(Date.UTC(py, pm, 0)).getUTCDate();
   const out = {};
