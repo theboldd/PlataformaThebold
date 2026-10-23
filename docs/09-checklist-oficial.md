@@ -1,5 +1,15 @@
 # THE BOLD OS — Checklist oficial de conferência
 
+## Revisão 5.1 · 23/10/2026 — Recomeço da operação com novembro
+
+| O que | Onde | Estado |
+|---|---|---|
+| Apagados (decisão da CEO): 451 conteúdos, 692 tarefas, 144 legados, 5.392 linhas do histórico do CR Editorial, 45 ciclos e 45 registros dos quadros antigos no Client Brain. Ficaram clientes, equipe, acessos, Client Brain e fichas. Cópia de segurança antes da troca | Base | 🟢 |
+| Importados 307 conteúdos de novembro (entregas de 2/11 a 3/12) como operação normal: títulos e datas dos calendários de cada cliente (CR Editorial; feed da Tatiana, La Marca, The Bold e Ocear), etapa e responsável pelo quadro “Controle produção NOVEMBRO” lido em 23/10 | Processos | 🟢 |
+| Calendários de stories datados (17º Cartório, Tatiana) não têm itens de novembro; rotinas semanais de stories seguem no Client Brain | — | 🟢 |
+| 56 pontos para conferir em Decisões da migração (apelidos, quantidades diferentes entre card e calendário, formatos não identificados, legenda em coluna anterior à peça, stories sem coluna no quadro) | Decisões da migração | 🟡 |
+| Sem responsável: Ocear sem estrategista (15) e Paula Gouvêa sem editor de vídeo (5) | Pendências | 🟡 |
+
 ## Revisão 5.0 · 23/10/2026 — Ajuste do cliente e ideias do quadro
 
 | O que | Onde | Estado |

@@ -1,11 +1,11 @@
 // RECOMEÇO DA OPERAÇÃO (decisão da CEO, 23/10/2026): apaga os conteúdos, tarefas e históricos de produção vindos do Notion
-// e traz apenas o mês de NOVEMBRO — o quadro "Controle produção NOVEMBRO" (página PROCESSO) + o cronograma de novembro
-// do CR EDITORIAL de cada cliente. Ficam: clientes, equipe, acessos, Client Brain (exceto registros dos quadros mensais) e fichas.
+// e traz apenas o que está sendo produzido para NOVEMBRO (entregas de 1/11 a 3/12): o quadro "Controle produção NOVEMBRO" (página PROCESSO)
+// + os calendários de novembro de cada cliente (CR EDITORIAL / calendário de feed e calendário de stories). Ficam: clientes, equipe, acessos, Client Brain (exceto registros dos quadros mensais) e fichas.
 // Os conteúdos novos entram como OPERAÇÃO NORMAL (data_origin=plataforma): prazos, pendências e atrasos contam a partir daqui.
 // A origem de cada conteúdo fica registrada (reference = página do Notion; observações internas = texto e comentários).
 // Nada é inventado: sem título no cronograma → "tema a definir"; sem etapa clara → registrado em Decisões da migração.
 //
-// Entradas (extração só de leitura, feita em 23/10): RECOMECO_DIR/board_out{1,2,3}.json e RECOMECO_DIR/cr_nov.json
+// Entradas (extração só de leitura): RECOMECO_DIR/board_out{1,2,3}.json (quadro, lido em 23/10) e RECOMECO_DIR/cr_nov.json (calendários de 1/11 a 3/12)
 // Uso: BOLD_DATA_DIR=… BOLD_STORAGE_DIR=… RECOMECO_DIR=… node server/migration/recomecar-novembro.js [--aplicar]
 //   sem --aplicar: recusa rodar fora de uma cópia de trabalho (scratchpad). Antes de qualquer mudança grava uma cópia da base.
 import fs from 'node:fs';
@@ -63,7 +63,7 @@ const ENT = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'
 const clean = (v) => (typeof v === 'string' ? v.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&(amp|lt|gt|quot|#39|nbsp);/g, (m) => ENT[m]).trim() : v);
 // Formato pelo prefixo do título no cronograma (CARROSSEL:, REELS:, ESTÁTICO:, ÚNICO: = post único)
 const formatOf = (title) => { const p = String(title || '').split(':')[0].toUpperCase(); return /CARROSS/.test(p) ? 'carrossel' : /REEL|V[IÍ]DEO/.test(p) ? 'reel' : /EST[AÁ]TIC|[ÚU]NICO|POST\b/.test(p) ? 'estatico' : null; };
-const visualType = (format) => (format === 'reel' ? 'REELS' : 'DESIGN');
+const visualType = (format) => (format === 'reel' ? 'REELS' : format === 'stories' ? 'STORIES' : 'DESIGN');
 const fmt = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
 // Autores e menções do Notion aparecem como user://id: o nome vem do mapa de usuários da extração dos quadros (quando conhecido)
 const NUSERS = (() => { try { return JSON.parse(fs.readFileSync(path.resolve('storage/migration/notion/_board_novembro.json'), 'utf8')).users || {}; } catch { return {}; } })();
@@ -80,6 +80,7 @@ const R = { backup: path.basename(backup), before: {}, deleted: {}, created: 0, 
 const issue = (clientId, clientName, description) => { R.issues.push(`${clientName || '—'}: ${description}`); insert('migration_issues', { id: uid('mi_'), client_id: clientId || null, client_name: clientName || null, kind: 'recomeco_novembro', description, source: SOURCE, status: 'aberto', created_at: now() }); };
 const count = (sql) => one(sql).n;
 const legBehind = new Set();
+const storiesNoBoard = new Set();
 
 tx(() => {
   // ── 1. O que existe antes ──
@@ -120,6 +121,7 @@ tx(() => {
 
   // Etapa de um conteúdo = coluna do card da peça (DESIGN ou REELS) do cliente; a legenda é trilha à parte (registrada)
   const stageFor = (slot, format) => {
+    if (format === 'stories') return { stage: slot.Cronograma ? COLUMN_STAGE[slot.Cronograma.column] || 'producao' : null, crono: slot.Cronograma };
     const vis = slot[visualType(format)], leg = slot.LEGENDA, crono = slot.Cronograma;
     const vs = vis ? COLUMN_STAGE[vis.column] : null, ls = leg ? COLUMN_STAGE[leg.column] : null;
     if (!vs && !ls) return { stage: crono ? COLUMN_STAGE[crono.column] || 'producao' : null, vis, leg, crono };
@@ -130,6 +132,7 @@ tx(() => {
   const createOne = ({ clientId, title, format, planned, ref, notes, caption, slot, fromCr }) => {
     const s = stageFor(slot || {}, format);
     let stage = s.stage;
+    if (format === 'stories' && !s.vis) storiesNoBoard.add(clientName(clientId));
     if (!stage) { stage = 'producao'; issue(clientId, clientName(clientId), `“${title}”: o cliente não tem card de ${visualType(format)}, legenda nem cronograma no quadro de novembro — entrou em Produção; confirmar a etapa.`); }
     const content = createContent({ client_id: clientId, title, format, stage, cycle_month: MONTH, planned_at: planned, reference: ref, internal_notes: notes, strategy_tags: ['recomeco-novembro'] }, null);
     run("UPDATE contents SET data_origin='plataforma' WHERE id=?", content.id);
@@ -162,22 +165,22 @@ tx(() => {
     return content;
   };
 
-  // ── 4. Conteúdos: cronograma de novembro do CR EDITORIAL de cada cliente ──
+  // ── 4. Conteúdos: calendários de novembro de cada cliente (feed + stories, 1/11 a 3/12) ──
   for (const c of cr.clients) {
-    if (c.error) { issue(c.client_id, c.client_name, `CR EDITORIAL não lido: ${c.error}`); continue; }
-    if (!one('SELECT 1 FROM clients WHERE id=?', c.client_id)) { issue(null, c.client_name, 'Cliente do CR EDITORIAL não existe mais na base — não importado.'); continue; }
+    for (const cal of c.calendars || []) if (cal.error) issue(c.client_id, c.client_name, `${cal.calendar} não lido: ${cal.error} — ${cal.url}`);
+    if (!one('SELECT 1 FROM clients WHERE id=?', c.client_id)) { issue(null, c.client_name, 'Cliente do calendário não existe mais na base — não importado.'); continue; }
     const slot = byClient.get(c.client_id) || {};
     ensureCycle(c.client_id, MONTH);
     const want = {};
     for (const r of c.rows) {
       const title = clean(String(r.title || r.properties?.Name || '')).replace(/\s+/g, ' ').trim();
-      let format = formatOf(title) || formatOf(r.properties?.Tipo);
+      let format = r.kind === 'stories' ? 'stories' : formatOf(title) || formatOf(r.properties?.Tipo) || formatOf([].concat(r.properties?.Formato || []).join(' '));
       if (!format) { format = 'estatico'; issue(c.client_id, c.client_name, `“${title || 'sem título'}” (${r.date?.slice(0, 10)}): o título não diz o formato (carrossel, reels, estático) — entrou como estático; confirmar.`); }
       want[format] = (want[format] || 0) + 1;
       const shown = title ? title.split(':').slice(1).join(':').trim() || title : `Conteúdo de ${r.date?.slice(0, 10)} (tema a definir)`;
       const s = stageFor(slot, format);
-      const notes = [`Importado do Notion em ${fmt(startedAt)} · CR EDITORIAL de ${c.client_name} — ${r.notion_url}`, title ? `Título no Notion: ${title}` : 'Sem título no Notion', propText(r.properties), cardText(s.vis), cardText(s.leg), cardText(s.crono)].filter(Boolean).join('\n\n');
-      createOne({ clientId: c.client_id, title: shown, format, planned: r.date ? new Date(`${r.date.slice(0, 10)}T12:00:00-03:00`).toISOString() : null, ref: r.notion_url, notes, caption: typeof r.properties?.LEGENDA === 'string' ? clean(r.properties.LEGENDA) : null, slot, fromCr: true });
+      const notes = [`Importado do Notion em ${fmt(startedAt)} · ${r.calendar || 'Calendário'} de ${c.client_name} — ${r.notion_url}`, title ? `Título no Notion: ${title}` : 'Sem título no Notion', propText(r.properties), cardText(s.vis), cardText(s.leg), cardText(s.crono)].filter(Boolean).join('\n\n');
+      createOne({ clientId: c.client_id, title: shown, format, planned: r.date ? new Date(`${r.date.slice(0, 10)}T12:00:00-03:00`).toISOString() : null, ref: r.notion_url, notes, caption: typeof (r.properties?.LEGENDA ?? r.properties?.Legenda) === 'string' ? clean(r.properties.LEGENDA ?? r.properties.Legenda) : null, slot, fromCr: true });
     }
     // Diferença entre a lista do card (☐ 4 reels…) e o cronograma: registrada, nada é criado a mais
     for (const type of ['DESIGN', 'REELS']) {
@@ -206,6 +209,7 @@ tx(() => {
   for (const card of cards) if (!R.cards_used.has(card.url) && findClient(card.title) && card.type !== 'Cronograma') R.issues.push(`Card não usado: ${card.title} · ${card.type} · ${card.column} (o cliente não tem conteúdo desse tipo no cronograma)`);
 
   // Importação não é operação: não dispara notificações nem conta como execução de automação
+  for (const n of storiesNoBoard) issue(null, n, 'Stories de novembro importados: o quadro do Notion não tem coluna de stories, então a etapa veio do card de cronograma do cliente (ou Produção). Confirmar.');
   if (legBehind.size) issue(null, null, `Em ${legBehind.size} card(s) a legenda está numa coluna anterior à da peça no Notion; a etapa seguiu a peça e a legenda fica registrada nas observações: ${[...legBehind].join(' · ')}.`);
   for (const [clientId, slot] of byClient) if (slot.LEGENDA?.column === 'Pendente por material' && slot[ 'DESIGN']?.column !== 'Pendente por material') issue(clientId, clientName(clientId), `Legenda “Pendente por material” no Notion (${slot.LEGENDA.url}); os conteúdos não foram bloqueados por isso — a peça segue a coluna dela.`);
   run('DELETE FROM notifications WHERE created_at >= ?', startedAt);
