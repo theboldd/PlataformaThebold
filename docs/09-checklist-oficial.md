@@ -1,5 +1,17 @@
 # THE BOLD OS — Checklist oficial de conferência
 
+## Revisão 5.0 · 23/10/2026 — Ajuste do cliente e ideias do quadro
+
+| O que | Onde | Estado |
+|---|---|---|
+| Pedido de ajuste do cliente: a plataforma identifica pelo texto (design/imagem, vídeo, legenda, página, texto) e envia direto para quem produziu; Rebeca, Vitória e Vivian são avisadas | Process Engine | 🟢 |
+| Se a plataforma não identificar, o ajuste nasce sem responsável e Rebeca/Vitória/Vivian recebem “encaminhe ao responsável” (aparece em Pendências) | Process Engine · Pendências | 🟢 |
+| Ajuste do cliente feito segue para publicar: versão liberada pela equipe (o cliente vê como liberada, nunca como aprovada por ele) | Process Engine · Portal | 🟢 |
+| Barra de progresso no cartão do cliente (prontos ÷ total dos meses em aberto) | Processos | 🟢 |
+| “Concluir todas” no cartão do cliente (só demandas com arquivo/legenda já enviados) | Processos | 🟢 |
+| Lembrete de cartão parado há mais de 3 dias (configurável) para quem está com ele, e Operações em cópia | Automações | 🟢 |
+| Avisos de “ajuste feito” agrupados num resumo do dia por pessoa | Notificações | 🟢 |
+
 ## Revisão 4.9 · 23/10/2026 — Processos: cartões por cliente e fluxo de ajuste
 
 | O que | Onde | Estado |

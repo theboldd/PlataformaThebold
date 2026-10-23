@@ -171,7 +171,7 @@ export default function Processos() {
             <div key={sw.key} className="jb-swim">
               {sw.label && <div className="jb-swim-head"><span className="jb-label" style={{ background: toneOf(sw.label) }}>{cleanName(sw.label)}</span><span className="jb-swim-count">{sw.lanes.reduce((n, l) => n + l.cards.length, 0)} itens{group === 'client' ? ` · ${byFormat(sw.lanes)}` : ''}</span></div>}
               <div className="jb-board">
-                {sw.lanes.map((lane) => <Column key={lane.key} lane={lane} byClient={byClient} reload={reload} teamView={view === 'equipe'} moved={moved} showHead={sw === swimlanes[0] || !!sw.label} onDropCard={canMove ? (card) => setMoving({ content: card, targets: lane.targets || (lane.stages || []).map((x) => x.key) }) : null} />)}
+                {sw.lanes.map((lane) => <Column key={lane.key} lane={lane} byClient={byClient} reload={reload} progress={data.progress} teamView={view === 'equipe'} moved={moved} showHead={sw === swimlanes[0] || !!sw.label} onDropCard={canMove ? (card) => setMoving({ content: card, targets: lane.targets || (lane.stages || []).map((x) => x.key) }) : null} />)}
               </div>
             </div>
           ))}
@@ -221,7 +221,7 @@ function teamLanes(data) {
   ];
 }
 
-function Column({ lane, moved, showHead, onDropCard, teamView, byClient, reload }) {
+function Column({ lane, moved, showHead, onDropCard, teamView, byClient, reload, progress }) {
   const cls = laneClass(lane);
   const sub = lane.label && lane.label.toLowerCase() !== (CLASS[cls]?.label || '').toLowerCase() && lane.label !== 'Edição de vídeo' ? lane.label : null;
   const [over, setOver] = useState(false);
@@ -245,7 +245,7 @@ function Column({ lane, moved, showHead, onDropCard, teamView, byClient, reload 
       )}
       <div className="jb-col-body">
         {byClient
-          ? groupByClient(lane.cards).map((g) => <ClientCard key={g.client_id} g={g} lane={lane} moved={moved} reload={reload} />)
+          ? groupByClient(lane.cards).map((g) => <ClientCard key={g.client_id} g={g} lane={lane} moved={moved} reload={reload} progress={progress?.[g.client_id]} />)
           : lane.cards.map((c) => <Card key={c.id} c={c} classes={teamView ? [cls] : cardClasses(c)} moved={moved.has(c.id)} draggable={!!onDropCard} track={lane.fn ? c.tracks?.find((t) => t.fn === lane.fn && (t.assignee_id || null) === (lane.person?.id || null)) : null} />)}
         {!lane.cards.length && lane.person && <div className="jb-col-empty">Nada com {lane.person.id ? lane.person.name.split(' ')[0] : 'ninguém'} agora</div>}
       </div>
@@ -271,7 +271,7 @@ const STAGE_HINT = { analise_producao: 'revisar', analise_cronograma: 'revisar',
 
 // CARTÃO DO CLIENTE — as demandas daquele cliente nesta coluna. Quem tem a tarefa conclui ali mesmo;
 // concluir manda para a próxima etapa pelo Process Engine (revisão, aprovação…) e avisa quem precisa saber.
-function ClientCard({ g, lane, moved, reload }) {
+function ClientCard({ g, lane, moved, reload, progress }) {
   const auth = useAuth();
   const toast = useToast();
   const [busy, setBusy] = useState(null);
@@ -280,6 +280,12 @@ function ClientCard({ g, lane, moved, reload }) {
   const canApprove = auth.can('conteudos', 'approve');
   const formats = byFormat([{ cards: g.items }]);
   const late = g.items.filter((c) => c.due_at && new Date(c.due_at) < new Date()).length;
+  // "Concluir todas": as demandas desta coluna que a pessoa pode concluir agora (com arquivo/legenda já enviados)
+  const trackOf = (c) => (lane.fn ? c.tracks?.find((t) => t.fn === lane.fn && (t.assignee_id || null) === (lane.person?.id || null)) : c.tracks?.find((t) => ['etapa', 'ajuste'].includes(t.kind) && t.fn !== 'revisao') || null);
+  const ready = g.items.map((c) => [c, trackOf(c)]).filter(([c, tr]) => !c.restricted && !c.blocked && tr && (tr.assignee_id === auth.user.id || canApprove)
+    && ['producao', 'ajuste_interno', 'ajuste_cliente', 'cronograma', 'ajuste_cronograma'].includes(c.stage)
+    && !(c.stage === 'producao' && ((tr.track === 'visual' && !c.has_media) || (tr.track === 'legenda' && !c.has_caption))));
+  const completeAll = () => run('all', async () => { let ok = 0; const fails = []; for (const [c, tr] of ready) { try { await api.post(`/tasks/${tr.task_id}/complete`); ok++; } catch (e) { fails.push(`${c.title}: ${e.message}`); } } if (fails.length) throw new Error(`${ok} concluída(s). Não deu em ${fails.length}: ${fails[0]}`); }, `${pl(ready.length, 'demanda concluída', 'demandas concluídas')}.`);
   const reviewCol = ['analise_producao', 'analise_cronograma'].some((s) => (lane.targets || lane.stages?.map((x) => x.key) || []).includes(s));
   return (
     <article className={`jb-cc ${g.items.some((c) => moved.has(c.id)) ? 'moved' : ''}`} style={{ '--tone': toneOf(g.client_id) }}>
@@ -288,6 +294,12 @@ function ClientCard({ g, lane, moved, reload }) {
         <span className="jb-cc-n" title={pl(g.items.length, 'demanda', 'demandas')}>{g.items.length}</span>
       </header>
       <div className="jb-cc-sub">{formats}{late ? <b className="late"> · {pl(late, 'atrasada', 'atrasadas')}</b> : null}</div>
+      {progress?.total > 0 && (
+        <div className="jb-cc-prog" title={`${progress.done} de ${progress.total} conteúdos do mês liberados para publicação ou publicados`}>
+          <span className="jb-cc-bar" aria-hidden><span style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }} /></span>
+          <small>{progress.done} de {progress.total} prontos</small>
+        </div>
+      )}
       <ul className="jb-cc-list">
         {g.items.map((c) => {
           // a trilha desta coluna (coluna de pessoa) ou a primeira tarefa aberta do conteúdo
@@ -330,6 +342,7 @@ function ClientCard({ g, lane, moved, reload }) {
           );
         })}
       </ul>
+      {ready.length > 1 && <button className="jb-cc-all" disabled={busy === 'all'} onClick={completeAll}>Concluir todas ({ready.length})</button>}
       {reviewCol && !g.restricted && <Link className="jb-cc-go" to={`/revisao/${g.client_id}`}>Revisar {g.items.length > 1 ? `as ${g.items.length} demandas` : 'a demanda'} na Sala de Revisão →</Link>}
     </article>
   );
@@ -401,7 +414,10 @@ function HowItWorks({ open, onClose }) {
           <div className="caps mb-2">Regras atuais</div>
           <ul className="sm" style={{ paddingLeft: 18 }}>
             <li>Análise interna do cronograma: <b>{data.settings.analise_cronograma_ativa ? 'ativa' : 'desligada'}</b></li>
-            <li>Após ajuste normal do cliente, reenviar ao cliente: <b>{data.settings.reenviar_cliente_apos_ajuste ? 'sim' : 'não'}</b></li>
+            <li>Ajuste interno feito: <b>{data.settings.revisar_apos_ajuste_interno ? 'volta para a revisão' : 'segue para a aprovação do cliente (quem pediu é avisado)'}</b></li>
+            <li>Ajuste do cliente: a plataforma identifica pelo texto (design, vídeo, legenda, página) e envia a quem produziu; se não identificar, Rebeca/Vitória/Vivian encaminham</li>
+            <li>Ajuste do cliente feito: <b>{data.settings.publicar_apos_ajuste_cliente ? 'segue para publicar (versão liberada pela equipe)' : data.settings.reenviar_cliente_apos_ajuste ? 'volta para o cliente aprovar' : 'conferência e liberação'}</b></li>
+            <li>Lembrete de cartão parado na mesma etapa: depois de <b>{data.settings.lembrete_parado_dias} dias</b></li>
             <li>Régua de cobrança do cliente: {data.settings.followup_cliente_horas.join('h · ')}h</li>
           </ul>
         </div>

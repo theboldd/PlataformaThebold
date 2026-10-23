@@ -147,11 +147,13 @@ test('✎ ajuste estruturado após aprovação: registra tipo, local e região n
   assert.equal(one('SELECT status FROM content_versions WHERE content_id=? AND number=1', c.id).status, 'substituida');
   assert.match(one('SELECT notes FROM content_versions WHERE id=?', v2.id).notes, /Ajustes solicitados em/);
   P.completeTask(adj.task_id, user(U.copy));
-  review(c.id, user(U.est), { decision: 'aprovar' }, req);
-  assert.equal(fresh(c).stage, 'aprovacao_cliente', 'reaprovação: V2 volta para o cliente');
+  // Regra da CEO (23/10): ajuste do cliente feito segue para publicar; a V2 fica LIBERADA PELA EQUIPE (não é aprovação do cliente)
+  assert.equal(fresh(c).stage, 'agendamento', 'ajuste do cliente feito → liberado para publicação');
+  assert.equal(one('SELECT status FROM content_versions WHERE content_id=? AND number=2', c.id).status, 'liberada');
+  assert.ok(one("SELECT 1 FROM notifications WHERE type='ajuste_feito' AND content_id=?", c.id), 'Rebeca/Vitória/Vivian sabem que o ajuste foi feito');
   const item = (await s.get(`/portal/contents/${c.id}`)).data;
   assert.equal(item.version.number, 2);
-  assert.deepEqual(item.versions.map((v) => [v.number, v.state]), [[2, 'atual'], [1, 'substituida']]);
+  assert.deepEqual(item.versions.map((v) => [v.number, v.state]), [[2, 'liberada'], [1, 'substituida']]);
   assert.equal(item.adjustments[0].resolved_in, 2, 'ajuste feito na V2');
   assert.ok(item.adjustments[0].region, 'região volta para desenhar o pino');
 });
@@ -405,4 +407,18 @@ test('data de publicação não é prazo operacional: sem risco, atraso ou pend�
   assert.equal(STAGES.agendamento.label, 'Liberado para publicação');
   assert.equal(STAGES.agendamento.sla, null);
   for (const st of RELEASED_STAGES) assert.equal(contentRisk({ ...cc, stage: st }).level, 'nenhum', `${st}: fora da operação`);
+});
+
+test('✎ ajuste do cliente sem tipo identificável vai para a triagem (Rebeca/Vitória/Vivian encaminham)', async () => {
+  const c = await toClientApproval(A, 'Sem tipo');
+  const s = await login(ca);
+  const fd = new FormData(); fd.append('note', 'não gostei, pode mudar?'); fd.append('version', '1');
+  const r = await s.form(`/portal/contents/${c.id}/adjust`, fd);
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  const adj = one("SELECT * FROM adjustments WHERE content_id=? AND origin='cliente'", c.id);
+  assert.equal(adj.assigned_to, null, 'não identificado: ninguém recebe por engano');
+  assert.ok(one("SELECT 1 FROM notifications WHERE type='ajuste_triagem' AND content_id=? AND user_id=?", c.id, U.ceo.id), 'a CEO recebe para encaminhar');
+  assert.equal(P.identifyAspect('trocar a cor do fundo'), 'imagem');
+  assert.equal(P.identifyAspect('cortar o começo do reels'), 'video');
+  assert.equal(P.identifyAspect('ajusta a legenda'), 'legenda');
 });

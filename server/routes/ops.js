@@ -445,10 +445,19 @@ ops.get('/process/board', requirePerm('processos', 'view'), (req, res) => {
   cards = cards.map((c) => ({ ...c, tracks: byContent.get(c.id) || [] }));
   // filtro por pessoa vale para qualquer trilha aberta do card (design, edição, legenda…), não só a primeira
   if (assignee_id) cards = cards.filter((c) => c.tracks.some((t) => (assignee_id === 'none' ? !t.assignee_id : t.assignee_id === assignee_id)));
+  // Progresso do mês por cliente (barra do cartão): quantos conteúdos dos meses em aberto já estão liberados para publicação ou além
+  const monthsOf = new Map();
+  for (const c of cards) if (c.month) (monthsOf.get(c.client_id) || monthsOf.set(c.client_id, new Set()).get(c.client_id)).add(c.month);
+  const progress = {};
+  for (const r of all("SELECT client_id, COALESCE(cycle_month, substr(planned_at,1,7)) m, COUNT(*) total, SUM(stage IN ('agendamento','agendado','publicado')) done FROM contents WHERE stage<>'cancelado' AND (legacy_status IS NULL OR legacy_status='reprogramado') GROUP BY 1,2")) {
+    if (!monthsOf.get(r.client_id)?.has(r.m)) continue;
+    const p0 = progress[r.client_id] || (progress[r.client_id] = { total: 0, done: 0, months: [] });
+    p0.total += r.total; p0.done += r.done || 0; p0.months.push(r.m);
+  }
   const lanes = LANES.map((l) => ({ ...l, stages: Object.entries(STAGES).filter(([, s]) => s.lane === l.key).map(([k, s]) => ({ key: k, label: s.label, fn: s.fn, action: s.action, exit: s.exit })), cards: cards.filter((c) => c.lane === l.key) }));
   const recent = all("SELECT l.created_at, l.summary, l.content_id, c.client_id FROM activity_logs l JOIN contents c ON c.id=l.content_id WHERE l.action='etapa.alterada' ORDER BY l.created_at DESC LIMIT 25")
     .map((r) => (canAccessClient(req.user, r.client_id) ? r : { created_at: r.created_at, summary: r.summary.replace(/^#\d+/, '#—'), content_id: null }));
-  res.json({ lanes, total: cards.length, recent, filters: { months: all("SELECT DISTINCT COALESCE(cycle_month, substr(planned_at,1,7)) m FROM contents WHERE stage<>'cancelado' AND COALESCE(cycle_month, substr(planned_at,1,7)) IS NOT NULL ORDER BY m DESC").map((r) => r.m), formats: all("SELECT DISTINCT format FROM contents WHERE stage<>'cancelado'").map((r) => r.format), clients: all('SELECT id, name FROM clients ORDER BY name'), people: all("SELECT id, name, functions FROM users WHERE active=1 AND role_key<>'cliente' ORDER BY name").map((u) => ({ ...u, functions: parseJSON(u.functions, []) })), stages: STAGE_ORDER.map((k) => ({ key: k, label: STAGES[k].label })) } });
+  res.json({ lanes, total: cards.length, recent, progress, filters: { months: all("SELECT DISTINCT COALESCE(cycle_month, substr(planned_at,1,7)) m FROM contents WHERE stage<>'cancelado' AND COALESCE(cycle_month, substr(planned_at,1,7)) IS NOT NULL ORDER BY m DESC").map((r) => r.m), formats: all("SELECT DISTINCT format FROM contents WHERE stage<>'cancelado'").map((r) => r.format), clients: all('SELECT id, name FROM clients ORDER BY name'), people: all("SELECT id, name, functions FROM users WHERE active=1 AND role_key<>'cliente' ORDER BY name").map((u) => ({ ...u, functions: parseJSON(u.functions, []) })), stages: STAGE_ORDER.map((k) => ({ key: k, label: STAGES[k].label })) } });
 });
 ops.get('/process/definition', requirePerm('processos', 'view'), (_req, res) => {
   res.json({ stages: STAGES, lanes: LANES, order: STAGE_ORDER, settings: Object.fromEntries(Object.keys(DEFAULT_SETTINGS).map((k) => [k, setting(k)])), example_cycle: buildMilestones(new Date(Date.now() + 40 * 864e5).toISOString().slice(0, 7)) });

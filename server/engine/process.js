@@ -63,6 +63,9 @@ export const DEFAULT_SETTINGS = {
   },
   analise_cronograma_ativa: true,      // PDF: "em breve não teremos essa fase" → desligável
   reenviar_cliente_apos_ajuste: true,
+  publicar_apos_ajuste_cliente: true,  // decisão da CEO (23/10): ajuste pedido pelo cliente, depois de feito, segue para publicar (versão liberada pela equipe, não aprovação do cliente)
+  ajuste_cliente_triagem_roles: ['ceo', 'operacoes', 'gestao'], // Rebeca · Vitória · Vivian recebem todo pedido de ajuste do cliente e encaminham o que a plataforma não identificou
+  lembrete_parado_dias: 3,             // cartão parado na mesma etapa há mais de N dias: lembra quem está com ele
   revisar_apos_ajuste_interno: false, // decisão da CEO (23/10): ajuste interno feito segue direto para a aprovação do cliente, sem nova revisão; quem pediu é avisado  // decisão The Bold (21/10): a versão que resolve o ajuste do cliente VOLTA para o cliente aprovar — aprovação nunca é inferida pela etapa
   revisores_padrao_roles: ['qualidade', 'ceo'], // Rebeca + Raísa
   cc_roles: ['operacoes'],             // Vitória recebe cópia das etapas-chave
@@ -392,11 +395,18 @@ function advance(c, actor, meta) {
       const doers = [...new Set(round.map((r) => r.completed_by).filter(Boolean))].map((id) => userName(id)).filter(Boolean);
       const who = doers.length ? doers.join(' e ') : userName(actor?.id) || 'A equipe';
       const requesters = [...new Set(round.map((r) => r.requested_by).filter(Boolean))].filter((id) => id !== actor?.id);
-      notify(requesters, { level: 'info', type: 'ajuste_feito', title: `${who} fez o ajuste pedido`, body: `#${c.number} ${c.title}: ajuste concluído e enviado para a aprovação do cliente.`, link: `/conteudos/${c.id}`, client: c.client_id, content: c.id });
+      notify(requesters, { level: 'info', type: 'ajuste_feito', title: `${who} fez o ajuste pedido`, body: `#${c.number} ${c.title}: ajuste concluído e enviado para a aprovação do cliente.`, link: `/conteudos/${c.id}`, groupKey: `ajuste-feito:${now().slice(0, 10)}`, client: c.client_id, content: c.id });
       return enterStage(c, 'aprovacao_cliente', actor, { reason: `ajuste interno feito por ${who} — segue para o cliente sem nova revisão` });
     }
     case 'ajuste_cliente': {
       automation('ajuste.concluido', { entity: 'content', id: c.id, client: c.client_id });
+      if (setting('publicar_apos_ajuste_cliente')) {
+        // Regra da CEO (23/10): ajuste do cliente feito → segue para publicar. A versão fica LIBERADA PELA EQUIPE (nunca marcada como aprovada pelo cliente)
+        const doers = [...new Set(all("SELECT t.completed_by FROM adjustments a JOIN tasks t ON t.id=a.task_id WHERE a.content_id=? AND a.origin='cliente' AND a.status='concluido' AND t.completed_by IS NOT NULL", c.id).map((r) => r.completed_by))].map(userName).filter(Boolean);
+        const who = doers.length ? doers.join(' e ') : userName(actor?.id) || 'A equipe';
+        notify(triageUsers().filter((id) => id !== actor?.id), { level: 'info', type: 'ajuste_feito', title: `${who} fez o ajuste do cliente`, body: `#${c.number} ${c.title}: liberado para publicação.`, link: `/conteudos/${c.id}`, groupKey: `ajuste-feito:${now().slice(0, 10)}`, client: c.client_id, content: c.id });
+        return releaseAfterClientAdjust(c, actor, `ajuste do cliente feito por ${who}`);
+      }
       const sizes = all("SELECT size FROM adjustments WHERE content_id=? AND origin='cliente' AND status='concluido' AND version_id=(SELECT version_id FROM adjustments WHERE content_id=? AND origin='cliente' ORDER BY created_at DESC LIMIT 1)", c.id, c.id).map((r) => r.size);
       const simple = sizes.length && sizes.every((s) => s === 'simples');
       if (!simple || roundNeedsReapproval(c.id)) return enterStage(c, 'revisao_ajuste', actor, { reason: 'ajuste concluído — estrategista confere' });
@@ -417,7 +427,7 @@ function roundNeedsReapproval(contentId) {
 function releaseAfterClientAdjust(c, actor, reason) {
   const v = currentVersion(c.id);
   if (v) {
-    update('content_versions', { id: v.id }, { status: 'liberada', locked: 1 });
+    update('content_versions', { id: v.id }, { status: 'liberada', locked: 1, sent_to_client_at: v.sent_to_client_at || now() }); // o cliente vê a versão que vai ao ar, marcada como liberada pela equipe
     update('contents', { id: c.id }, { approved_version_id: v.id });
   }
   log({ actor: actor?.id, action: 'versao.liberada', entity: 'content', id: c.id, client: c.client_id, content: c.id, visibility: 'client',
@@ -458,23 +468,50 @@ export function reviewDecision(contentId, actor, { decision, note, adjustments =
   });
 }
 
+// Identificação do pedido do cliente: só por palavras explícitas do próprio texto (nada é adivinhado).
+// Reconhecido → vai direto para quem produziu aquela trilha; não reconhecido → triagem (Rebeca/Vitória/Vivian encaminham).
+const ASPECT_WORDS = [
+  ['legenda', /\blegenda|\bcopy\b|hashtag|texto da legenda/i],
+  ['video', /\bv[ií]deo|\breels?\b|\bcorte|m[uú]sica|[aá]udio|trilha sonora|legendagem|edi[cç][aã]o/i],
+  ['pagina', /\bp[aá]gina\s*\d|\bslide\s*\d|\bcard\s*\d/i],
+  ['imagem', /\bimagem|\bfoto|\bcor(es)?\b|\bfonte|\blogo|\barte\b|\bcapa\b|\bdesign/i],
+  ['texto', /\btexto|\bfrase|\bescrito|\bpalavra|\bt[ií]tulo/i],
+];
+export function identifyAspect(note, given) {
+  if (given && given !== 'outro' && ADJUST_ASPECTS[given]) return given;
+  const hit = ASPECT_WORDS.find(([, re]) => re.test(String(note || '')));
+  return hit ? hit[0] : null;
+}
+const triageUsers = () => { const roles = setting('ajuste_cliente_triagem_roles') || []; return roles.length ? all(`SELECT id FROM users WHERE active=1 AND role_key IN (${roles.map(() => '?').join(',')})`, ...roles).map((r) => r.id) : []; };
+// Pedido de ajuste do cliente: identifica a trilha; se não der para identificar, nasce sem responsável para a triagem encaminhar
+function clientAdjustment(c, actor, args) {
+  const aspect = identifyAspect(args.description, args.aspect);
+  const cname = one('SELECT name FROM clients WHERE id=?', c.client_id)?.name;
+  const adj = createAdjustment(c, actor, { ...args, origin: 'cliente', aspect, triage: !aspect });
+  const who = userName(adj.assigned_to);
+  notify(triageUsers(), aspect
+    ? { level: 'atencao', type: 'ajuste_cliente', title: `${cname} pediu ajuste · ${ADJUST_ASPECTS[aspect]}`, body: `#${c.number} ${c.title}: ${args.description.slice(0, 120)} → enviado para ${who || 'definir responsável'}`, link: `/conteudos/${c.id}`, groupKey: `ajuste-cli:${c.client_id}:${now().slice(0, 10)}`, client: c.client_id, content: c.id }
+    : { level: 'urgente', type: 'ajuste_triagem', title: `${cname} pediu ajuste: encaminhe ao responsável`, body: `#${c.number} ${c.title}: “${args.description.slice(0, 140)}” — a plataforma não identificou se é design, vídeo ou legenda.`, cta: 'Encaminhar', link: `/conteudos/${c.id}`, client: c.client_id, content: c.id });
+  return adj;
+}
+
 // Tipo do ajuste (feedback estruturado do cliente) → trilha responsável
 export const ADJUST_ASPECTS = { texto: 'Texto', imagem: 'Imagem', video: 'Vídeo', legenda: 'Legenda', pagina: 'Página do carrossel', outro: 'Outro' };
 const trackOfAspect = (aspect) => (['legenda', 'texto'].includes(aspect) ? 'legenda' : 'visual');
-function createAdjustment(c, actor, { description, origin, size = 'normal', track = null, aspect = null, assignee_id = null, carousel_page = null, video_timestamp = null, region = null, reapproval = 0 }) {
+function createAdjustment(c, actor, { description, origin, size = 'normal', track = null, aspect = null, assignee_id = null, carousel_page = null, video_timestamp = null, region = null, reapproval = 0, triage = false }) {
   if (!description?.trim()) throw new HttpError(422, 'Explique o ajuste necessário.');
   if (aspect && !ADJUST_ASPECTS[aspect]) aspect = 'outro';
   track = track || (aspect ? trackOfAspect(aspect) : 'visual');
   if (region && typeof region === 'object') region = JSON.stringify({ x: Math.max(0, Math.min(1, Number(region.x) || 0)), y: Math.max(0, Math.min(1, Number(region.y) || 0)) });
   const v = currentVersion(c.id);
   const fn = track === 'legenda' ? 'copy' : productionTracks(c.format)[0].fn;
-  const assignee = assignee_id || lastProducer(c.id, fn) || resolveAssignee(c.client_id, fn);
+  const assignee = triage ? null : assignee_id || lastProducer(c.id, fn) || resolveAssignee(c.client_id, fn);
   const due = dueFor(c, c.stage);
   const t = insert('tasks', { id: uid('t_'), title: `Ajuste ${origin === 'cliente' ? 'do cliente' : 'interno'} — ${c.title}`, description, client_id: c.client_id, content_id: c.id, stage: c.stage, function: fn,
     assignee_id: assignee, status: 'aberta', kind: 'ajuste', origin: 'engine', priority: origin === 'cliente' ? 'alta' : c.priority, due_at: due, created_by: actor.id, created_at: now() });
   const adj = insert('adjustments', { id: uid('aj_'), content_id: c.id, version_id: v?.id || null, origin, size, description, aspect, carousel_page, video_timestamp, region,
     requested_by: actor.id, assigned_to: assignee, task_id: t.id, status: 'aberto', due_at: due, created_at: now(), reapproval: reapproval ? 1 : 0 });
-  notify(assignee, { level: origin === 'cliente' ? 'atencao' : 'info', type: 'ajuste', title: `Ajuste ${origin === 'cliente' ? 'solicitado pelo cliente' : 'interno'}`, body: `#${c.number} ${c.title}: ${description.slice(0, 140)}`, link: `/conteudos/${c.id}`, client: c.client_id, content: c.id });
+  if (assignee) notify(assignee, { level: origin === 'cliente' ? 'atencao' : 'info', type: 'ajuste', title: `Ajuste ${origin === 'cliente' ? 'solicitado pelo cliente' : 'interno'}`, body: `#${c.number} ${c.title}: ${description.slice(0, 140)}`, link: `/conteudos/${c.id}`, client: c.client_id, content: c.id });
   log({ actor: actor.id, action: 'ajuste.criado', entity: 'adjustment', id: adj.id, client: c.client_id, content: c.id, summary: `Ajuste (${origin}${size === 'simples' ? ', simples' : ''}) atribuído a ${userName(assignee) || 'SEM RESPONSÁVEL'}: ${description.slice(0, 120)}` });
   // O cliente vê o registro em linguagem dele, sem nomes internos
   if (origin === 'cliente') log({ actor: actor.id, action: 'ajuste.solicitado', entity: 'adjustment', id: adj.id, client: c.client_id, content: c.id, visibility: 'client',
@@ -566,7 +603,7 @@ export function clientDecision(contentId, actor, { decision, note, carousel_page
       return next;
     }
     const next = enterStage(c, 'ajuste_cliente', actor, { reason: 'cliente solicitou ajuste' });
-    createAdjustment(next, actor, { description: note, origin: 'cliente', size: size === 'simples' ? 'simples' : 'normal', aspect, carousel_page, video_timestamp, region });
+    clientAdjustment(next, actor, { description: note, size: size === 'simples' ? 'simples' : 'normal', aspect, carousel_page, video_timestamp, region });
     if (!onBehalf) notify(actor.id, { level: 'info', type: 'ajuste_recebido', title: 'Seu ajuste foi recebido pela equipe.', body: `${c.title} — a The Bold já está cuidando. Você recebe a nova versão aqui para aprovar.`, link: `/portal/conteudos?c=${c.id}`, groupKey: `ajuste-rec:${c.client_id}`, client: c.client_id });
     automation('cliente.ajuste', { entity: 'content', id: c.id, client: c.client_id });
     return one('SELECT * FROM contents WHERE id=?', c.id);
@@ -774,7 +811,7 @@ export function clientAdjustmentRequest(contentId, actor, { note, carousel_page 
     if (c.stage === 'ajuste_cliente' || c.stage === 'revisao_ajuste') {
       const reap = roundNeedsReapproval(c.id) ? 1 : 0;
       if (c.stage === 'revisao_ajuste') enterStage(c, 'ajuste_cliente', actor, { reason: 'novo pedido do cliente durante o ajuste' });
-      const adj = createAdjustment(one('SELECT * FROM contents WHERE id=?', c.id), actor, { description: note, origin: 'cliente', aspect, carousel_page, video_timestamp, region, reapproval: reap });
+      const adj = clientAdjustment(one('SELECT * FROM contents WHERE id=?', c.id), actor, { description: note, aspect, carousel_page, video_timestamp, region, reapproval: reap });
       return { mode: 'ajuste_adicional', adjustment: adj, content: one('SELECT * FROM contents WHERE id=?', c.id) };
     }
     if (['agendamento', 'agendado'].includes(c.stage)) {
@@ -783,7 +820,7 @@ export function clientAdjustmentRequest(contentId, actor, { note, carousel_page 
       update('contents', { id: c.id }, { approved_version_id: null, scheduled_at: null, schedule_mode: null, client_adjust_rounds: c.client_adjust_rounds + 1, updated_at: now() });
       log({ actor: actor.id, action: 'cliente.ajuste_pos_aprovacao', entity: 'content', id: c.id, client: c.client_id, content: c.id, visibility: 'client', summary: `Ajuste solicitado após a aprovação da V${v?.number} — nova versão volta para aprovação` });
       const next = enterStage(c, 'ajuste_cliente', actor, { reason: 'ajuste pedido após aprovação' });
-      const adj = createAdjustment(next, actor, { description: note, origin: 'cliente', aspect, carousel_page, video_timestamp, region, reapproval: 1 });
+      const adj = clientAdjustment(next, actor, { description: note, aspect, carousel_page, video_timestamp, region, reapproval: 1 });
       const team = all("SELECT DISTINCT user_id FROM client_members WHERE client_id=? AND function IN ('estrategia','atendimento','agendamento')", c.client_id).map((r) => r.user_id);
       notify(team, { level: 'urgente', type: 'ajuste_pos_aprovacao', title: 'Ajuste pedido em conteúdo já aprovado', body: `#${c.number} ${c.title}: ${note.slice(0, 120)}${c.stage === 'agendado' ? ' — o agendamento foi suspenso.' : ''}`, link: `/conteudos/${c.id}`, content: c.id, client: c.client_id });
       notify(actor.id, { level: 'info', type: 'ajuste_recebido', title: 'Seu ajuste foi recebido pela equipe.', body: `${c.title} — a nova versão volta para você aprovar.`, link: '/portal/conteudos', client: c.client_id });

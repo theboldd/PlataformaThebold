@@ -149,3 +149,10 @@ a.jb-cc-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .jb-cc-when .input { width: 150px; min-height: 26px; padding: 2px 6px; font-size: 11px; }
 .jb-cc-go { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--jb-ink); text-decoration: none; padding-top: 6px; border-top: 1px solid var(--jb-line); }
 .jb-cc-go:hover { color: var(--bordo); }
+.jb-cc-prog { display: flex; align-items: center; gap: 8px; }
+.jb-cc-bar { flex: 1; height: 4px; background: var(--jb-line); overflow: hidden; }
+.jb-cc-bar span { display: block; height: 100%; background: var(--tone); filter: brightness(1.6); }
+.jb-cc-prog small { flex: none; font-size: 10px; color: var(--jb-muted); font-variant-numeric: tabular-nums; }
+.jb-cc-all { font: inherit; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 6px 8px; border: 1px dashed var(--bordo); background: transparent; color: var(--jb-ink); cursor: pointer; }
+.jb-cc-all:hover { background: var(--bordo); color: #fff; }
+.jb-cc-all:disabled { opacity: .5; }

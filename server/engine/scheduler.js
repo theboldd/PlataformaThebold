@@ -143,11 +143,14 @@ export function tick() {
       notify(people.filter((p) => p.role_key !== 'cliente').map((p) => p.user_id), { level: 'info', type: 'reuniao', title: 'Reunião amanhã', body: `${hora} · ${m.title}`, link: '/reunioes', groupKey: `reuniao-amanha:${m.starts_at.slice(0, 10)}`, client: m.client_id });
     }
   }
-  // Processo parado (> 3 dias na mesma etapa interna)
-  for (const c of all("SELECT c.*, cl.name cname FROM contents c JOIN clients cl ON cl.id=c.client_id WHERE c.blocked=0 AND c.data_origin='plataforma' AND c.stage IN ('cronograma','analise_cronograma','ajuste_cronograma','producao','analise_producao','ajuste_interno','ajuste_cliente','revisao_ajuste','agendamento') AND c.stage_entered_at < ?", new Date(t - 3 * 864e5).toISOString())) {
+  // Cartão parado (> N dias na mesma etapa interna): lembra quem está com ele e avisa Operações (uma vez por entrada na etapa)
+  const stuckDays = Number(setting('lembrete_parado_dias')) || 3;
+  for (const c of all("SELECT c.*, cl.name cname FROM contents c JOIN clients cl ON cl.id=c.client_id WHERE c.blocked=0 AND c.data_origin='plataforma' AND c.stage IN ('cronograma','analise_cronograma','ajuste_cronograma','producao','analise_producao','ajuste_interno','ajuste_cliente','revisao_ajuste') AND c.stage_entered_at < ?", new Date(t - stuckDays * 864e5).toISOString())) {
     if (isEnabled('processo.parado') && onceFor('processo.parado', c.id, c.stage_entered_at)) {
       automation('processo.parado', { entity: 'content', id: c.id, client: c.client_id, detail: c.stage_entered_at });
-      notify(cc(), { level: 'atencao', type: 'parado', title: 'Conteúdos parados há mais de 3 dias', body: `${c.cname} · #${c.number} em ${STAGES[c.stage].label}`, link: '/processos', groupKey: 'parado:cc' });
+      const holders = all("SELECT DISTINCT assignee_id FROM tasks WHERE content_id=? AND status IN ('aberta','em_andamento') AND assignee_id IS NOT NULL AND function<>'cliente'", c.id).map((r) => r.assignee_id);
+      notify(holders, { level: 'atencao', type: 'parado', title: `Parado há mais de ${stuckDays} dias: ${c.cname}`, body: `#${c.number} ${c.title} em ${STAGES[c.stage].label}. Conclua ou avise o que está faltando.`, link: `/conteudos/${c.id}`, groupKey: `parado:${now().slice(0, 10)}`, client: c.client_id, content: c.id });
+      notify(cc(), { level: 'atencao', type: 'parado', title: `Conteúdos parados há mais de ${stuckDays} dias`, body: `${c.cname} · #${c.number} em ${STAGES[c.stage].label}`, link: '/processos', groupKey: 'parado:cc' });
     }
   }
   // Onboarding: itens atrasados

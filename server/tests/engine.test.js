@@ -93,25 +93,21 @@ test('ciclo completo do conteúdo: o engine move tudo sozinho e preserva versõe
   const aviso = one("SELECT * FROM notifications WHERE user_id=? AND type='ajuste_feito' ORDER BY created_at DESC LIMIT 1", U.ceo.id);
   assert.ok(aviso, 'quem pediu o ajuste recebe o aviso');
   assert.match(aviso.title, /fez o ajuste pedido/);
-  // Cliente pede ajuste → nova versão → conferência → cliente aprova V3
+  // Cliente pede ajuste → nova versão → regra da CEO (23/10): ajuste feito segue para publicar (V3 liberada pela equipe)
   P.clientDecision(c.id, user(cu), { decision: 'ajuste', note: 'Trocar frase da página 2', carousel_page: 2 }, req);
   assert.equal(fresh(c).stage, 'ajuste_cliente');
   assert.equal(one("SELECT carousel_page FROM adjustments WHERE content_id=? AND origin='cliente'", c.id).carousel_page, 2);
+  assert.equal(open(c)[0].assignee_id, U.des.id, 'pedido identificado (página) vai direto para quem produziu');
   await addImage(c, user(U.des), '#F6F3F0');
   P.completeTask(open(c)[0].id, user(U.des));
-  assert.equal(fresh(c).stage, 'revisao_ajuste');
-  review(c.id, user(U.est), { decision: 'aprovar' }, req);
-  assert.equal(fresh(c).stage, 'aprovacao_cliente', 'regra The Bold (21/10): a V3 que resolve o ajuste volta para o cliente aprovar');
-  assert.equal(fresh(c).approved_version_id, null, 'nenhuma aprovação inferida pela etapa');
-  P.clientDecision(c.id, user(cu), { decision: 'aprovar' }, req);
   c = fresh(c);
-  assert.equal(c.stage, 'agendamento');
+  assert.equal(c.stage, 'agendamento', 'ajuste do cliente feito → liberado para publicação');
   const versions = all('SELECT * FROM content_versions WHERE content_id=? ORDER BY number', c.id);
   assert.equal(versions.length, 3, 'V1, V2 e V3 preservadas');
   const released = versions.find((v) => v.id === c.approved_version_id);
   assert.equal(released.number, 3);
-  assert.equal(released.status, 'aprovada');
-  assert.equal(released.approved_by, cu.id, 'aprovada pelo cliente, não pela equipe');
+  assert.equal(released.status, 'liberada', 'liberada pela equipe — nunca marcada como aprovada pelo cliente');
+  assert.equal(released.approved_by, null);
   assert.equal(released.locked, 1);
   assert.deepEqual(versions.slice(0, 2).map((v) => v.status), ['substituida', 'substituida']);
   const ap = one("SELECT * FROM approvals WHERE content_id=? AND kind='cliente' AND decision='ajuste'", c.id);
