@@ -171,7 +171,7 @@ export default function Processos() {
             <div key={sw.key} className="jb-swim">
               {sw.label && <div className="jb-swim-head"><span className="jb-label" style={{ background: toneOf(sw.label) }}>{cleanName(sw.label)}</span><span className="jb-swim-count">{sw.lanes.reduce((n, l) => n + l.cards.length, 0)} itens{group === 'client' ? ` · ${byFormat(sw.lanes)}` : ''}</span></div>}
               <div className="jb-board">
-                {sw.lanes.map((lane) => <Column key={lane.key} lane={lane} byClient={byClient} reload={reload} progress={data.progress} teamView={view === 'equipe'} moved={moved} showHead={sw === swimlanes[0] || !!sw.label} onDropCard={canMove ? (card) => setMoving({ content: card, targets: lane.targets || (lane.stages || []).map((x) => x.key) }) : null} />)}
+                {sw.lanes.map((lane) => <Column key={lane.key} lane={lane} byClient={byClient} reload={reload} progress={data.progress} people={data.filters.people} teamView={view === 'equipe'} moved={moved} showHead={sw === swimlanes[0] || !!sw.label} onDropCard={canMove ? (card) => setMoving({ content: card, targets: lane.targets || (lane.stages || []).map((x) => x.key) }) : null} />)}
               </div>
             </div>
           ))}
@@ -221,7 +221,7 @@ function teamLanes(data) {
   ];
 }
 
-function Column({ lane, moved, showHead, onDropCard, teamView, byClient, reload, progress }) {
+function Column({ lane, moved, showHead, onDropCard, teamView, byClient, reload, progress, people }) {
   const cls = laneClass(lane);
   const sub = lane.label && lane.label.toLowerCase() !== (CLASS[cls]?.label || '').toLowerCase() && lane.label !== 'Edição de vídeo' ? lane.label : null;
   const [over, setOver] = useState(false);
@@ -245,7 +245,7 @@ function Column({ lane, moved, showHead, onDropCard, teamView, byClient, reload,
       )}
       <div className="jb-col-body">
         {byClient
-          ? groupByClient(lane.cards).map((g) => <ClientCard key={g.client_id} g={g} lane={lane} moved={moved} reload={reload} progress={progress?.[g.client_id]} />)
+          ? groupByClient(lane.cards).map((g) => <ClientCard key={g.client_id} g={g} lane={lane} moved={moved} reload={reload} progress={progress?.[g.client_id]} people={people} />)
           : lane.cards.map((c) => <Card key={c.id} c={c} classes={teamView ? [cls] : cardClasses(c)} moved={moved.has(c.id)} draggable={!!onDropCard} track={lane.fn ? c.tracks?.find((t) => t.fn === lane.fn && (t.assignee_id || null) === (lane.person?.id || null)) : null} />)}
         {!lane.cards.length && lane.person && <div className="jb-col-empty">Nada com {lane.person.id ? lane.person.name.split(' ')[0] : 'ninguém'} agora</div>}
       </div>
@@ -267,84 +267,123 @@ function groupByClient(cards) {
   for (const c of cards) (m.get(c.client_id) || m.set(c.client_id, { client_id: c.client_id, client: c.client, restricted: c.restricted, items: [] }).get(c.client_id)).items.push(c);
   return [...m.values()].sort((a, b) => (a.client || '').localeCompare(b.client || ''));
 }
-const STAGE_HINT = { analise_producao: 'revisar', analise_cronograma: 'revisar', revisao_ajuste: 'conferir', ajuste_interno: 'ajustar', ajuste_cliente: 'ajustar' };
 
-// CARTÃO DO CLIENTE — as demandas daquele cliente nesta coluna. Quem tem a tarefa conclui ali mesmo;
-// concluir manda para a próxima etapa pelo Process Engine (revisão, aprovação…) e avisa quem precisa saber.
-function ClientCard({ g, lane, moved, reload, progress }) {
+// CARTÃO DO CLIENTE — no quadro fica só o resumo (cliente, quantidade, progresso). As demandas ficam DENTRO dele:
+// ao clicar, abre o cartão com a lista para dar o check. Check = concluir: o Process Engine manda para a próxima etapa
+// e avisa o próximo responsável. Cada demanda aceita comentário interno com @menção.
+function ClientCard({ g, lane, moved, reload, progress, people }) {
+  const [open, setOpen] = useState(false);
+  const formats = byFormat([{ cards: g.items }]);
+  const late = g.items.filter((c) => c.due_at && new Date(c.due_at) < new Date()).length;
+  const blocked = g.items.filter((c) => c.blocked).length;
+  const key = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setOpen(true); } };
+  return (
+    <>
+      <article className={`jb-cc ${g.items.some((c) => moved.has(c.id)) ? 'moved' : ''}`} style={{ '--tone': toneOf(g.client_id) }} role="button" tabIndex={0} onClick={() => setOpen(true)} onKeyDown={key} aria-label={`${cleanName(g.client || '')}: ${pl(g.items.length, 'demanda', 'demandas')}. Abrir`}>
+        <header className="jb-cc-h">
+          <span className="jb-cc-name">{cleanName(g.client || '')}</span>
+          <span className="jb-cc-n" title={pl(g.items.length, 'demanda', 'demandas')}>{g.items.length}</span>
+        </header>
+        <div className="jb-cc-sub">{formats}{late ? <b className="late"> · {pl(late, 'atrasada', 'atrasadas')}</b> : null}{blocked ? <b className="late"> · {blocked} aguardando material</b> : null}</div>
+        {progress?.total > 0 && (
+          <div className="jb-cc-prog" title={`${progress.done} de ${progress.total} conteúdos do mês liberados para publicação ou publicados`}>
+            <span className="jb-cc-bar" aria-hidden><span style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }} /></span>
+            <small>{progress.done} de {progress.total} prontos</small>
+          </div>
+        )}
+        <span className="jb-cc-open">Abrir demandas →</span>
+      </article>
+      {open && (
+        <Drawer open onClose={() => setOpen(false)} title={cleanName(g.client || '')} kicker={`${lane.person ? `${lane.label} · ${lane.person.name}` : lane.label} · ${pl(g.items.length, 'demanda', 'demandas')}`} wide>
+          <ClientDemands g={g} lane={lane} reload={reload} people={people} />
+        </Drawer>
+      )}
+    </>
+  );
+}
+
+function ClientDemands({ g, lane, reload, people = [] }) {
   const auth = useAuth();
   const toast = useToast();
   const [busy, setBusy] = useState(null);
   const [when, setWhen] = useState({});
+  const [note, setNote] = useState({}); // comentário aberto por demanda
   const run = async (key, fn, ok) => { setBusy(key); try { await fn(); toast(ok); reload(); } catch (e) { toast(e.message, 'err'); } finally { setBusy(null); } };
   const canApprove = auth.can('conteudos', 'approve');
-  const formats = byFormat([{ cards: g.items }]);
-  const late = g.items.filter((c) => c.due_at && new Date(c.due_at) < new Date()).length;
-  // "Concluir todas": as demandas desta coluna que a pessoa pode concluir agora (com arquivo/legenda já enviados)
   const trackOf = (c) => (lane.fn ? c.tracks?.find((t) => t.fn === lane.fn && (t.assignee_id || null) === (lane.person?.id || null)) : c.tracks?.find((t) => ['etapa', 'ajuste'].includes(t.kind) && t.fn !== 'revisao') || null);
-  const ready = g.items.map((c) => [c, trackOf(c)]).filter(([c, tr]) => !c.restricted && !c.blocked && tr && (tr.assignee_id === auth.user.id || canApprove)
-    && ['producao', 'ajuste_interno', 'ajuste_cliente', 'cronograma', 'ajuste_cronograma'].includes(c.stage)
+  const CHECKABLE = ['producao', 'ajuste_interno', 'ajuste_cliente', 'cronograma', 'ajuste_cronograma'];
+  const ready = g.items.map((c) => [c, trackOf(c)]).filter(([c, tr]) => !c.restricted && !c.blocked && tr && (tr.assignee_id === auth.user.id || canApprove) && CHECKABLE.includes(c.stage)
     && !(c.stage === 'producao' && ((tr.track === 'visual' && !c.has_media) || (tr.track === 'legenda' && !c.has_caption))));
-  const completeAll = () => run('all', async () => { let ok = 0; const fails = []; for (const [c, tr] of ready) { try { await api.post(`/tasks/${tr.task_id}/complete`); ok++; } catch (e) { fails.push(`${c.title}: ${e.message}`); } } if (fails.length) throw new Error(`${ok} concluída(s). Não deu em ${fails.length}: ${fails[0]}`); }, `${pl(ready.length, 'demanda concluída', 'demandas concluídas')}.`);
+  const completeAll = () => run('all', async () => { let ok = 0; const fails = []; for (const [c, tr] of ready) { try { await api.post(`/tasks/${tr.task_id}/complete`); ok++; } catch (e) { fails.push(`${c.title}: ${e.message}`); } } if (fails.length) throw new Error(`${ok} concluída(s). Não deu em ${fails.length}: ${fails[0]}`); }, `${pl(ready.length, 'demanda concluída', 'demandas concluídas')}. Os próximos responsáveis foram avisados.`);
   const reviewCol = ['analise_producao', 'analise_cronograma'].some((s) => (lane.targets || lane.stages?.map((x) => x.key) || []).includes(s));
+  const sendNote = (c) => run(`n:${c.id}`, async () => { await api.post(`/contents/${c.id}/comments`, { body: note[c.id], visibility: 'internal' }); setNote((n) => { const x = { ...n }; delete x[c.id]; return x; }); }, 'Comentário enviado. Quem foi mencionado recebe a notificação.');
+  const mention = (c, name) => setNote((n) => ({ ...n, [c.id]: `${(n[c.id] || '').replace(/\s*$/, '')}${n[c.id] ? ' ' : ''}@${name.split(' ')[0]} ` }));
   return (
-    <article className={`jb-cc ${g.items.some((c) => moved.has(c.id)) ? 'moved' : ''}`} style={{ '--tone': toneOf(g.client_id) }}>
-      <header className="jb-cc-h">
-        {g.restricted ? <span className="jb-cc-name">{cleanName(g.client || '')}</span> : <Link to={`/clientes/${g.client_id}`} className="jb-cc-name" title="Abrir a ficha do cliente">{cleanName(g.client || '')} ↗</Link>}
-        <span className="jb-cc-n" title={pl(g.items.length, 'demanda', 'demandas')}>{g.items.length}</span>
-      </header>
-      <div className="jb-cc-sub">{formats}{late ? <b className="late"> · {pl(late, 'atrasada', 'atrasadas')}</b> : null}</div>
-      {progress?.total > 0 && (
-        <div className="jb-cc-prog" title={`${progress.done} de ${progress.total} conteúdos do mês liberados para publicação ou publicados`}>
-          <span className="jb-cc-bar" aria-hidden><span style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }} /></span>
-          <small>{progress.done} de {progress.total} prontos</small>
-        </div>
-      )}
-      <ul className="jb-cc-list">
+    <div className="jb-dm">
+      <div className="row between wrap gap-2">
+        {!g.restricted ? <Link className="link sm" to={`/clientes/${g.client_id}`}>Abrir a ficha do cliente ↗</Link> : <span />}
+        {ready.length > 1 && <button className="jb-cc-all" disabled={busy === 'all'} onClick={completeAll}>✓ Concluir todas ({ready.length})</button>}
+      </div>
+      <p className="xs muted">Dar o check conclui a sua parte: o conteúdo segue para a próxima etapa e o próximo responsável recebe a notificação. Para chamar alguém sem concluir, use o comentário com @nome.</p>
+      <ul className="jb-dm-list">
         {g.items.map((c) => {
-          // a trilha desta coluna (coluna de pessoa) ou a primeira tarefa aberta do conteúdo
-          const tr = lane.fn ? c.tracks?.find((t) => t.fn === lane.fn && (t.assignee_id || null) === (lane.person?.id || null)) : c.tracks?.find((t) => ['etapa', 'ajuste'].includes(t.kind) && !['revisao'].includes(t.fn)) || null;
+          const tr = trackOf(c);
           const mine = tr && (tr.assignee_id === auth.user.id || canApprove);
           const needsFile = tr?.track === 'visual' && !c.has_media && c.stage === 'producao';
           const needsCaption = tr?.track === 'legenda' && !c.has_caption && c.stage === 'producao';
           const due = tr?.due_at || c.due_at;
           const overdue = due && new Date(due) < new Date();
-          const doable = !c.restricted && !c.blocked && tr && mine && ['producao', 'ajuste_interno', 'ajuste_cliente', 'cronograma', 'ajuste_cronograma'].includes(c.stage);
+          const doable = !c.restricted && !c.blocked && tr && mine && CHECKABLE.includes(c.stage);
+          const canCheck = doable && !needsFile && !needsCaption;
           return (
             <li key={c.id} className={c.blocked ? 'blocked' : ''}>
-              <span className={`jb-type t-${c.format}`} title={FORMATS[c.format]}>{FORMATS[c.format]?.[0]}</span>
-              <span className="jb-cc-t">
-                {c.restricted ? <span>{c.title}</span> : <Link to={`/conteudos/${c.id}`}>{c.title}</Link>}
-                <small>
-                  {c.blocked ? <b className="late">■ {c.block_reason || 'Bloqueado'}</b> : lane.person ? <>{FORMATS[c.format]}</> : <>{tr?.name ? tr.name.split(' ')[0] : c.owner && c.owner !== 'SEM RESPONSÁVEL' ? c.owner.split(' ')[0] : c.owner === 'SEM RESPONSÁVEL' ? 'Sem responsável' : c.stage_label}</>}
-                  {due && !c.blocked && <span className={overdue ? 'late' : ''}> · {new Date(due).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', timeZone: 'America/Sao_Paulo' }).replace('.', '')}</span>}
-                  {STAGE_HINT[c.stage] && !lane.fn && <span> · {STAGE_HINT[c.stage]}</span>}
-                </small>
-              </span>
-              {doable && (needsFile || needsCaption
-                ? <Link className="jb-cc-btn ghost" to={`/conteudos/${c.id}`} title={needsFile ? 'Envie a capa/arte/vídeo antes de concluir' : 'Escreva a legenda antes de concluir'}>{needsFile ? 'Enviar arquivo' : 'Escrever legenda'}</Link>
-                : <button className="jb-cc-btn" disabled={busy === c.id} onClick={() => run(c.id, () => api.post(`/tasks/${tr.task_id}/complete`), c.stage.startsWith('ajuste') ? 'Ajuste concluído.' : 'Concluído. Seguiu para a próxima etapa.')}>Concluir</button>)}
-              {!c.restricted && c.stage === 'agendamento' && (
-                when[c.id] != null ? (
-                  <span className="jb-cc-when">
-                    <input type="datetime-local" className="input" value={when[c.id]} onChange={(e) => setWhen((w) => ({ ...w, [c.id]: e.target.value }))} aria-label="Data e hora do agendamento" />
-                    <button className="jb-cc-btn" disabled={!when[c.id] || busy === c.id} onClick={() => run(c.id, () => api.post(`/contents/${c.id}/schedule`, { at: new Date(when[c.id]).toISOString(), mode: 'externo' }), 'Marcado como agendado.')}>OK</button>
-                  </span>
-                ) : (
-                  <span className="jb-cc-acts">
-                    <button className="jb-cc-btn ghost" onClick={() => setWhen((w) => ({ ...w, [c.id]: '' }))} title="Agendado no Meta: informe data e hora">Agendado</button>
-                    <button className="jb-cc-btn" disabled={busy === c.id} title="Já foi ao ar" onClick={() => run(c.id, async () => { await api.post(`/contents/${c.id}/schedule`, { at: new Date().toISOString(), mode: 'externo' }); await api.post(`/contents/${c.id}/published`, {}); }, 'Publicação registrada.')}>✓ Publicado</button>
-                  </span>
-                )
-              )}
-              {!c.restricted && c.stage === 'agendado' && <button className="jb-cc-btn" disabled={busy === c.id} onClick={() => run(c.id, () => api.post(`/contents/${c.id}/published`, {}), 'Publicação registrada.')}>✓ Publicado</button>}
+              <button type="button" className={`jb-dm-check ${canCheck ? '' : 'off'}`} disabled={!canCheck || busy === c.id} aria-label={canCheck ? `Concluir ${c.title}` : 'Sem ação sua nesta demanda agora'}
+                title={canCheck ? 'Concluir e enviar para a próxima etapa' : needsFile ? 'Envie o arquivo antes de concluir' : needsCaption ? 'Escreva a legenda antes de concluir' : c.blocked ? 'Bloqueado' : 'Não está com você agora'}
+                onClick={() => run(c.id, () => api.post(`/tasks/${tr.task_id}/complete`), c.stage.startsWith('ajuste') ? 'Ajuste concluído. Quem pediu foi avisado.' : 'Concluído. O próximo responsável foi avisado.')} />
+              <div className="jb-dm-body">
+                <div className="jb-dm-top">
+                  <span className={`jb-type t-${c.format}`} title={FORMATS[c.format]}>{FORMATS[c.format]?.[0]}</span>
+                  {c.restricted ? <b>{c.title}</b> : <Link to={`/conteudos/${c.id}`} className="jb-dm-t">{c.title}</Link>}
+                </div>
+                <div className="jb-dm-meta">
+                  {c.blocked ? <b className="late">■ {c.block_reason || 'Bloqueado'}</b> : <span>{c.stage_label}{tr?.name ? ` · com ${tr.name.split(' ')[0]}` : c.owner === 'SEM RESPONSÁVEL' ? ' · sem responsável' : ''}</span>}
+                  {due && !c.blocked && <span className={overdue ? 'late' : ''}>prazo {new Date(due).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', timeZone: 'America/Sao_Paulo' }).replace('.', '')}</span>}
+                  {c.planned_at && <span>publicação {new Date(c.planned_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', timeZone: 'America/Sao_Paulo' }).replace('.', '')}</span>}
+                </div>
+                <div className="jb-dm-acts">
+                  {doable && needsFile && <Link className="jb-cc-btn ghost" to={`/conteudos/${c.id}`}>Enviar arquivo</Link>}
+                  {doable && needsCaption && <Link className="jb-cc-btn ghost" to={`/conteudos/${c.id}`}>Escrever legenda</Link>}
+                  {!c.restricted && c.stage === 'agendamento' && (when[c.id] != null ? (
+                    <span className="jb-cc-when">
+                      <input type="datetime-local" className="input" value={when[c.id]} onChange={(e) => setWhen((w) => ({ ...w, [c.id]: e.target.value }))} aria-label="Data e hora do agendamento" />
+                      <button className="jb-cc-btn" disabled={!when[c.id] || busy === c.id} onClick={() => run(c.id, () => api.post(`/contents/${c.id}/schedule`, { at: new Date(when[c.id]).toISOString(), mode: 'externo' }), 'Marcado como agendado.')}>OK</button>
+                    </span>
+                  ) : (
+                    <>
+                      <button className="jb-cc-btn ghost" onClick={() => setWhen((w) => ({ ...w, [c.id]: '' }))} title="Agendado no Meta: informe data e hora">Agendado</button>
+                      <button className="jb-cc-btn" disabled={busy === c.id} title="Já foi ao ar" onClick={() => run(c.id, async () => { await api.post(`/contents/${c.id}/schedule`, { at: new Date().toISOString(), mode: 'externo' }); await api.post(`/contents/${c.id}/published`, {}); }, 'Publicação registrada.')}>✓ Publicado</button>
+                    </>
+                  ))}
+                  {!c.restricted && c.stage === 'agendado' && <button className="jb-cc-btn" disabled={busy === c.id} onClick={() => run(c.id, () => api.post(`/contents/${c.id}/published`, {}), 'Publicação registrada.')}>✓ Publicado</button>}
+                  {!c.restricted && note[c.id] == null && <button className="jb-dm-link" onClick={() => setNote((n) => ({ ...n, [c.id]: '' }))}>Comentar / mencionar</button>}
+                </div>
+                {note[c.id] != null && (
+                  <div className="jb-dm-note">
+                    <textarea className="textarea" rows={2} autoFocus value={note[c.id]} onChange={(e) => setNote((n) => ({ ...n, [c.id]: e.target.value }))} placeholder="Comentário interno… use @nome para chamar alguém" aria-label="Comentário" />
+                    <div className="jb-dm-people">{people.slice(0, 12).map((u) => <button key={u.id} type="button" onClick={() => mention(c, u.name)}>@{u.name.split(' ')[0]}</button>)}</div>
+                    <div className="row gap-2">
+                      <button className="jb-cc-btn" disabled={!note[c.id]?.trim() || busy === `n:${c.id}`} onClick={() => sendNote(c)}>Enviar</button>
+                      <button className="jb-dm-link" onClick={() => setNote((n) => { const x = { ...n }; delete x[c.id]; return x; })}>Cancelar</button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </li>
           );
         })}
       </ul>
-      {ready.length > 1 && <button className="jb-cc-all" disabled={busy === 'all'} onClick={completeAll}>Concluir todas ({ready.length})</button>}
-      {reviewCol && !g.restricted && <Link className="jb-cc-go" to={`/revisao/${g.client_id}`}>Revisar {g.items.length > 1 ? `as ${g.items.length} demandas` : 'a demanda'} na Sala de Revisão →</Link>}
-    </article>
+      {reviewCol && !g.restricted && <Link className="btn btn-primary mt-4" to={`/revisao/${g.client_id}`}>Revisar {g.items.length > 1 ? `as ${g.items.length} demandas` : 'a demanda'} na Sala de Revisão</Link>}
+    </div>
   );
 }
 

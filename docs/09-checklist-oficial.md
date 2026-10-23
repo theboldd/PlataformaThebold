@@ -1,5 +1,14 @@
 # THE BOLD OS — Checklist oficial de conferência
 
+## Revisão 5.2 · 23/10/2026 — Demandas dentro do cartão do cliente
+
+| O que | Onde | Estado |
+|---|---|---|
+| No quadro, o cartão do cliente mostra só o resumo (quantidade, tipos, atrasos, aguardando material, progresso); as demandas ficam dentro dele | Processos | 🟢 |
+| Ao clicar, abre o cartão com as demandas para dar o check: o check conclui a parte da pessoa, o conteúdo segue para a próxima etapa e o próximo responsável é notificado | Processos | 🟢 |
+| Em cada demanda: comentário interno com @menção (botões com os nomes da equipe); quem é mencionado recebe notificação | Processos | 🟢 |
+| “Concluir todas”, “Enviar arquivo / Escrever legenda”, check da Vivian (Agendado / ✓ Publicado) e atalho para a Sala de Revisão ficam dentro do cartão | Processos | 🟢 |
+
 ## Revisão 5.1 · 23/10/2026 — Recomeço da operação com novembro
 
 | O que | Onde | Estado |
