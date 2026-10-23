@@ -1,4 +1,4 @@
-// CENTRO DE PENDÊNCIAS — radar operacional: quantos problemas → quais urgentes → o que trava → quem age → próxima ação.
+// PENDÊNCIAS — radar operacional: quantos problemas → quais urgentes → o que trava → quem age → próxima ação.
 // Pendências são derivadas do estado real; agir aqui = agir na origem (tarefa, conteúdo, item de onboarding).
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -6,29 +6,40 @@ import { useApi, useToast } from '../lib/hooks.js';
 import { api } from '../lib/api.js';
 import { useCrumbs } from '../components/Shell.jsx';
 import { Loading, Empty, ErrorBox, Drawer, Button } from '../components/ui.jsx';
-import { I } from '../components/Icons.jsx';
 import { fmtDateTime, ago, cleanName } from '../lib/format.js';
 import { FUNCTIONS } from '../lib/status.js';
 import '../styles/pend.css';
-import { StatePanel } from '../components/State.jsx';
 import { useDetailParam } from '../lib/nav.jsx';
 
 const SEV = [['critica', 'Críticas'], ['alta', 'Altas'], ['media', 'Médias'], ['baixa', 'Baixas']];
 const SEV1 = { critica: 'Crítica', alta: 'Alta', media: 'Média', baixa: 'Baixa' };
+const TONE = { critica: 't-rosa', alta: 't-pessego', media: 't-manteiga', baixa: 't-azul' };
+const SEV_HINT = { critica: 'travam o fluxo agora', alta: 'atrasam as próximas etapas', media: 'pedem acompanhamento', baixa: 'sem urgência' };
 const KEYS = ['sev', 'cause', 'client', 'who', 'process'];
 const pad = (n) => String(n).padStart(2, '0');
 const pl = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+// Radar de prioridade: 4 cartões com cor (vazio = apagado, mas a estrutura fica)
+function Radar({ C, f, set }) {
+  return (
+    <section className="pd-radar" aria-label="Prioridade">
+      {SEV.map(([k, label]) => (
+        <button key={k} className={`pd-sev ${TONE[k]} ${f?.sev === k ? 'on' : ''} ${!C[k] ? 'zero' : ''}`} onClick={() => set?.('sev', k)} aria-pressed={f?.sev === k} disabled={!C[k]}>
+          <span className="pd-sev-l"><i aria-hidden />{label}</span>
+          <span className="pd-big">{pad(C[k])}</span>
+          <span className="pd-sev-h">{SEV_HINT[k]}</span>
+        </button>
+      ))}
+    </section>
+  );
+}
 
 // Com zero pendências a estrutura continua visível: prioridades, como cada pendência é lida e o que fica fora (regra 23)
 function PendStructure({ data }) {
   const fr = data.fora_regra_23;
   return (
-    <div className="col gap-5 mt-5">
-      <section className="pd-radar" aria-label="Prioridade">
-        {SEV.map(([k, label]) => (
-          <div key={k} className={`pd-sev s-${k} zero`}><span className="pd-big">00</span><span className="pd-sev-l"><i aria-hidden />{label}</span></div>
-        ))}
-      </section>
+    <div className="pd-empty-wrap">
+      <Radar C={data.counts} />
       <section>
         <h2 className="pd-h2">Como cada pendência é lida</h2>
         <ol className="pd-model">
@@ -37,18 +48,25 @@ function PendStructure({ data }) {
         <p className="xs muted">Filtros disponíveis quando houver pendências: prioridade, causa, cliente, quem age e processo.</p>
       </section>
       {fr && (fr.tarefas_herdadas_abertas > 0 || fr.conteudos_migrados_bloqueados > 0) && (
-        <StatePanel s="aguardando_decisao" kicker="Fora das pendências · regra 23" title="O que veio do Notion não gera pendência.">
-          <p>{fr.tarefas_herdadas_abertas} tarefas herdadas abertas ({fr.tarefas_herdadas_vencidas} com prazo já passado) e {fr.conteudos_migrados_bloqueados} conteúdos migrados bloqueados ficam fora daqui. {fr.legado_nao_validado} itens legados aguardam validação individual.</p>
-          <p className="xs muted">Como tratar o trabalho migrado em andamento é uma decisão pendente da CEO. Enquanto isso, ele aparece na Torre (marcado como herdado) e em Itens legados.</p>
+        <section className="pd-fora" aria-labelledby="pd-fora-t">
+          <div className="pd-fora-h"><span className="pd-fora-k">Fora das pendências · regra 23</span><span className="pd-fora-st">Aguardando decisão</span></div>
+          <h2 id="pd-fora-t" className="pd-fora-t">O que veio do Notion não gera pendência.</h2>
+          <ul className="pd-fora-n">
+            <li><b>{fr.tarefas_herdadas_abertas}</b><span>tarefas herdadas abertas</span></li>
+            <li><b>{fr.tarefas_herdadas_vencidas}</b><span>delas com prazo já passado</span></li>
+            <li><b>{fr.conteudos_migrados_bloqueados}</b><span>conteúdos migrados bloqueados</span></li>
+            <li><b>{fr.legado_nao_validado}</b><span>itens legados aguardando validação</span></li>
+          </ul>
+          <p className="pd-fora-x">Como tratar o trabalho migrado em andamento é uma decisão pendente da CEO. Enquanto isso, ele aparece na Torre (marcado como herdado) e em Itens legados.</p>
           <div className="row wrap gap-2"><Link to="/torre" className="btn btn-sm">Ver na Torre</Link><Link to="/atrasos" className="btn btn-sm">Itens legados</Link></div>
-        </StatePanel>
+        </section>
       )}
     </div>
   );
 }
 
 export default function Pendencias() {
-  useCrumbs('Centro de Pendências');
+  useCrumbs('Pendências');
   const [params, setParams] = useSearchParams();
   // MINHAS (o que exige ação minha) × EQUIPE (operação inteira — só com permissão)
   const scope = params.get('escopo') === 'equipe' ? 'equipe' : 'minhas';
@@ -60,61 +78,58 @@ export default function Pendencias() {
   const shown = useMemo(() => items.filter((i) => (!f.sev || i.severity === f.sev) && (!f.cause || i.cause === f.cause) && (!f.client || i.client_id === f.client) && (!f.who || i.who === f.who) && (!f.process || i.process === f.process)),
     [items, f.sev, f.cause, f.client, f.who, f.process]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (error?.status === 403) return <div className="page"><div className="pd-head"><h1 className="pd-h1">Centro de Pendências</h1></div><Empty title="Visão restrita.">{error.message} <a className="link" href="/pendencias">Ver as minhas</a></Empty></div>;
+  const head = (
+    <header className="pd-head">
+      <div className="pd-top">
+        <span className="pd-kicker">Centro de Pendências · derivadas do estado real</span>
+        {data && (
+          <div className="pd-scope" role="tablist" aria-label="Escopo">
+            <button role="tab" aria-selected={scope === 'minhas'} className={scope === 'minhas' ? 'on' : ''} onClick={() => setParams({}, { replace: true })}>Minhas <b>{data.tab_counts.minhas}</b></button>
+            {data.can_team && <button role="tab" aria-selected={scope === 'equipe'} className={scope === 'equipe' ? 'on' : ''} onClick={() => setParams({ escopo: 'equipe' }, { replace: true })}>Equipe <b>{data.tab_counts.equipe}</b></button>}
+          </div>
+        )}
+      </div>
+      <h1 className="pd-h1">{scope === 'minhas' ? 'O que depende de você?' : 'O que está travando a operação?'}</h1>
+      {data && <p className="pd-sub">{scope === 'minhas' ? 'Só o que exige ação sua' : 'Toda a operação'} · {pl(data.counts.total, 'pendência', 'pendências')}</p>}
+    </header>
+  );
+
+  if (error?.status === 403) return <div className="page pd">{head}<Empty title="Visão restrita.">{error.message} <a className="link" href="/pendencias">Ver as minhas</a></Empty></div>;
   if (error) return <div className="page"><ErrorBox error={error} /></div>;
   if (loading && !data) return <div className="page"><Loading rows={8} /></div>;
   const C = data.counts;
-  const maxCause = Math.max(1, ...data.causes.map((c) => c.n));
   const active = KEYS.some((k) => f[k]);
   const whoCount = [...shown.reduce((m, i) => m.set(i.who, (m.get(i.who) || 0) + 1), new Map())].sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="page pd">
-      <header className="pd-head">
-        <div>
-          <h1 className="pd-h1">{scope === 'minhas' ? 'O que depende de você?' : 'O que está travando a operação?'}</h1>
-          <p className="pd-sub">{scope === 'minhas' ? 'Só o que exige ação sua' : 'Pendências de toda a operação'} · derivadas do estado real · {pl(C.total, 'pendência', 'pendências')}</p>
-        </div>
-        <div className="pd-scope" role="tablist" aria-label="Escopo">
-          <button role="tab" aria-selected={scope === 'minhas'} className={scope === 'minhas' ? 'on' : ''} onClick={() => setParams({}, { replace: true })}>Minhas <b>{data.tab_counts.minhas}</b></button>
-          {data.can_team && <button role="tab" aria-selected={scope === 'equipe'} className={scope === 'equipe' ? 'on' : ''} onClick={() => setParams({ escopo: 'equipe' }, { replace: true })}>Equipe <b>{data.tab_counts.equipe}</b></button>}
-        </div>
-      </header>
+      {head}
 
       {!C.total ? (
-<>
-        <div className="pd-clear"><span className="pd-big">00</span><p>{scope === 'minhas' ? 'Nada depende de você agora. Quando uma tarefa sua atrasar, um conteúdo seu travar ou um cliente seu esperar resposta, aparece aqui.' : 'Nada travando a operação agora. Tarefas atrasadas, bloqueios, onboarding parado e pagamentos vencidos aparecem aqui sozinhos.'}</p></div>
+        <>
+          <div className="pd-clear t-verde">
+            <span className="pd-clear-n">00</span>
+            <div><span className="pd-clear-k">Em dia</span><p>{scope === 'minhas' ? 'Nada depende de você agora. Quando uma tarefa sua atrasar, um conteúdo seu travar ou um cliente seu esperar resposta, aparece aqui.' : 'Nada travando a operação agora. Tarefas atrasadas, bloqueios, onboarding parado e pagamentos vencidos aparecem aqui sozinhos.'}</p></div>
+          </div>
           <PendStructure data={data} />
         </>
       ) : (
         <>
-          {/* RADAR DE PRIORIDADE */}
-          <section className="pd-radar" aria-label="Prioridade">
-            {SEV.map(([k, label]) => (
-              <button key={k} className={`pd-sev s-${k} ${f.sev === k ? 'on' : ''} ${!C[k] ? 'zero' : ''}`} onClick={() => set('sev', k)} aria-pressed={f.sev === k} disabled={!C[k]}>
-                <span className="pd-big">{pad(C[k])}</span>
-                <span className="pd-sev-l"><i aria-hidden />{label}</span>
-                <span className="pd-sev-bar" aria-hidden><span style={{ width: `${C.total ? (C[k] / C.total) * 100 : 0}%` }} /></span>
-              </button>
-            ))}
-          </section>
+          <Radar C={C} f={f} set={set} />
 
-          {/* O QUE ESTÁ TRAVANDO */}
+          {/* O QUE ESTÁ TRAVANDO — causas em uma linha */}
           <section className="pd-causes" aria-labelledby="pd-c-t">
             <h2 id="pd-c-t" className="pd-h2">O que está travando</h2>
-            <div className="pd-cause-grid">
+            <div className="pd-cause-row">
               {data.causes.map((c) => (
                 <button key={c.key} className={`pd-cause ${f.cause === c.key ? 'on' : ''}`} onClick={() => set('cause', c.key)} aria-pressed={f.cause === c.key}>
-                  <span className="pd-cause-n">{pad(c.n)}</span>
-                  <span className="pd-cause-l">{c.label}</span>
-                  <span className="pd-cause-bar" aria-hidden><span style={{ width: `${(c.n / maxCause) * 100}%` }} /></span>
-                  {c.critical > 0 && <span className="pd-cause-c">{c.critical} crítica{c.critical > 1 ? 's' : ''}</span>}
+                  <b>{c.n}</b><span>{c.label}</span>{c.critical > 0 && <em>{c.critical} crítica{c.critical > 1 ? 's' : ''}</em>}
                 </button>
               ))}
             </div>
           </section>
 
-          {/* FILTROS */}
+          {/* FILTROS — uma linha */}
           <div className="pd-filters" role="region" aria-label="Filtros">
             <div className="pd-tabs" role="group" aria-label="Prioridade">
               <button className={!f.sev ? 'on' : ''} onClick={() => set('sev', '')}>Todas · {C.total}</button>
@@ -136,22 +151,20 @@ export default function Pendencias() {
                 <ol className="pd-list">
                   {shown.map((p, i) => (
                     <li key={p.id}>
-                      {(i === 0 || shown[i - 1].severity !== p.severity) && <div className={`pd-group s-${p.severity}`}>{SEV.find(([k]) => k === p.severity)[1]} · {shown.filter((x) => x.severity === p.severity).length}</div>}
-                      <button className={`pd-item s-${p.severity}`} onClick={() => openDetail(p.id)} aria-label={`${SEV1[p.severity]}: ${p.problem || p.title}. Abrir detalhe`}>
-                        <span className="pd-rail" aria-hidden />
+                      {(i === 0 || shown[i - 1].severity !== p.severity) && <div className={`pd-group ${TONE[p.severity]}`}><i aria-hidden />{SEV.find(([k]) => k === p.severity)[1]} · {shown.filter((x) => x.severity === p.severity).length}</div>}
+                      <button className={`pd-item ${TONE[p.severity]}`} onClick={() => openDetail(p.id)} aria-label={`${SEV1[p.severity]}: ${p.problem || p.title}. Abrir detalhe`}>
                         <span className="pd-i-top">
-                          <span className={`pd-badge s-${p.severity}`}><i aria-hidden />{SEV1[p.severity]}</span>
                           <span className="pd-client">{p.client ? cleanName(p.client) : 'The Bold'}</span>
                           <span className="pd-type">{p.cause_label}</span>
+                          {p.late && <span className="pd-late">há {p.late}</span>}
                         </span>
                         <span className="pd-problem">{p.problem || p.title}</span>
                         <span className="pd-facts">
-                          {p.late && <span className="pd-late">há {p.late}</span>}
-                          <span><b>Quem age</b> {p.who || '—'}</span>
+                          <span><b>Quem age</b>{p.who || '—'}</span>
+                          <span className="pd-next"><b>Próxima ação</b>{p.action || p.next}</span>
                           {p.process && <span className="pd-proc">{p.process}</span>}
                         </span>
-                        <span className="pd-ia"><span><b>Impacto</b> {p.impact}</span><span className="pd-next"><b>Próxima ação</b> {p.action || p.next}</span></span>
-                        <span className="pd-open">Abrir <I.arrow size={13} /></span>
+                        <span className="pd-open">Abrir →</span>
                       </button>
                     </li>
                   ))}
@@ -159,9 +172,9 @@ export default function Pendencias() {
               )}
             </section>
             <aside className="pd-who" aria-label="Quem precisa agir">
-              <h2 className="pd-h2">Quem precisa agir</h2>
+              <div className="pd-who-h"><span>Quem precisa agir</span><b>{whoCount.length}</b></div>
               <ul>{whoCount.map(([w, n]) => (
-                <li key={w}><button className={f.who === w ? 'on' : ''} onClick={() => set('who', w)}><span>{w}</span><b>{n}</b></button></li>
+                <li key={w}><button className={f.who === w ? 'on' : ''} onClick={() => set('who', w)}><span>{w}</span><em>{n}</em></button></li>
               ))}</ul>
             </aside>
           </div>

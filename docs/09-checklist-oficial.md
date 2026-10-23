@@ -1,5 +1,16 @@
 # THE BOLD OS — Checklist oficial de conferência
 
+## Revisão 4.8 · 23/10/2026 — Pendências na linguagem editorial
+
+| O que | Onde | Estado |
+|---|---|---|
+| Cabeçalho: legenda e Minhas × Equipe na mesma linha, título forte e resumo em itálico | Pendências · topo | 🟢 |
+| Radar de prioridade em 4 cartões coloridos (crítica rosa · alta pêssego · média amarelo · baixa azul), clicáveis como filtro; vazios ficam apagados | Pendências | 🟢 |
+| Sem pendências: cartão verde “Em dia”, o radar zerado, como cada pendência é lida e o bloco da regra 23 com os números do que veio do Notion | Pendências | 🟢 |
+| O que está travando: causas em uma linha; filtros delicados em uma linha | Pendências | 🟢 |
+| Lista em cartões com a cor da prioridade (cliente, tipo, há quanto tempo, quem age, próxima ação); Quem precisa agir no visual do app Notas | Pendências | 🟢 |
+| Regras de pendência, permissões e ações na origem: sem mudança | Pendências | 🟢 |
+
 ## Revisão 4.7 · 23/10/2026 — Visão geral vira BoldBoard
 
 | O que | Onde | Estado |
